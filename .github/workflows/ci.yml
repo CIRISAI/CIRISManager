@@ -38,15 +38,7 @@ jobs:
     
     - name: Run tests
       run: |
-        pytest tests/ -v --cov=ciris_manager --cov-report=xml
-    
-    # Codecov disabled - configure CODECOV_TOKEN secret to enable
-    # - name: Upload coverage to Codecov
-    #   uses: codecov/codecov-action@v3
-    #   with:
-    #     file: ./coverage.xml
-    #     token: ${{ secrets.CODECOV_TOKEN }}
-    #     fail_ci_if_error: false
+        pytest tests/ -v --cov=ciris_manager --cov-report=term-missing
 
   # Docker build removed - deployment via git clone instead
   
