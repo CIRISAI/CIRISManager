@@ -4,9 +4,7 @@ Discovers running CIRIS agents by querying Docker directly.
 """
 
 import docker
-import json
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -120,9 +118,7 @@ class DockerAgentDiscovery:
                 },
                 "labels": config.get("Labels", {}),
                 "image": config.get("Image"),
-                "restart_policy": attrs.get("HostConfig", {})
-                .get("RestartPolicy", {})
-                .get("Name"),
+                "restart_policy": attrs.get("HostConfig", {}).get("RestartPolicy", {}).get("Name"),
             }
 
             return agent_info

@@ -30,7 +30,7 @@ class TestAgentInfo:
         assert agent.compose_file == "/path/to/compose.yml"
         assert agent.created_at is not None
         assert "T" in agent.created_at  # ISO format
-        assert agent.created_at.endswith("Z")
+        assert "+00:00" in agent.created_at or agent.created_at.endswith("Z")  # UTC timezone
     
     def test_initialization_with_created_at(self):
         """Test AgentInfo initialization with created_at."""

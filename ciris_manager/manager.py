@@ -8,12 +8,10 @@ API for agent discovery and lifecycle management.
 import asyncio
 import logging
 import signal
-import subprocess
 import secrets
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, Any
 
-from ciris_manager.core.container_manager import ContainerManager
 from ciris_manager.core.watchdog import CrashLoopWatchdog
 from ciris_manager.config.settings import CIRISManagerConfig
 from ciris_manager.port_manager import PortManager
@@ -111,9 +109,7 @@ class CIRISManager:
                 if agent_info:
                     # Ensure port manager knows about this allocation
                     self.port_manager.allocate_port(agent_id)
-                    logger.info(
-                        f"Found existing agent: {agent_id} on port {agent_info.port}"
-                    )
+                    logger.info(f"Found existing agent: {agent_id} on port {agent_info.port}")
 
     async def create_agent(
         self,
@@ -139,16 +135,12 @@ class CIRISManager:
             PermissionError: WA signature required but not provided
         """
         # Validate inputs
-        template_path = (
-            Path(self.config.manager.templates_directory) / f"{template}.yaml"
-        )
+        template_path = Path(self.config.manager.templates_directory) / f"{template}.yaml"
         if not template_path.exists():
             raise ValueError(f"Template not found: {template}")
 
         # Check if template is pre-approved
-        is_pre_approved = self.template_verifier.is_pre_approved(
-            template, template_path
-        )
+        is_pre_approved = self.template_verifier.is_pre_approved(template, template_path)
 
         if not is_pre_approved and not wa_signature:
             raise PermissionError(
@@ -188,7 +180,7 @@ class CIRISManager:
         self.compose_generator.write_compose_file(compose_config, compose_path)
 
         # Register agent
-        agent_info = self.agent_registry.register_agent(
+        self.agent_registry.register_agent(
             agent_id=agent_id,
             name=name,
             port=allocated_port,
@@ -366,6 +358,7 @@ class CIRISManager:
             logger.info(f"Removing nginx routes for {agent_id}")
             # Get current list of agents to pass to nginx manager
             from ciris_manager.docker_discovery import DockerAgentDiscovery
+
             discovery = DockerAgentDiscovery()
             agents = discovery.discover_agents()
             self.nginx_manager.remove_agent_routes(agent_id, agents)
@@ -384,9 +377,11 @@ class CIRISManager:
             if compose_path.exists():
                 compose_path.unlink()
                 logger.info(f"Removed docker-compose.yml for agent {agent_id}")
-            
+
             # Note: The agent directory with data/logs will remain but the container is stopped
-            logger.info(f"Agent {agent_id} stopped. Directory {agent_dir} retained for data preservation.")
+            logger.info(
+                f"Agent {agent_id} stopped. Directory {agent_dir} retained for data preservation."
+            )
 
             logger.info(f"Successfully deleted agent {agent_id}")
             return True
