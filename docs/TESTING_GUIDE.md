@@ -120,22 +120,22 @@ def test_new_endpoint():
     assert response.status_code == 200
 ```
 
-## Multi-Environment Testing
+## Running Tests
 
-For more thorough testing across Python versions:
+We use pytest directly for all testing needs:
 
 ```bash
-# Install tox
-pip install tox
+# Run all tests
+pytest tests/
 
-# Run tests on all Python versions
-tox
+# Run with coverage
+pytest tests/ --cov=ciris_manager
 
-# Run specific environment
-tox -e py311
+# Run specific test file
+pytest tests/ciris_manager/test_manager.py
 
-# Run linting only
-tox -e lint
+# Run with verbose output
+pytest tests/ -v
 ```
 
 ## Pre-commit Hooks

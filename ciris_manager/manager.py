@@ -70,7 +70,7 @@ class CIRISManager:
 
         # Initialize nginx manager based on configuration
         self.nginx_manager: Union[NginxManager, NoOpNginxManager]
-        
+
         if self.config.nginx.enabled:
             try:
                 # Try to initialize the real nginx manager
@@ -89,8 +89,7 @@ class CIRISManager:
             logger.info("Nginx is disabled in configuration")
             self.nginx_manager = NoOpNginxManager()
 
-        # Initialize existing components (updated for per-agent management)
-        self.container_manager = None  # Will be replaced with per-agent management
+        # Initialize existing components
 
         self.watchdog = CrashLoopWatchdog(
             check_interval=self.config.watchdog.check_interval,
@@ -467,9 +466,9 @@ class CIRISManager:
             "config": self.config.model_dump(),
             "watchdog_status": self.watchdog.get_status(),
             "components": {
-                "container_manager": "running" if self._running else "stopped",
                 "watchdog": "running" if self._running else "stopped",
-                "api_server": "not_implemented",
+                "api_server": "running" if self._running else "stopped",
+                "nginx": "enabled" if self.config.nginx.enabled else "disabled",
             },
         }
 

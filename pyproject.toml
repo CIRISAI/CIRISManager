@@ -7,7 +7,7 @@ name = "ciris-manager"
 version = "0.1.0"
 description = "CIRIS Container Manager - Lightweight systemd service for agent lifecycle"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "CIRIS AI", email = "team@ciris.ai"}
@@ -18,8 +18,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -46,7 +44,6 @@ dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0",
-    "black>=23.0",
     "mypy>=1.0",
     "ruff>=0.1.0",
     "types-PyYAML>=6.0",
@@ -65,16 +62,12 @@ Issues = "https://github.com/CIRISAI/ciris-manager/issues"
 [tool.setuptools.packages.find]
 include = ["ciris_manager*"]
 
-[tool.black]
-line-length = 100
-target-version = ['py38']
-
 [tool.ruff]
 line-length = 100
-target-version = "py38"
+target-version = "py311"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

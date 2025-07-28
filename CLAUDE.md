@@ -49,8 +49,8 @@ npm run type-check  # Run TypeScript type checking
 
 ### Code Quality
 ```bash
-# Format code with black
-black ciris_manager/ tests/
+# Format code with ruff
+ruff format ciris_manager/ tests/
 
 # Run linter
 ruff check ciris_manager/ tests/

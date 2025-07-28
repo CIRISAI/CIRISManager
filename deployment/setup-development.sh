@@ -84,7 +84,7 @@ export PYTHONPATH="$PWD:$PYTHONPATH"
 
 echo "Running linting..."
 ruff check ciris_manager/
-black --check ciris_manager/
+ruff format --check ciris_manager/
 
 echo "Running type checking..."
 mypy ciris_manager/
@@ -99,12 +99,6 @@ if command -v pre-commit >/dev/null 2>&1; then
     log "Setting up pre-commit hooks..."
     cat > .pre-commit-config.yaml << 'EOF'
 repos:
-  - repo: https://github.com/psf/black
-    rev: 23.11.0
-    hooks:
-      - id: black
-        language_version: python3
-
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.1.6
     hooks:

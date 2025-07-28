@@ -6,7 +6,7 @@ Thank you for your interest in contributing to CIRISManager! This guide will hel
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.11 or higher
 - Docker (for testing container management features)
 - Git
 
@@ -122,8 +122,7 @@ Then create a Pull Request on GitHub.
 
 ## Code Style
 
-- We use [Black](https://black.readthedocs.io/) for Python formatting
-- We use [Ruff](https://docs.astral.sh/ruff/) for linting
+- We use [Ruff](https://docs.astral.sh/ruff/) for formatting and linting
 - Type hints are encouraged where appropriate
 - Docstrings should follow Google style
 

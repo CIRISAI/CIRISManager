@@ -52,7 +52,7 @@ def init_auth_service(
     # Check for dev mode
     # Declare with Protocol type
     oauth_provider: OAuthProvider
-    
+
     if client_id == "mock-local-testing" or os.getenv("CIRIS_DEV_MODE") == "true":
         logger.info("Using mock OAuth provider for development")
         oauth_provider = MockOAuthProvider()
