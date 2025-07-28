@@ -1,0 +1,21 @@
+[Unit]
+Description=CIRIS Manager API Service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/ciris/CIRISAgent
+ExecStart=/home/ciris/venv/bin/python /home/ciris/CIRISAgent/deployment/run-ciris-manager-api.py
+Restart=always
+RestartSec=5
+Environment="PYTHONUNBUFFERED=1"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ciris-manager-api
+
+[Install]
+WantedBy=multi-user.target

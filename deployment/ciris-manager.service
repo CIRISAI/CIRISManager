@@ -1,0 +1,28 @@
+[Unit]
+Description=CIRIS Manager - Agent Lifecycle Management Service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=exec
+User=root
+Group=docker
+WorkingDirectory=/home/ciris/CIRISAgent
+ExecStart=/usr/local/bin/ciris-manager --config /etc/ciris-manager/config.yml
+Restart=always
+RestartSec=10
+
+# Docker socket access
+SupplementaryGroups=docker
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ciris-manager
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
