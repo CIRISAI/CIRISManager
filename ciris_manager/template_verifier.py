@@ -45,7 +45,7 @@ class TemplateVerifier:
                 self.manifest = json.load(f)
 
             # Extract root public key
-            if "root_public_key" not in self.manifest:
+            if self.manifest is None or "root_public_key" not in self.manifest:
                 logger.error("Manifest missing root_public_key")
                 self.manifest = None
                 return
@@ -60,9 +60,10 @@ class TemplateVerifier:
                 self.manifest = None
                 return
 
-            logger.info(
-                f"Loaded pre-approved manifest with {len(self.manifest.get('templates', {}))} templates"
-            )
+            if self.manifest:
+                logger.info(
+                    f"Loaded pre-approved manifest with {len(self.manifest.get('templates', {}))} templates"
+                )
 
         except Exception as e:
             logger.error(f"Failed to load manifest: {e}")
