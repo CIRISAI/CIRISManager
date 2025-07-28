@@ -4,7 +4,7 @@ OAuth authentication service for CIRISManager.
 Separates OAuth logic from route handlers for better testability.
 """
 
-from typing import Optional, Dict, Any, Protocol
+from typing import Optional, Dict, Any, Protocol, Generator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -77,7 +77,7 @@ class UserStore(Protocol):
 class InMemorySessionStore:
     """In-memory session storage implementation."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._sessions: Dict[str, Dict[str, Any]] = {}
 
     def store_session(self, state: str, data: Dict[str, Any]) -> None:
@@ -93,11 +93,11 @@ class InMemorySessionStore:
 class SQLiteUserStore:
     """SQLite user storage implementation."""
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         self._init_db()
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         """Initialize database schema."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -130,7 +130,7 @@ class SQLiteUserStore:
             conn.commit()
 
     @contextmanager
-    def _get_db(self):
+    def _get_db(self) -> Generator[sqlite3.Connection, None, None]:
         """Get database connection."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -158,7 +158,8 @@ class SQLiteUserStore:
 
             # Get user ID
             cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
-            return cursor.fetchone()["id"]
+            result = cursor.fetchone()
+            return int(result["id"])
 
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email."""
@@ -272,7 +273,7 @@ class AuthService:
         """Verify JWT token."""
         try:
             payload = jwt.decode(token, self.jwt_secret, algorithms=[self.jwt_algorithm])
-            return payload
+            return dict(payload)
         except jwt.ExpiredSignatureError:
             logger.debug("JWT token expired")
             return None

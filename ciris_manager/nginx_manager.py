@@ -323,7 +323,7 @@ http {
 
         return True
 
-    def _rollback(self):
+    def _rollback(self) -> None:
         """Rollback to previous configuration."""
         if self.backup_path.exists():
             try:

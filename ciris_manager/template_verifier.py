@@ -154,7 +154,8 @@ class TemplateVerifier:
 
         templates = self.manifest.get("templates", {})
         template_data = templates.get(template_name, {})
-        return template_data.get("description")
+        description = template_data.get("description")
+        return description if isinstance(description, str) else None
 
     def list_pre_approved_templates(self) -> Dict[str, str]:
         """Get list of all pre-approved templates with descriptions."""

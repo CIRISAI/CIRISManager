@@ -277,7 +277,7 @@ class CIRISManager:
         )
         await process.communicate()
 
-    async def start(self):
+    async def start(self) -> None:
         """Start all manager services."""
         logger.info("Starting CIRISManager...")
 
@@ -298,7 +298,7 @@ class CIRISManager:
 
         logger.info("CIRISManager started successfully")
 
-    async def _start_api_server(self):
+    async def _start_api_server(self) -> None:
         """Start the FastAPI server for CIRISManager API."""
         try:
             from fastapi import FastAPI
@@ -390,7 +390,7 @@ class CIRISManager:
             logger.error(f"Failed to delete agent {agent_id}: {e}")
             return False
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop all manager services."""
         logger.info("Stopping CIRISManager...")
 
@@ -403,12 +403,12 @@ class CIRISManager:
 
         logger.info("CIRISManager stopped")
 
-    async def run(self):
+    async def run(self) -> None:
         """Run the manager until shutdown signal."""
         # Setup signal handlers
         loop = asyncio.get_event_loop()
 
-        def handle_signal():
+        def handle_signal() -> None:
             logger.info("Shutdown signal received")
             self._shutdown_event.set()
 
@@ -458,7 +458,7 @@ class CIRISManager:
         }
 
 
-async def main():
+async def main() -> None:
     """Main entry point for CIRISManager."""
     # Setup logging
     logging.basicConfig(

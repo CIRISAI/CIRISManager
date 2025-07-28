@@ -18,7 +18,7 @@ class ManagedContainer:
     host_port: int
     container_name: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.agent_id:
             raise ValueError("Agent ID required")
         if not 1 <= self.host_port <= 65535:
@@ -50,7 +50,7 @@ def _is_infrastructure_container(name: str) -> bool:
     return name in infra_names
 
 
-def _extract_env_dict(container) -> Dict[str, str]:
+def _extract_env_dict(container: Any) -> Dict[str, str]:
     """Extract environment variables as dictionary."""
     env_vars = container.attrs.get("Config", {}).get("Env", [])
     env_dict = {}
@@ -61,7 +61,7 @@ def _extract_env_dict(container) -> Dict[str, str]:
     return env_dict
 
 
-def _get_agent_id(container, env_dict: Dict[str, str]) -> Optional[str]:
+def _get_agent_id(container: Any, env_dict: Dict[str, str]) -> Optional[str]:
     """Get agent ID from environment or labels."""
     agent_id = env_dict.get("CIRIS_AGENT_ID")
     if not agent_id:
@@ -69,7 +69,7 @@ def _get_agent_id(container, env_dict: Dict[str, str]) -> Optional[str]:
     return agent_id
 
 
-def _get_host_port(container) -> Optional[int]:
+def _get_host_port(container: Any) -> Optional[int]:
     """Find the host port for a container."""
     for container_port in ["8080/tcp", "8081/tcp", "8082/tcp"]:
         port_bindings = container.ports.get(container_port, [])
@@ -78,7 +78,7 @@ def _get_host_port(container) -> Optional[int]:
     return None
 
 
-def _process_container(container) -> Optional[ManagedContainer]:
+def _process_container(container: Any) -> Optional[ManagedContainer]:
     """Process a single container and return ManagedContainer if routable."""
     if not container.name.startswith("ciris-"):
         return None
@@ -143,7 +143,7 @@ def get_routable_containers() -> List[ManagedContainer]:
     return routable
 
 
-def _validate_container(container, result: Dict[str, Any]) -> None:
+def _validate_container(container: Any, result: Dict[str, Any]) -> None:
     """Validate a single container and update result."""
     if not container.name.startswith("ciris-"):
         return
@@ -190,7 +190,7 @@ def validate_routing_setup() -> Dict[str, Any]:
     """Validate the routing setup and return diagnostic info."""
     import docker
 
-    result = {"routable_count": 0, "skipped": [], "errors": []}
+    result: Dict[str, Any] = {"routable_count": 0, "skipped": [], "errors": []}
 
     try:
         client = docker.from_env()

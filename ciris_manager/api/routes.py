@@ -59,7 +59,7 @@ class TemplateListResponse(BaseModel):
     pre_approved: List[str]
 
 
-def create_routes(manager) -> APIRouter:
+def create_routes(manager: Any) -> APIRouter:
     """
     Create API routes with manager instance.
 

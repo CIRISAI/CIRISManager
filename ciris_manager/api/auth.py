@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 # Backward compatibility - load OAuth config
-def load_oauth_config():
+def load_oauth_config() -> bool:
     """Load OAuth configuration from file."""
     oauth_path = Path.home() / "shared/oauth/google_oauth_manager.json"
 

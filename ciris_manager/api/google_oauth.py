@@ -2,7 +2,7 @@
 Google OAuth provider implementation.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, cast
 import httpx
 import logging
 
@@ -66,7 +66,7 @@ class GoogleOAuthProvider:
         try:
             response = await self.http_client.post(self.TOKEN_URL, data=data)
             response.raise_for_status()
-            return response.json()
+            return cast(Dict[str, Any], response.json())
         except httpx.HTTPStatusError as e:
             logger.error(f"Token exchange failed: {e.response.text}")
             raise ValueError(f"Failed to exchange code: {e.response.status_code}")
@@ -81,7 +81,7 @@ class GoogleOAuthProvider:
                 self.USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}
             )
             response.raise_for_status()
-            return response.json()
+            return cast(Dict[str, Any], response.json())
         except httpx.HTTPStatusError as e:
             logger.error(f"User info fetch failed: {e.response.text}")
             raise ValueError(f"Failed to get user info: {e.response.status_code}")
@@ -89,7 +89,7 @@ class GoogleOAuthProvider:
             logger.error(f"User info error: {e}")
             raise ValueError("Failed to get user information")
 
-    async def close(self):
+    async def close(self) -> None:
         """Close HTTP client."""
         if self._http_client:
             await self._http_client.aclose()

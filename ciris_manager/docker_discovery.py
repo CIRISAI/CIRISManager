@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 class DockerAgentDiscovery:
     """Discovers CIRIS agents running in Docker containers."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         try:
             self.client = docker.from_env()
         except Exception as e:
             logger.error(f"Failed to connect to Docker: {e}")
-            self.client = None
+            self.client = None  # type: ignore[assignment]
 
     def discover_agents(self) -> List[Dict[str, Any]]:
         """Discover all CIRIS agent containers."""
@@ -134,7 +134,10 @@ class DockerAgentDiscovery:
 
         try:
             container = self.client.containers.get(container_name)
-            return container.logs(tail=lines).decode("utf-8")
+            logs = container.logs(tail=lines)
+            if isinstance(logs, bytes):
+                return logs.decode("utf-8")
+            return str(logs)
         except Exception as e:
             logger.error(f"Error getting logs for {container_name}: {e}")
             return ""

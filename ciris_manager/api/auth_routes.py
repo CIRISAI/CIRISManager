@@ -39,7 +39,7 @@ def init_auth_service(
     # Use environment variables if not provided
     client_id = google_client_id or os.getenv("GOOGLE_CLIENT_ID")
     client_secret = google_client_secret or os.getenv("GOOGLE_CLIENT_SECRET")
-    jwt_secret = jwt_secret or os.getenv("MANAGER_JWT_SECRET", "dev-secret-key")
+    jwt_secret_value = jwt_secret or os.getenv("MANAGER_JWT_SECRET") or "dev-secret-key"
     db_path = db_path or Path.home() / ".config" / "ciris-manager" / "auth.db"
 
     if not client_id or not client_secret:
@@ -58,7 +58,7 @@ def init_auth_service(
         oauth_provider=oauth_provider,
         session_store=session_store,
         user_store=user_store,
-        jwt_secret=jwt_secret,
+        jwt_secret=jwt_secret_value,
     )
 
     return _auth_service
@@ -88,7 +88,7 @@ def create_auth_routes() -> APIRouter:
         request: Request,
         redirect_uri: Optional[str] = None,
         auth_service: AuthService = Depends(get_auth_service),
-    ):
+    ) -> RedirectResponse:
         """Initiate Google OAuth login flow."""
         if not auth_service:
             raise HTTPException(status_code=500, detail=oauth_error_msg)
@@ -111,7 +111,7 @@ def create_auth_routes() -> APIRouter:
         code: str,
         state: str,
         auth_service: AuthService = Depends(get_auth_service),
-    ):
+    ) -> RedirectResponse:
         """Handle Google OAuth callback."""
         if not auth_service:
             raise HTTPException(status_code=500, detail=oauth_error_msg)
@@ -144,7 +144,7 @@ def create_auth_routes() -> APIRouter:
             raise HTTPException(status_code=500, detail="Authentication failed")
 
     @router.post("/oauth/logout")
-    async def logout(response: Response):
+    async def logout(response: Response) -> Dict[str, str]:
         """Logout by clearing the JWT cookie."""
         response.delete_cookie("manager_token")
         return {"message": "Logged out successfully"}
@@ -153,7 +153,7 @@ def create_auth_routes() -> APIRouter:
     async def get_current_user(
         authorization: Optional[str] = Header(None),
         auth_service: AuthService = Depends(get_auth_service),
-    ):
+    ) -> Dict[str, Any]:
         """Get current authenticated user."""
         if not auth_service:
             raise HTTPException(status_code=500, detail=oauth_error_msg)

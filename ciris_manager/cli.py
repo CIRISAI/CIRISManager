@@ -12,7 +12,7 @@ from ciris_manager.manager import CIRISManager
 from ciris_manager.config.settings import CIRISManagerConfig
 
 
-def generate_default_config(config_path: str):
+def generate_default_config(config_path: str) -> None:
     """Generate a default configuration file."""
     default_config = {
         "docker": {"compose_file": "/home/ciris/CIRISAgent/deployment/docker-compose.yml"},
@@ -29,7 +29,7 @@ def generate_default_config(config_path: str):
     print(f"Generated default configuration at: {config_path}")
 
 
-async def run_manager(config_path: str):
+async def run_manager(config_path: str) -> None:
     """Run the CIRISManager."""
     try:
         config = CIRISManagerConfig.from_file(config_path)
@@ -55,7 +55,7 @@ async def run_manager(config_path: str):
         sys.exit(1)
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="CIRIS Container Manager")
     parser.add_argument(

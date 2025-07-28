@@ -32,7 +32,7 @@ class ContainerManager:
         self._running = False
         self._task: Optional[asyncio.Task] = None
 
-    async def start(self):
+    async def start(self) -> None:
         """Start the container management loop."""
         if self._running:
             return
@@ -41,7 +41,7 @@ class ContainerManager:
         self._task = asyncio.create_task(self._management_loop())
         logger.info(f"Container manager started with {self.interval}s interval")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the container management loop."""
         self._running = False
         if self._task:
@@ -52,7 +52,7 @@ class ContainerManager:
                 pass
         logger.info("Container manager stopped")
 
-    async def _management_loop(self):
+    async def _management_loop(self) -> None:
         """Main container management loop."""
         while self._running:
             try:
@@ -169,7 +169,7 @@ class ContainerManager:
             return stdout.decode().strip()
         return ""
 
-    async def _notify_update_available(self, agent: Dict):
+    async def _notify_update_available(self, agent: Dict) -> None:
         """Notify agent that an update is available."""
         # This will be implemented when we add local auth
         logger.info(

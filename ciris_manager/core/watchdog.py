@@ -57,7 +57,7 @@ class CrashLoopWatchdog:
         self._running = False
         self._task: Optional[asyncio.Task] = None
 
-    async def start(self):
+    async def start(self) -> None:
         """Start the watchdog monitoring loop."""
         if self._running:
             return
@@ -69,7 +69,7 @@ class CrashLoopWatchdog:
             f"crashes in {self.crash_window.total_seconds()}s"
         )
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the watchdog monitoring loop."""
         self._running = False
         if self._task:
@@ -80,7 +80,7 @@ class CrashLoopWatchdog:
                 pass
         logger.info("Crash loop watchdog stopped")
 
-    async def _watchdog_loop(self):
+    async def _watchdog_loop(self) -> None:
         """Main watchdog monitoring loop."""
         while self._running:
             try:
@@ -117,7 +117,7 @@ class CrashLoopWatchdog:
 
         return containers
 
-    async def _check_container(self, container: Dict):
+    async def _check_container(self, container: Dict) -> None:
         """Check a container for crash loops."""
         name = container["Names"]
         state = container["State"]
@@ -165,7 +165,7 @@ class CrashLoopWatchdog:
                 return -1
         return -1
 
-    async def _handle_crash_loop(self, tracker: ContainerTracker):
+    async def _handle_crash_loop(self, tracker: ContainerTracker) -> None:
         """Handle a detected crash loop."""
         logger.error(
             f"Crash loop detected for {tracker.container}: "
@@ -182,7 +182,7 @@ class CrashLoopWatchdog:
             f"Manual intervention required."
         )
 
-    async def _stop_container(self, container: str):
+    async def _stop_container(self, container: str) -> None:
         """Stop a container."""
         cmd = ["docker", "stop", container]
 
@@ -196,7 +196,7 @@ class CrashLoopWatchdog:
         else:
             logger.error(f"Failed to stop container {container}: {stderr.decode()}")
 
-    async def _send_alert(self, message: str):
+    async def _send_alert(self, message: str) -> None:
         """Send an alert about crash loop."""
         # TODO: Implement actual alerting mechanism
         logger.critical(f"ALERT: {message}")

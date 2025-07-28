@@ -40,6 +40,8 @@ class PortManager:
 
     def _load_metadata(self) -> None:
         """Load port allocations from metadata file."""
+        if self.metadata_path is None:
+            return
         try:
             with open(self.metadata_path, "r") as f:
                 data = json.load(f)

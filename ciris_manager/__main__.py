@@ -11,7 +11,7 @@ from ciris_manager.manager import CIRISManager
 from ciris_manager.config.settings import CIRISManagerConfig
 
 
-def setup_logging(verbose: bool = False):
+def setup_logging(verbose: bool = False) -> None:
     """Setup logging configuration."""
     level = logging.DEBUG if verbose else logging.INFO
 
@@ -22,7 +22,7 @@ def setup_logging(verbose: bool = False):
     )
 
 
-def main():
+def main() -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
         description="CIRISManager - Agent lifecycle management service"

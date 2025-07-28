@@ -108,7 +108,7 @@ class CIRISManagerConfig(BaseModel):
 
         return cls(**data)
 
-    def save(self, path: str):
+    def save(self, path: str) -> None:
         """Save configuration to YAML file."""
         import yaml
 
