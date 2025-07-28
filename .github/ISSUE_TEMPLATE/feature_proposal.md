@@ -1,8 +1,10 @@
 ---
 name: "✨ Feature Proposal"
+about: Feature proposal issue template for Design Directive Protocol.
 title: "✨ [FEATURE]: "
-labels: ["enhancement", "proposal"]
-assignees: ''
+labels: enhancement
+assignees: tyler-j-chrestoff
+
 ---
 
 ### 1. Objective
