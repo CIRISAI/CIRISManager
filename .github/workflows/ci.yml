@@ -30,7 +30,7 @@ jobs:
     - name: Run linting
       run: |
         ruff check ciris_manager/
-        black --check ciris_manager/
+        ruff format --check ciris_manager/
     
     - name: Run type checking
       run: |

@@ -298,3 +298,28 @@ class AuthService:
             return None
 
         return payload
+
+
+class MockOAuthProvider:
+    """Mock OAuth provider for local development."""
+
+    async def get_authorization_url(self, state: str, redirect_uri: str) -> str:
+        """Return mock authorization URL."""
+        return f"{redirect_uri}?state={state}&code=mock-auth-code"
+
+    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> Dict[str, Any]:
+        """Return mock token."""
+        return {
+            "access_token": "mock-oauth-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        }
+
+    async def get_user_info(self, access_token: str) -> Dict[str, Any]:
+        """Return mock user info."""
+        return {
+            "id": "dev-user-123",
+            "email": "dev@ciris.ai",  # Changed to pass the @ciris.ai check
+            "name": "Dev User",
+            "picture": "https://via.placeholder.com/150",
+        }

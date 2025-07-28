@@ -2,6 +2,7 @@
 """
 CIRISManager CLI entry point.
 """
+
 import argparse
 import asyncio
 import sys

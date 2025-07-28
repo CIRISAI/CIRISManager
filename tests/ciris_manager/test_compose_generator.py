@@ -50,10 +50,10 @@ class TestComposeGenerator:
         # Check service config
         service = compose["services"]["agent-scout"]
         assert service["container_name"] == "ciris-agent-scout"
-        # Now uses build context instead of image
-        assert "build" in service
-        assert service["build"]["context"] == "/home/ciris/ciris/forks/CIRISAgent"
-        assert service["build"]["dockerfile"] == "Dockerfile"
+        # Now uses image from GHCR instead of building locally
+        assert "image" in service
+        assert service["image"] == "ghcr.io/cirisai/ciris-agent:latest"
+        assert service["platform"] == "linux/amd64"
         assert service["ports"] == ["8081:8080"]
         assert service["restart"] == "unless-stopped"
 
@@ -137,6 +137,9 @@ class TestComposeGenerator:
         )
 
         volumes = compose["services"]["agent-scout"]["volumes"]
+        # Custom OAuth volume path should be used
+        assert f"{temp_agent_dir}/data:/app/data" in volumes
+        assert f"{temp_agent_dir}/logs:/app/logs" in volumes
         assert "/custom/oauth/path:/home/ciris/shared/oauth:ro" in volumes
 
     def test_write_compose_file(self, generator, temp_agent_dir):

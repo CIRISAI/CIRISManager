@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import logging
+import os
 from .auth import get_current_user_dependency as get_current_user
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class StatusResponse(BaseModel):
     status: str
     version: str = "1.0.0"
     components: Dict[str, str]
+    auth_mode: Optional[str] = None
 
 
 class TemplateListResponse(BaseModel):
@@ -71,6 +73,19 @@ def create_routes(manager: Any) -> APIRouter:
     """
     router = APIRouter()
 
+    # Check if we're in dev mode - if so, create a mock user dependency
+    auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
+
+    if auth_mode == "development":
+        # Simple mock user for all endpoints
+        async def get_mock_user() -> Dict[str, str]:
+            return {"id": "dev-user", "email": "dev@ciris.local", "name": "Development User"}
+
+        auth_dependency = Depends(get_mock_user)
+    else:
+        # Production uses real auth
+        auth_dependency = Depends(get_current_user)
+
     @router.get("/health")
     async def health_check() -> Dict[str, str]:
         """Health check endpoint."""
@@ -81,7 +96,9 @@ def create_routes(manager: Any) -> APIRouter:
         """Get manager status."""
         status = manager.get_status()
         return StatusResponse(
-            status="running" if status["running"] else "stopped", components=status["components"]
+            status="running" if status["running"] else "stopped",
+            components=status["components"],
+            auth_mode=auth_mode,
         )
 
     @router.get("/agents", response_model=AgentListResponse)
@@ -115,7 +132,7 @@ def create_routes(manager: Any) -> APIRouter:
 
     @router.post("/agents", response_model=AgentResponse)
     async def create_agent(
-        request: CreateAgentRequest, user: dict = Depends(get_current_user)
+        request: CreateAgentRequest, user: dict = auth_dependency
     ) -> AgentResponse:
         """Create a new agent."""
         try:
@@ -147,7 +164,7 @@ def create_routes(manager: Any) -> APIRouter:
         logger.info(f"Agent {result['agent_id']} created by {user['email']}")
 
     @router.delete("/agents/{agent_id}")
-    async def delete_agent(agent_id: str, user: dict = Depends(get_current_user)) -> Dict[str, str]:
+    async def delete_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
         """
         Delete an agent and clean up all resources.
 
