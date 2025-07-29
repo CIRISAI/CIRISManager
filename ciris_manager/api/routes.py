@@ -248,17 +248,21 @@ def create_routes(manager: Any) -> APIRouter:
     @router.get("/env/default")
     async def get_default_env() -> Dict[str, str]:
         """Get default environment variables for agent creation."""
-        # This is what the GUI form loads to populate the environment variables
+        # These are the EXACT variable names CIRIS agents expect (from CIRISAgent/.env.example)
         return {
+            # Core CIRIS requirements
+            "LLM_PROVIDER": "openai",
             "OPENAI_API_KEY": "",  # User must provide
-            "OPENAI_MODEL_NAME": "gpt-4o-mini",
-            "ADMIN_USERNAME": "admin",
-            "ADMIN_PASSWORD": "ciris_admin_password",
-            "DESCRIPTION": "CIRIS Agent",
-            "PORT": "8000",  # Will be dynamically assigned
+            "DATABASE_URL": "sqlite:////data/ciris.db",
+            "API_HOST": "0.0.0.0",
+            "API_PORT": "8080",  # Will be dynamically assigned
+            "JWT_SECRET_KEY": "generate-with-openssl-rand-hex-32",
+            "ENVIRONMENT": "production",
             "LOG_LEVEL": "INFO",
-            "MAX_TOKENS": "2000",
-            "TEMPERATURE": "0.7"
+            
+            # Optional: Admin credentials (not in .env.example but commonly used)
+            "ADMIN_USERNAME": "admin",
+            "ADMIN_PASSWORD": "ciris_admin_password"
         }
 
     @router.get("/ports/allocated")
@@ -273,24 +277,5 @@ def create_routes(manager: Any) -> APIRouter:
             },
         }
 
-    @router.get("/env/default")
-    async def get_default_env() -> Dict[str, str]:
-        """Get default .env file content for agent creation."""
-        from pathlib import Path
-
-        # Look for .env file in the project root
-        # Try to find the project root by looking for ciris_templates directory
-        current_path = Path(__file__).parent.parent.parent  # Go up to project root
-        env_path = current_path / ".env"
-
-        if env_path.exists():
-            try:
-                content = env_path.read_text()
-                return {"content": content}
-            except Exception as e:
-                logger.error(f"Failed to read .env file: {e}")
-                return {"content": ""}
-
-        return {"content": ""}
 
     return router
