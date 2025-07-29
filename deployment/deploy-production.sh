@@ -115,9 +115,8 @@ apt-get install -y \
     python3-venv \
     python3-pip \
     git \
-    nginx \
+    docker-compose \
     certbot \
-    python3-certbot-nginx \
     curl \
     jq \
     logrotate
@@ -240,17 +239,22 @@ else
     print_warning "Skipping SSL setup as requested"
 fi
 
-# Step 9: Configure nginx
-print_status "Configuring nginx..."
-if [ ! -f "/etc/nginx/sites-available/ciris-manager" ]; then
-    cp "$INSTALL_DIR/deployment/nginx-ciris-manager.conf" /etc/nginx/sites-available/ciris-manager
-    sed -i "s/your-domain.com/$DOMAIN/g" /etc/nginx/sites-available/ciris-manager
-    ln -sf /etc/nginx/sites-available/ciris-manager /etc/nginx/sites-enabled/
+# Step 9: Setup nginx container
+print_status "Setting up nginx container..."
+
+# Create Docker network
+docker network create ciris-network 2>/dev/null || true
+
+# Copy docker-compose file if not exists
+if [ ! -f "$INSTALL_DIR/docker-compose.yml" ]; then
+    print_error "docker-compose.yml not found in $INSTALL_DIR"
+    exit 1
 fi
 
-# Test nginx configuration
-nginx -t || {
-    print_error "Nginx configuration test failed!"
+# Pull nginx container image
+print_status "Pulling nginx container image..."
+docker pull ghcr.io/cirisai/ciris-nginx:latest || {
+    print_error "Failed to pull nginx container image"
     exit 1
 }
 
@@ -278,7 +282,6 @@ print_status "Enabling services..."
 systemctl enable ciris-manager.service
 systemctl enable ciris-manager-api.service
 systemctl enable ciris-backup.timer
-systemctl enable nginx
 
 # Step 14: Pre-flight checks
 print_status "Running pre-flight checks..."
@@ -296,7 +299,11 @@ print_status "Starting services..."
 systemctl start ciris-manager
 sleep 2
 systemctl start ciris-manager-api
-systemctl start nginx
+
+# Start nginx container
+print_status "Starting nginx container..."
+cd "$INSTALL_DIR"
+docker-compose up -d nginx
 
 # Step 16: Verify deployment
 print_status "Verifying deployment..."
@@ -304,7 +311,7 @@ sleep 5
 
 # Check service status
 SERVICES_OK=true
-for service in ciris-manager ciris-manager-api nginx; do
+for service in ciris-manager ciris-manager-api; do
     if systemctl is-active --quiet $service; then
         print_status "$service is running"
     else
@@ -312,6 +319,14 @@ for service in ciris-manager ciris-manager-api nginx; do
         SERVICES_OK=false
     fi
 done
+
+# Check nginx container
+if docker ps | grep -q ciris-nginx; then
+    print_status "nginx container is running"
+else
+    print_error "nginx container failed to start"
+    SERVICES_OK=false
+fi
 
 # Check health endpoint
 if [ "$SERVICES_OK" = true ]; then

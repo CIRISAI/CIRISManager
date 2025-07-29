@@ -64,6 +64,24 @@ Browser → Nginx (port 80/443) → Routes:
    - Check: `/etc/nginx/ciris-agents/` for generated configs
    - Run: `nginx -t` to validate configuration
 
+4. **OAuth "404 Not Found" after Google login**
+   - Cause: Missing nginx route for `/manager/oauth/callback`
+   - Fix: Add location block to existing nginx config:
+   ```nginx
+   location /manager/oauth/callback {
+       proxy_pass http://ciris_manager;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+   }
+   ```
+
+5. **"attempt to write a readonly database"**
+   - Cause: systemd ProtectSystem=strict blocking writes
+   - Fix: Add `/var/lib/ciris-manager` to ReadWritePaths in service file
+
 ### Testing Integration
 
 ```bash

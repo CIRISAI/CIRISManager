@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: ghcr.io/cirisai/ciris-nginx:latest
+    container_name: ciris-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # SSL certificates (read-only for security)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Nginx logs
+      - /var/log/nginx:/var/log/nginx
+      # Manager routing configuration
+      - ./deployment/nginx-manager-routes.conf:/etc/nginx/conf.d/00-manager.conf:ro
+      # Dynamic agent configs (if using volume)
+      # - ciris-nginx-config:/etc/nginx/conf.d
+    extra_hosts:
+      # Allow nginx to reach Manager on host
+      - "host.docker.internal:host-gateway"
+    environment:
+      - MANAGER_HOST=host.docker.internal:8888
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ciris-network
+
+# Optional: Named volume for dynamic config updates
+# volumes:
+#   ciris-nginx-config:
+#     name: ciris-nginx-config
+
+networks:
+  ciris-network:
+    name: ciris-network
+    driver: bridge

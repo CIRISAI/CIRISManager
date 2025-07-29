@@ -20,7 +20,7 @@ auth:
 nginx:
   enabled: false               # Enable nginx integration
   config_dir: /etc/nginx/sites-enabled
-  container_name: nginx
+  container_name: ciris-nginx
 
 # Docker settings
 docker:

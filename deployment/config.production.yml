@@ -61,7 +61,7 @@ api:
 nginx:
   enabled: true                          # Enable nginx integration
   config_dir: /etc/nginx/sites-enabled
-  container_name: nginx
+  container_name: ciris-nginx
   ssl_cert_path: /etc/letsencrypt/live/your-domain.com/fullchain.pem
   ssl_key_path: /etc/letsencrypt/live/your-domain.com/privkey.pem
   

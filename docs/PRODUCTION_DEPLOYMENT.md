@@ -279,6 +279,8 @@ sudo ufw enable
 
 ### 6.2 Nginx Reverse Proxy (Recommended)
 
+**Note:** If deploying alongside CIRISAgent, add these location blocks to the existing nginx configuration instead of creating a separate site. See `deployment/INTEGRATION_NOTES.md` for details.
+
 ```nginx
 server {
     listen 443 ssl http2;
@@ -286,6 +288,15 @@ server {
 
     ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+
+    # OAuth callback compatibility route (if needed)
+    location /manager/oauth/callback {
+        proxy_pass http://localhost:8888;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
     location /manager/ {
         proxy_pass http://localhost:8888/manager/;
