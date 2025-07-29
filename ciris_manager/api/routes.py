@@ -57,7 +57,7 @@ class StatusResponse(BaseModel):
 class TemplateListResponse(BaseModel):
     """Response model for template list."""
 
-    templates: Dict[str, Any]  # Changed to Any to support full template configs
+    templates: Dict[str, str]  # Template name -> description
     pre_approved: List[str]
 
 
@@ -232,21 +232,8 @@ def create_routes(manager: Any) -> APIRouter:
                 template_name = template_file.stem
                 # For now, just return the template name and description
                 # The actual config should be loaded when a specific template is selected
-                # Include basic default config in the template list
-                # This is what the GUI expects
-                all_templates[template_name] = {
-                    "id": template_name,
-                    "name": template_name.replace("-", " ").title(),
-                    "description": f"{template_name.replace('-', ' ').title()} agent template",
-                    "env": {
-                        "ADMIN_USERNAME": "admin",
-                        "ADMIN_PASSWORD": "ciris_admin_password",
-                        "MODEL_NAME": "gpt-4o-mini",
-                        "OPENAI_API_KEY": "",
-                        "DESCRIPTION": f"{template_name.replace('-', ' ').title()} Agent",
-                        "PORT": "8000"
-                    }
-                }
+                # Just return template metadata - GUI gets env vars from separate endpoint
+                all_templates[template_name] = f"{template_name.replace('-', ' ').title()} agent template"
 
         # For development: if no manifest exists, treat some templates as pre-approved
         if not pre_approved and all_templates:
@@ -258,36 +245,21 @@ def create_routes(manager: Any) -> APIRouter:
 
         return TemplateListResponse(templates=all_templates, pre_approved=pre_approved_list)
 
-    @router.get("/templates/{template_id}/config")
-    async def get_template_config(template_id: str) -> Dict[str, Any]:
-        """Get the default configuration for a specific template."""
-        # This should return the default agent config that populates the form
-        # NOT the raw template YAML
-        default_config = {
-            "agent_id": template_id,
-            "agent_name": template_id.replace("-", " ").title(),
-            "env": {
-                "MODEL_NAME": "gpt-4o-mini",
-                "ADMIN_USERNAME": "admin",
-                "ADMIN_PASSWORD": "change_me_in_production",
-                "DESCRIPTION": f"{template_id.replace('-', ' ').title()} Agent",
-                "PORT": "8000"  # This will be dynamically assigned
-            },
-            "routing": {
-                "path": f"/api/{template_id}/v1",
-                "public": True
-            }
+    @router.get("/env/default")
+    async def get_default_env() -> Dict[str, str]:
+        """Get default environment variables for agent creation."""
+        # This is what the GUI form loads to populate the environment variables
+        return {
+            "OPENAI_API_KEY": "",  # User must provide
+            "OPENAI_MODEL_NAME": "gpt-4o-mini",
+            "ADMIN_USERNAME": "admin",
+            "ADMIN_PASSWORD": "ciris_admin_password",
+            "DESCRIPTION": "CIRIS Agent",
+            "PORT": "8000",  # Will be dynamically assigned
+            "LOG_LEVEL": "INFO",
+            "MAX_TOKENS": "2000",
+            "TEMPERATURE": "0.7"
         }
-        
-        # For specific templates, add their unique defaults
-        if template_id == "echo":
-            default_config["env"]["RESPONSE_STYLE"] = "helpful"
-        elif template_id == "sage":
-            default_config["env"]["EXPERTISE_AREAS"] = "general,coding,analysis"
-        elif template_id == "scout":
-            default_config["env"]["SEARCH_DEPTH"] = "comprehensive"
-            
-        return default_config
 
     @router.get("/ports/allocated")
     async def get_allocated_ports() -> Dict[str, Any]:
