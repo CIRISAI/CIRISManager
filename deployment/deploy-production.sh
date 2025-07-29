@@ -178,15 +178,20 @@ sudo -u ciris-manager "$INSTALL_DIR/venv/bin/pip" install -e "$INSTALL_DIR"
 # Step 6: Configure CIRIS Manager
 print_status "Configuring CIRIS Manager..."
 
-# Copy configuration template
-if [ ! -f "$CONFIG_DIR/config.yml" ]; then
-    cp "$INSTALL_DIR/deployment/config.production.yml" "$CONFIG_DIR/config.yml"
-    
-    # Update domain in config
-    sed -i "s/your-domain.com/$DOMAIN/g" "$CONFIG_DIR/config.yml"
-    
-    print_warning "Please edit $CONFIG_DIR/config.yml with your specific settings"
-fi
+# Copy COMPLETE configuration template
+print_status "Installing production configuration..."
+cp "$INSTALL_DIR/deployment/config.production.yml" "$CONFIG_DIR/config.yml"
+
+# Update domain in config
+sed -i "s/your-domain.com/$DOMAIN/g" "$CONFIG_DIR/config.yml"
+
+# Ensure all directories exist
+mkdir -p /opt/ciris/agents
+mkdir -p "$INSTALL_DIR/agent_templates"
+chown -R ciris-manager:ciris-manager /opt/ciris/agents
+chown -R ciris-manager:ciris-manager "$INSTALL_DIR/agent_templates"
+
+print_status "Configuration installed with proper paths"
 
 # Copy environment template
 if [ ! -f "$CONFIG_DIR/environment" ]; then
