@@ -102,10 +102,17 @@ fi
 
 # Step 1: System Prerequisites
 print_status "Installing system prerequisites..."
+
+# Check Python version
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}' | cut -d. -f1,2)
+if [[ "$PYTHON_VERSION" < "3.11" ]]; then
+    print_error "Python 3.11+ required, found Python $PYTHON_VERSION"
+    exit 1
+fi
+
 apt-get update
 apt-get install -y \
-    python3.11 \
-    python3.11-venv \
+    python3-venv \
     python3-pip \
     git \
     nginx \
@@ -154,9 +161,12 @@ else
     git checkout "$VERSION"
 fi
 
+# Fix git safe directory
+git config --global --add safe.directory "$INSTALL_DIR"
+
 # Step 5: Create Python virtual environment
 print_status "Setting up Python environment..."
-python3.11 -m venv "$INSTALL_DIR/venv"
+python3 -m venv "$INSTALL_DIR/venv"
 chown -R ciris-manager:ciris-manager "$INSTALL_DIR/venv"
 
 # Install dependencies
