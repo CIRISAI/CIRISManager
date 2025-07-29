@@ -6,12 +6,12 @@ Requires=docker.service
 [Service]
 Type=simple
 User=ciris-manager
-Group=ciris-manager
+Group=ciris
 WorkingDirectory=/opt/ciris-manager
 EnvironmentFile=/etc/ciris-manager/environment
 Environment="PYTHONUNBUFFERED=1"
 Environment="HOME=/var/lib/ciris-manager"
-ExecStart=/opt/ciris-manager/venv/bin/python /opt/ciris-manager/deployment/run-ciris-manager-api.py
+ExecStart=/opt/ciris-manager/venv/bin/ciris-manager --config /etc/ciris-manager/config.yml
 Restart=always
 RestartSec=5
 
@@ -25,7 +25,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/ciris/agents /var/log/ciris-manager /etc/ciris-manager /var/lib/ciris-manager
+ReadWritePaths=/opt/ciris/agents /var/log/ciris-manager /etc/ciris-manager /var/lib/ciris-manager /home/ciris/nginx
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true

@@ -6,7 +6,7 @@ Requires=docker.service
 [Service]
 Type=exec
 User=ciris-manager
-Group=ciris-manager
+Group=ciris
 WorkingDirectory=/opt/ciris-manager
 EnvironmentFile=/etc/ciris-manager/environment
 ExecStart=/opt/ciris-manager/venv/bin/ciris-manager --config /etc/ciris-manager/config.yml
@@ -26,7 +26,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/ciris/agents /var/log/ciris-manager /etc/ciris-manager
+ReadWritePaths=/opt/ciris/agents /var/log/ciris-manager /etc/ciris-manager /home/ciris/nginx
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true

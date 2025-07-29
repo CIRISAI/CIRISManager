@@ -57,10 +57,10 @@ api:
     requests_per_minute: 60
     burst_size: 100
     
-# Nginx configuration (optional)
+# Nginx configuration
 nginx:
   enabled: true                          # Enable nginx integration
-  config_dir: /etc/nginx/sites-enabled
+  config_dir: /home/ciris/nginx         # Writable directory for nginx configs
   container_name: ciris-nginx
   ssl_cert_path: /etc/letsencrypt/live/your-domain.com/fullchain.pem
   ssl_key_path: /etc/letsencrypt/live/your-domain.com/privkey.pem

@@ -121,14 +121,28 @@ apt-get install -y \
     jq \
     logrotate
 
-# Step 2: Create system user
-print_status "Creating ciris-manager user..."
+# Step 2: Create system user and group
+print_status "Creating ciris group and users..."
+
+# Create ciris group if it doesn't exist
+if ! getent group ciris &>/dev/null; then
+    groupadd ciris
+fi
+
+# Create ciris-manager user if it doesn't exist
 if ! id "ciris-manager" &>/dev/null; then
     useradd -r -s /bin/false -d /nonexistent -c "CIRIS Manager Service" ciris-manager
 fi
 
-# Add user to docker group
+# Create ciris user if it doesn't exist (for agent containers)
+if ! id "ciris" &>/dev/null; then
+    useradd -r -s /bin/false -d /home/ciris -c "CIRIS Agent Service" ciris
+fi
+
+# Add users to groups
 usermod -aG docker ciris-manager
+usermod -aG ciris ciris-manager
+usermod -aG ciris ciris
 
 # Step 3: Create directory structure
 print_status "Creating directory structure..."
@@ -137,14 +151,17 @@ mkdir -p "$CONFIG_DIR"
 mkdir -p "$AGENT_DIR"
 mkdir -p "$LOG_DIR"
 mkdir -p "$BACKUP_DIR"
-mkdir -p /etc/nginx/ciris-agents
+mkdir -p /home/ciris/nginx
 
 # Set permissions
 chown -R ciris-manager:ciris-manager "$INSTALL_DIR"
 chown -R ciris-manager:ciris-manager "$CONFIG_DIR"
-chown -R ciris-manager:ciris-manager "$AGENT_DIR"
+chown -R ciris-manager:ciris "$AGENT_DIR"
+chmod 775 "$AGENT_DIR"
 chown -R ciris-manager:ciris-manager "$LOG_DIR"
 chown -R ciris-manager:ciris-manager "$BACKUP_DIR"
+chown -R ciris-manager:ciris /home/ciris/nginx
+chmod 775 /home/ciris/nginx
 
 # Step 4: Clone repository
 print_status "Cloning repository..."
