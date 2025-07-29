@@ -230,16 +230,13 @@ def create_routes(manager: Any) -> APIRouter:
         if templates_dir.exists():
             for template_file in templates_dir.glob("*.yaml"):
                 template_name = template_file.stem
-                try:
-                    # Load the full template configuration
-                    import yaml
-                    with open(template_file, 'r') as f:
-                        template_config = yaml.safe_load(f)
-                    all_templates[template_name] = template_config
-                except Exception as e:
-                    logger.error(f"Failed to load template {template_name}: {e}")
-                    # Fallback to simple description
-                    all_templates[template_name] = {"error": f"Failed to load template: {str(e)}"}
+                # For now, just return the template name and description
+                # The actual config should be loaded when a specific template is selected
+                all_templates[template_name] = {
+                    "id": template_name,
+                    "name": template_name.replace("-", " ").title(),
+                    "description": f"{template_name.replace('-', ' ').title()} agent template"
+                }
 
         # For development: if no manifest exists, treat some templates as pre-approved
         if not pre_approved and all_templates:
@@ -250,6 +247,37 @@ def create_routes(manager: Any) -> APIRouter:
             pre_approved_list = list(pre_approved.keys())
 
         return TemplateListResponse(templates=all_templates, pre_approved=pre_approved_list)
+
+    @router.get("/templates/{template_id}/config")
+    async def get_template_config(template_id: str) -> Dict[str, Any]:
+        """Get the default configuration for a specific template."""
+        # This should return the default agent config that populates the form
+        # NOT the raw template YAML
+        default_config = {
+            "agent_id": template_id,
+            "agent_name": template_id.replace("-", " ").title(),
+            "env": {
+                "MODEL_NAME": "gpt-4o-mini",
+                "ADMIN_USERNAME": "admin",
+                "ADMIN_PASSWORD": "change_me_in_production",
+                "DESCRIPTION": f"{template_id.replace('-', ' ').title()} Agent",
+                "PORT": "8000"  # This will be dynamically assigned
+            },
+            "routing": {
+                "path": f"/api/{template_id}/v1",
+                "public": True
+            }
+        }
+        
+        # For specific templates, add their unique defaults
+        if template_id == "echo":
+            default_config["env"]["RESPONSE_STYLE"] = "helpful"
+        elif template_id == "sage":
+            default_config["env"]["EXPERTISE_AREAS"] = "general,coding,analysis"
+        elif template_id == "scout":
+            default_config["env"]["SEARCH_DEPTH"] = "comprehensive"
+            
+        return default_config
 
     @router.get("/ports/allocated")
     async def get_allocated_ports() -> Dict[str, Any]:
