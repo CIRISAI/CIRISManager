@@ -124,15 +124,17 @@ http {
 
     def _generate_upstreams(self, agents: List[Dict]) -> str:
         """Generate upstream blocks for all services."""
+        # When nginx runs in host network mode, use localhost
+        # This is the default for production deployments
         upstreams = """    # === UPSTREAMS ===
     # GUI upstream (running on host)
     upstream gui {
-        server host.docker.internal:3000;
+        server 127.0.0.1:3000;
     }
     
     # Manager upstream
     upstream manager {
-        server host.docker.internal:8888;
+        server 127.0.0.1:8888;
     }
 """
 
@@ -148,10 +150,9 @@ http {
                     logger.warning(f"Skipping agent {agent_id} - no valid port")
                     continue
 
-                # Use host-based routing for global scale
-                # This allows agents to run anywhere - same machine, different machines, cloud
+                # Use localhost for host network mode (production default)
                 upstreams += f"""    upstream agent_{agent_id} {{
-        server host.docker.internal:{port};
+        server 127.0.0.1:{port};
     }}
 """
 
