@@ -108,8 +108,8 @@ class ComposeGenerator:
                     "ports": [f"{port}:8080"],
                     "environment": base_env,
                     "volumes": [
-                        f"{agent_dir}/data:/app/data",
-                        f"{agent_dir}/logs:/app/logs",
+                        f"{agent_id}_data:/app/data",
+                        f"{agent_id}_logs:/app/logs",
                         f"{oauth_volume}:/home/ciris/shared/oauth:ro",
                     ],
                     "restart": "unless-stopped",
@@ -132,6 +132,22 @@ class ComposeGenerator:
                 }
             },
             "networks": {"default": {"name": f"ciris-{agent_id}-network"}},
+            "volumes": {
+                f"{agent_id}_data": {
+                    "driver": "local",
+                    "labels": {
+                        "ai.ciris.agents.id": agent_id,
+                        "ai.ciris.agents.type": "data"
+                    }
+                },
+                f"{agent_id}_logs": {
+                    "driver": "local", 
+                    "labels": {
+                        "ai.ciris.agents.id": agent_id,
+                        "ai.ciris.agents.type": "logs"
+                    }
+                }
+            }
         }
 
         return compose_config

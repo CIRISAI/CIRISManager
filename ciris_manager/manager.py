@@ -178,19 +178,6 @@ class CIRISManager:
         # Create agent directory using agent_id (no spaces!)
         agent_dir = self.agents_dir / agent_id
         agent_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Create data and logs subdirectories with proper permissions
-        # Container runs as UID 1000 (ciris user)
-        data_dir = agent_dir / "data"
-        logs_dir = agent_dir / "logs"
-        data_dir.mkdir(exist_ok=True)
-        logs_dir.mkdir(exist_ok=True)
-        
-        # Set ownership for container access
-        import os
-        if os.getuid() == 0:  # Running as root
-            os.chown(data_dir, 1000, 1000)
-            os.chown(logs_dir, 1000, 1000)
 
         # Generate docker-compose.yml
         compose_config = self.compose_generator.generate_compose(
