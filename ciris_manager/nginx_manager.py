@@ -53,26 +53,26 @@ class NginxManager:
             self.new_config_path.write_text(new_config)
             logger.info(f"Generated new nginx config with {len(agents)} agents")
 
-            # 3. Validate configuration
-            if not self._validate_config():
-                logger.error("Nginx config validation failed")
-                return False
-
-            # 4. Backup current config if it exists
+            # 3. Backup current config if it exists
             if self.config_path.exists():
                 shutil.copy2(self.config_path, self.backup_path)
                 logger.info("Backed up current nginx config")
 
-            # 5. Atomic replace
+            # 4. Atomic replace
             os.rename(self.new_config_path, self.config_path)
             logger.info("Installed new nginx config")
 
-            # 6. Reload nginx
-            if self._reload_nginx():
-                logger.info("Nginx reloaded successfully")
-                return True
+            # 5. Validate and reload nginx
+            if self._validate_config():
+                if self._reload_nginx():
+                    logger.info("Nginx reloaded successfully")
+                    return True
+                else:
+                    logger.error("Nginx reload failed, rolling back")
+                    self._rollback()
+                    return False
             else:
-                logger.error("Nginx reload failed, rolling back")
+                logger.error("Nginx validation failed, rolling back")
                 self._rollback()
                 return False
 
@@ -276,22 +276,7 @@ http {
 
     def _validate_config(self) -> bool:
         """Validate nginx configuration using docker exec."""
-        # First copy the new config to container for validation
-        copy_result = subprocess.run(
-            [
-                "docker",
-                "cp",
-                str(self.new_config_path),
-                f"{self.container_name}:/etc/nginx/nginx.conf.new",
-            ],
-            capture_output=True,
-        )
-
-        if copy_result.returncode != 0:
-            logger.error(f"Failed to copy config to container: {copy_result.stderr.decode()}")
-            return False
-
-        # Validate the config
+        # Config is already at the right place via volume mount
         result = subprocess.run(
             [
                 "docker",
@@ -299,8 +284,6 @@ http {
                 self.container_name,
                 "nginx",
                 "-t",
-                "-c",
-                "/etc/nginx/nginx.conf.new",
             ],
             capture_output=True,
         )
@@ -313,17 +296,7 @@ http {
 
     def _reload_nginx(self) -> bool:
         """Reload nginx configuration."""
-        # First copy the validated config to the proper location
-        copy_result = subprocess.run(
-            ["docker", "cp", str(self.config_path), f"{self.container_name}:/etc/nginx/nginx.conf"],
-            capture_output=True,
-        )
-
-        if copy_result.returncode != 0:
-            logger.error(f"Failed to copy config to container: {copy_result.stderr.decode()}")
-            return False
-
-        # Reload nginx
+        # Just reload - config is already in place via volume mount
         result = subprocess.run(
             ["docker", "exec", self.container_name, "nginx", "-s", "reload"], capture_output=True
         )
