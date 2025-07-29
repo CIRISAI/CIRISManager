@@ -57,7 +57,7 @@ class StatusResponse(BaseModel):
 class TemplateListResponse(BaseModel):
     """Response model for template list."""
 
-    templates: Dict[str, str]
+    templates: Dict[str, Any]  # Changed to Any to support full template configs
     pre_approved: List[str]
 
 
@@ -230,8 +230,16 @@ def create_routes(manager: Any) -> APIRouter:
         if templates_dir.exists():
             for template_file in templates_dir.glob("*.yaml"):
                 template_name = template_file.stem
-                # Simple description from filename
-                all_templates[template_name] = f"{template_name.title()} agent template"
+                try:
+                    # Load the full template configuration
+                    import yaml
+                    with open(template_file, 'r') as f:
+                        template_config = yaml.safe_load(f)
+                    all_templates[template_name] = template_config
+                except Exception as e:
+                    logger.error(f"Failed to load template {template_name}: {e}")
+                    # Fallback to simple description
+                    all_templates[template_name] = {"error": f"Failed to load template: {str(e)}"}
 
         # For development: if no manifest exists, treat some templates as pre-approved
         if not pre_approved and all_templates:
