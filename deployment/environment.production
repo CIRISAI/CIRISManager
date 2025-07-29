@@ -1,0 +1,48 @@
+# CIRIS Manager Production Environment Variables
+# Copy this file to /etc/ciris-manager/environment and update values
+# CRITICAL: Set restrictive permissions (600) and ownership (ciris-manager:ciris-manager)
+
+# OAuth Configuration (REQUIRED for production)
+GOOGLE_CLIENT_ID=your-production-client-id
+GOOGLE_CLIENT_SECRET=your-production-client-secret
+
+# JWT Secret (REQUIRED - generate with: openssl rand -base64 32)
+MANAGER_JWT_SECRET=CHANGE_THIS_TO_RANDOM_SECRET
+
+# Configuration file path
+CIRIS_MANAGER_CONFIG=/etc/ciris-manager/config.yml
+
+# Force production auth mode (safety check)
+CIRIS_AUTH_MODE=production
+
+# Docker configuration
+DOCKER_HOST=unix:///var/run/docker.sock
+
+# Python settings
+PYTHONPATH=/opt/ciris-manager
+PYTHONUNBUFFERED=1
+
+# Logging
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+
+# API settings
+API_WORKERS=4
+API_TIMEOUT=120
+
+# Security headers
+SECURE_HEADERS=true
+CORS_ALLOW_CREDENTIALS=true
+
+# Optional: Sentry error tracking
+# SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+
+# Optional: OpenTelemetry tracing
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+# OTEL_SERVICE_NAME=ciris-manager
+
+# Optional: Prometheus metrics
+# PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
+
+# System limits
+MALLOC_ARENA_MAX=2

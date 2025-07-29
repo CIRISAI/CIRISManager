@@ -1,0 +1,18 @@
+[Unit]
+Description=CIRIS Manager Backup
+After=ciris-manager.service ciris-manager-api.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/ciris-manager/deployment/backup-ciris.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ciris-backup
+
+# Security
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/ciris-manager /tmp
+ReadOnlyPaths=/etc/ciris-manager /opt/ciris

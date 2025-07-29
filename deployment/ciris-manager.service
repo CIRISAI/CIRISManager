@@ -5,9 +5,10 @@ Requires=docker.service
 
 [Service]
 Type=exec
-User=root
-Group=docker
+User=ciris-manager
+Group=ciris-manager
 WorkingDirectory=/opt/ciris-manager
+EnvironmentFile=/etc/ciris-manager/environment
 ExecStart=/opt/ciris-manager/venv/bin/ciris-manager --config /etc/ciris-manager/config.yml
 Restart=always
 RestartSec=10
@@ -23,6 +24,23 @@ SyslogIdentifier=ciris-manager
 # Security
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ciris/agents /var/log/ciris-manager /etc/ciris-manager
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=true
+LockPersonality=true
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=2G
+CPUQuota=200%
 
 [Install]
 WantedBy=multi-user.target

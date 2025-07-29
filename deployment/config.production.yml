@@ -1,0 +1,107 @@
+# CIRIS Manager Production Configuration
+# Copy this file to /etc/ciris-manager/config.yml and update values
+
+# Manager configuration
+manager:
+  host: 0.0.0.0                          # Bind to all interfaces for container access
+  port: 8888                             # Internal API port (behind reverse proxy)
+  agents_directory: /opt/ciris/agents    # Production agent directory
+  templates_directory: /opt/ciris-manager/agent_templates
+  manifest_path: /opt/ciris-manager/pre-approved-templates.json
+  metadata_file: /opt/ciris/agents/metadata.json
+  
+# Authentication configuration - CRITICAL FOR PRODUCTION
+auth:
+  mode: production                       # MUST be 'production' for OAuth
+  jwt_algorithm: HS256
+  jwt_expiry_hours: 24
+  # OAuth credentials set via environment variables:
+  # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MANAGER_JWT_SECRET
+  
+# Docker configuration
+docker:
+  compose_file: /opt/ciris/agents/docker-compose.yml
+  registry: ghcr.io/cirisai
+  image: ciris-agent:latest
+  network_name: ciris-network
+  
+# Watchdog configuration
+watchdog:
+  enabled: true
+  check_interval: 60                     # seconds
+  restart_delay: 30                      # seconds
+  crash_threshold: 3                     # crashes before marking as failed
+  crash_window: 300                      # seconds (5 minutes)
+  
+# Container management
+container_management:
+  enabled: true
+  update_check_interval: 3600            # Check for updates hourly
+  auto_pull_images: false                # Manual updates in production
+  restart_on_update: false               # Manual restarts in production
+  
+# Port allocation
+ports:
+  start: 8000
+  end: 8999
+  reserved: [8080, 8888, 80, 443, 3000]  # Reserved ports
+  
+# API configuration
+api:
+  prefix: /manager/v1
+  cors_origins:
+    - https://your-domain.com            # Update with your domain
+    - https://api.your-domain.com
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+    burst_size: 100
+    
+# Nginx configuration (optional)
+nginx:
+  enabled: true                          # Enable nginx integration
+  config_dir: /etc/nginx/sites-enabled
+  container_name: nginx
+  ssl_cert_path: /etc/letsencrypt/live/your-domain.com/fullchain.pem
+  ssl_key_path: /etc/letsencrypt/live/your-domain.com/privkey.pem
+  
+# Logging configuration
+logging:
+  level: INFO                            # INFO for production
+  format: json                           # Structured logging
+  max_size_mb: 100
+  max_backups: 10
+  
+# Health check configuration
+health:
+  enabled: true
+  endpoint: /manager/v1/health
+  check_docker: true
+  check_disk_space: true
+  min_free_space_gb: 5
+  
+# Security configuration
+security:
+  allowed_hosts:
+    - your-domain.com
+    - api.your-domain.com
+  trusted_proxies:
+    - 127.0.0.1
+    - ::1
+  force_https: true
+  hsts_seconds: 31536000                 # 1 year
+  
+# Monitoring configuration
+monitoring:
+  metrics_enabled: false                 # Enable if using Prometheus
+  metrics_port: 9090
+  tracing_enabled: false                 # Enable if using OpenTelemetry
+  
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"                  # Daily at 2 AM
+  retention_days: 30
+  paths:
+    - /opt/ciris/agents
+    - /etc/ciris-manager

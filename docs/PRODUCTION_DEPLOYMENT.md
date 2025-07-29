@@ -10,6 +10,30 @@ This guide covers deploying CIRISManager to a production environment with proper
 - Domain name with SSL certificate (for OAuth redirects)
 - Google OAuth credentials configured for production domain
 
+## Architecture Overview
+
+CIRISManager acts as the orchestrator for the entire CIRIS ecosystem:
+
+```
+┌─────────────┐     ┌──────────────────────────────────┐
+│   Browser   │────▶│         Nginx (80/443)           │
+└─────────────┘     └────────────┬─────────────────────┘
+                                 │
+        ┌────────────────────────┼────────────────────────┐
+        │                        │                        │
+        ▼                        ▼                        ▼
+┌───────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│/manager/v1/*  │     │    /v1/*        │     │/api/{agent}/v1/*│
+│  Port 8888    │     │  Default Agent  │     │ Dynamic Agents  │
+│ CIRISManager  │     │    (Datum)      │     │  Ports 8000+    │
+└───────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+**Key Points:**
+- CIRISManager discovers agents and configures nginx automatically
+- All routing is managed dynamically - no manual nginx edits needed
+- GUI at port 3000 communicates through nginx to all services
+
 ## Phase 1: Pre-Deployment Setup
 
 ### 1.1 System Requirements

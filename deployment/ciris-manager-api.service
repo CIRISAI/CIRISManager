@@ -5,17 +5,40 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=root
+User=ciris-manager
+Group=ciris-manager
 WorkingDirectory=/opt/ciris-manager
+EnvironmentFile=/etc/ciris-manager/environment
+Environment="PYTHONUNBUFFERED=1"
 ExecStart=/opt/ciris-manager/venv/bin/python /opt/ciris-manager/deployment/run-ciris-manager-api.py
 Restart=always
 RestartSec=5
-Environment="PYTHONUNBUFFERED=1"
 
 # Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=ciris-manager-api
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ciris/agents /var/log/ciris-manager /etc/ciris-manager
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=false
+LockPersonality=true
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+CPUQuota=100%
 
 [Install]
 WantedBy=multi-user.target
