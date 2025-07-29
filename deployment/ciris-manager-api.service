@@ -10,6 +10,7 @@ Group=ciris-manager
 WorkingDirectory=/opt/ciris-manager
 EnvironmentFile=/etc/ciris-manager/environment
 Environment="PYTHONUNBUFFERED=1"
+Environment="HOME=/var/lib/ciris-manager"
 ExecStart=/opt/ciris-manager/venv/bin/python /opt/ciris-manager/deployment/run-ciris-manager-api.py
 Restart=always
 RestartSec=5

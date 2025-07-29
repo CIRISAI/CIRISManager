@@ -5,7 +5,8 @@ Runs only the API without container management or watchdog.
 """
 import asyncio
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 import sys
 import os
 import logging
@@ -60,6 +61,15 @@ if config.auth.mode == "production":
 else:
     # In development mode, skip OAuth setup entirely
     print("Development mode: OAuth authentication disabled")
+
+# Add OAuth callback redirect for Google Console compatibility
+@app.get("/manager/oauth/callback")
+async def oauth_callback_compat(request: Request):
+    """Redirect from Google's registered URL to our actual endpoint"""
+    return RedirectResponse(
+        url=f"/manager/v1/oauth/callback?{request.url.query}",
+        status_code=307  # Temporary redirect, preserves method
+    )
 
 if __name__ == "__main__":
     # Run the API server
