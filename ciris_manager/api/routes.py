@@ -232,10 +232,20 @@ def create_routes(manager: Any) -> APIRouter:
                 template_name = template_file.stem
                 # For now, just return the template name and description
                 # The actual config should be loaded when a specific template is selected
+                # Include basic default config in the template list
+                # This is what the GUI expects
                 all_templates[template_name] = {
                     "id": template_name,
                     "name": template_name.replace("-", " ").title(),
-                    "description": f"{template_name.replace('-', ' ').title()} agent template"
+                    "description": f"{template_name.replace('-', ' ').title()} agent template",
+                    "env": {
+                        "ADMIN_USERNAME": "admin",
+                        "ADMIN_PASSWORD": "ciris_admin_password",
+                        "MODEL_NAME": "gpt-4o-mini",
+                        "OPENAI_API_KEY": "",
+                        "DESCRIPTION": f"{template_name.replace('-', ' ').title()} Agent",
+                        "PORT": "8000"
+                    }
                 }
 
         # For development: if no manifest exists, treat some templates as pre-approved
