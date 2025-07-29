@@ -61,9 +61,8 @@ class TemplateVerifier:
                 return
 
             if self.manifest:
-                logger.info(
-                    f"Loaded pre-approved manifest with {len(self.manifest.get('templates', {}))} templates"
-                )
+                template_count = len(self.manifest.get("templates", {}))
+                logger.info(f"Loaded pre-approved manifest with {template_count} templates")
 
         except Exception as e:
             logger.error(f"Failed to load manifest: {e}")

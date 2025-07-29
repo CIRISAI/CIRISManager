@@ -3,36 +3,48 @@
 
 # Manager settings
 manager:
-  host: 127.0.0.1          # API bind address
-  port: 8888               # API port
-  agents_directory: /opt/ciris-agents  # Where agent data is stored
+  host: 127.0.0.1                      # API bind address
+  port: 8888                           # API port  
+  agents_directory: /opt/ciris/agents  # Where agents are created
+  templates_directory: ./agent_templates  # Agent templates location
+  manifest_path: ./pre-approved-templates.json  # Pre-approved templates
+
+# Authentication settings
+auth:
+  mode: development            # 'development' or 'production'
+  # For production mode, set these environment variables:
+  # GOOGLE_CLIENT_ID=your-client-id
+  # GOOGLE_CLIENT_SECRET=your-client-secret
+
+# Nginx settings (optional)
+nginx:
+  enabled: false               # Enable nginx integration
+  config_dir: /etc/nginx/sites-enabled
+  container_name: nginx
 
 # Docker settings
 docker:
-  compose_file: ./docker-compose.yml   # Path to your docker-compose file
-  registry: ghcr.io/cirisai            # Container registry
+  registry: ghcr.io/cirisai    # Container registry
+  image: ciris-agent:latest    # Default agent image
+
+# Port allocation
+ports:
+  start: 8000                  # First port for agents
+  end: 8999                    # Last port for agents
+  reserved: [8080, 8888]       # Reserved ports (not allocated)
 
 # Watchdog settings for crash detection
 watchdog:
-  check_interval: 30       # Seconds between health checks
-  crash_threshold: 3       # Number of crashes before marking as crash-looping
-  crash_window: 300        # Time window (seconds) for crash counting
+  check_interval: 30           # Seconds between health checks
+  crash_threshold: 3           # Number of crashes before marking as crash-looping
+  crash_window: 300            # Time window (seconds) for crash counting
 
 # Container management
 container_management:
-  interval: 300            # Seconds between container updates
-  pull_images: true        # Auto-pull latest images
+  interval: 300                # Seconds between container updates
+  pull_images: true            # Auto-pull latest images
 
-# API settings
-api:
-  enable_cors: true        # Enable CORS for web frontends
-  cors_origins:
-    - http://localhost:3000
-    - http://localhost:8080
-
-# OAuth settings (optional)
-# Configure these for production use
-# oauth:
-#   client_id: your-oauth-client-id
-#   client_secret: your-oauth-client-secret
-#   redirect_uri: http://localhost:8888/manager/v1/auth/callback
+# Update checking (optional)
+updates:
+  check_interval: 300          # Seconds between update checks
+  auto_notify: true            # Notify agents of updates

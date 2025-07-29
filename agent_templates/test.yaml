@@ -1,0 +1,4 @@
+description: 'Agent profile: test'
+name: test
+permitted_actions:
+- OBSERVE

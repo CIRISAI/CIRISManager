@@ -96,7 +96,7 @@ def _process_container(container: Any) -> Optional[ManagedContainer]:
     host_port = _get_host_port(container)
     if not host_port:
         logger.warning(
-            f"Container {container.name} (agent: {agent_id}) " "has no accessible port - skipping"
+            f"Container {container.name} (agent: {agent_id}) has no accessible port - skipping"
         )
         return None
 

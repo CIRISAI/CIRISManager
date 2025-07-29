@@ -6,7 +6,7 @@ Thank you for your interest in contributing to CIRISManager! This guide will hel
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.11 or higher
 - Docker (for testing container management features)
 - Git
 
@@ -122,10 +122,11 @@ Then create a Pull Request on GitHub.
 
 ## Code Style
 
-- We use [Black](https://black.readthedocs.io/) for Python formatting
-- We use [Ruff](https://docs.astral.sh/ruff/) for linting
-- Type hints are encouraged where appropriate
+- We use [Ruff](https://docs.astral.sh/ruff/) for both formatting and linting
+- Python 3.11+ type hints are required for new code
 - Docstrings should follow Google style
+- Line length: 100 characters
+- All code must pass `ruff check` and `ruff format`
 
 ## Testing Guidelines
 
@@ -177,7 +178,7 @@ ciris-manager/
 │   └── utils/            # Utility functions
 ├── tests/                # Test suite
 ├── deployment/           # Deployment scripts
-├── frontend/             # TypeScript/React components
+├── deployment/           # Deployment scripts (continued)
 └── docs/                 # Documentation
 ```
 

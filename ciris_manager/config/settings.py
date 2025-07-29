@@ -3,7 +3,7 @@ Configuration settings for CIRISManager.
 """
 
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 
 
@@ -74,11 +74,23 @@ class ManagerConfig(BaseModel):
 class NginxConfig(BaseModel):
     """Nginx configuration."""
 
+    enabled: bool = Field(default=True, description="Whether nginx integration is enabled")
     config_dir: str = Field(
         default="/home/ciris/nginx", description="Directory for nginx configuration files"
     )
     container_name: str = Field(
         default="ciris-nginx", description="Name of the nginx Docker container"
+    )
+
+
+class AuthConfig(BaseModel):
+    """Authentication configuration."""
+
+    mode: Literal["development", "production"] = Field(
+        default="production",
+        description=(
+            "Authentication mode - 'development' disables auth, 'production' requires OAuth"
+        ),
     )
 
 
@@ -90,6 +102,7 @@ class CIRISManagerConfig(BaseModel):
     watchdog: WatchdogConfig = Field(default_factory=WatchdogConfig)
     ports: PortConfig = Field(default_factory=PortConfig)
     nginx: NginxConfig = Field(default_factory=NginxConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
     updates: UpdateConfig = Field(default_factory=UpdateConfig)
     container_management: ContainerConfig = Field(default_factory=ContainerConfig)
 

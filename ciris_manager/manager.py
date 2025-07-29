@@ -10,7 +10,7 @@ import logging
 import signal
 import secrets
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 
 from ciris_manager.core.watchdog import CrashLoopWatchdog
 from ciris_manager.config.settings import CIRISManagerConfig
@@ -19,6 +19,7 @@ from ciris_manager.template_verifier import TemplateVerifier
 from ciris_manager.agent_registry import AgentRegistry
 from ciris_manager.compose_generator import ComposeGenerator
 from ciris_manager.nginx_manager import NginxManager
+from ciris_manager.nginx_noop import NoOpNginxManager
 
 logger = logging.getLogger(__name__)
 
@@ -67,14 +68,28 @@ class CIRISManager:
             default_image=self.config.docker.image,
         )
 
-        # Initialize nginx manager
-        self.nginx_manager = NginxManager(
-            config_dir=self.config.nginx.config_dir,
-            container_name=self.config.nginx.container_name,
-        )
+        # Initialize nginx manager based on configuration
+        self.nginx_manager: Union[NginxManager, NoOpNginxManager]
 
-        # Initialize existing components (updated for per-agent management)
-        self.container_manager = None  # Will be replaced with per-agent management
+        if self.config.nginx.enabled:
+            try:
+                # Try to initialize the real nginx manager
+                self.nginx_manager = NginxManager(
+                    config_dir=self.config.nginx.config_dir,
+                    container_name=self.config.nginx.container_name,
+                )
+                logger.info("Successfully initialized Nginx Manager")
+            except Exception as e:
+                # If it fails, fall back to no-op manager
+                logger.error(f"Nginx is enabled but failed to initialize: {e}")
+                logger.warning("Falling back to No-Op Nginx Manager")
+                self.nginx_manager = NoOpNginxManager()
+        else:
+            # If explicitly disabled, use the no-op manager
+            logger.info("Nginx is disabled in configuration")
+            self.nginx_manager = NoOpNginxManager()
+
+        # Initialize existing components
 
         self.watchdog = CrashLoopWatchdog(
             check_interval=self.config.watchdog.check_interval,
@@ -188,7 +203,7 @@ class CIRISManager:
             compose_file=str(compose_path),
         )
 
-        # Update nginx routing
+        # Update nginx routing (no conditional needed - handled by manager type)
         await self._add_nginx_route(name.lower(), allocated_port)
 
         # Start the agent
@@ -283,7 +298,7 @@ class CIRISManager:
 
         self._running = True
 
-        # Generate initial nginx config if it doesn't exist
+        # Generate initial nginx config
         await self.update_nginx_config()
 
         # Start the new container management loop
@@ -354,7 +369,7 @@ class CIRISManager:
                 )
                 await process.communicate()
 
-            # Remove nginx routes
+            # Remove nginx routes (no conditional needed)
             logger.info(f"Removing nginx routes for {agent_id}")
             # Get current list of agents to pass to nginx manager
             from ciris_manager.docker_discovery import DockerAgentDiscovery
@@ -451,9 +466,9 @@ class CIRISManager:
             "config": self.config.model_dump(),
             "watchdog_status": self.watchdog.get_status(),
             "components": {
-                "container_manager": "running" if self._running else "stopped",
                 "watchdog": "running" if self._running else "stopped",
-                "api_server": "not_implemented",
+                "api_server": "running" if self._running else "stopped",
+                "nginx": "enabled" if self.config.nginx.enabled else "disabled",
             },
         }
 

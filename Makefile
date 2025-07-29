@@ -27,8 +27,8 @@ lint:  ## Run linters (ruff, mypy)
 	ruff check ciris_manager/ tests/
 	mypy ciris_manager/
 
-format:  ## Format code with black and ruff
-	black ciris_manager/ tests/
+format:  ## Format code with ruff
+	ruff format ciris_manager/ tests/
 	ruff check --fix ciris_manager/ tests/
 
 clean:  ## Clean up generated files

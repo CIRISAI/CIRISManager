@@ -178,8 +178,7 @@ class CrashLoopWatchdog:
 
         # Send alert (implement notification mechanism later)
         await self._send_alert(
-            f"Agent {tracker.container} stopped due to crash loop. "
-            f"Manual intervention required."
+            f"Agent {tracker.container} stopped due to crash loop. Manual intervention required."
         )
 
     async def _stop_container(self, container: str) -> None:

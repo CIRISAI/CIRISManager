@@ -103,10 +103,8 @@ class ComposeGenerator:
             "services": {
                 agent_id: {
                     "container_name": f"ciris-{agent_id}",
-                    "build": {
-                        "context": "/home/ciris/ciris/forks/CIRISAgent",
-                        "dockerfile": "Dockerfile",
-                    },
+                    "image": f"{self.docker_registry}/{self.default_image}",
+                    "platform": "linux/amd64",
                     "ports": [f"{port}:8080"],
                     "environment": base_env,
                     "volumes": [

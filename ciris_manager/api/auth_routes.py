@@ -11,7 +11,14 @@ import logging
 import os
 from pathlib import Path
 
-from .auth_service import AuthService, InMemorySessionStore, SQLiteUserStore
+from .auth_service import (
+    AuthService,
+    InMemorySessionStore,
+    SQLiteUserStore,
+    MockOAuthProvider,
+    OAuthProvider,
+    TokenResponse,
+)
 from .google_oauth import GoogleOAuthProvider
 
 logger = logging.getLogger(__name__)
@@ -42,14 +49,21 @@ def init_auth_service(
     jwt_secret_value = jwt_secret or os.getenv("MANAGER_JWT_SECRET") or "dev-secret-key"
     db_path = db_path or Path.home() / ".config" / "ciris-manager" / "auth.db"
 
-    if not client_id or not client_secret:
+    # Check for dev mode
+    # Declare with Protocol type
+    oauth_provider: OAuthProvider
+
+    if client_id == "mock-local-testing" or os.getenv("CIRIS_DEV_MODE") == "true":
+        logger.info("Using mock OAuth provider for development")
+        oauth_provider = MockOAuthProvider()
+    elif not client_id or not client_secret:
         logger.warning("Google OAuth not configured")
         return None
-
-    # Create components
-    oauth_provider = GoogleOAuthProvider(
-        client_id=client_id, client_secret=client_secret, hd_domain="ciris.ai"
-    )
+    else:
+        # Create Google OAuth provider
+        oauth_provider = GoogleOAuthProvider(
+            client_id=client_id, client_secret=client_secret, hd_domain="ciris.ai"
+        )
 
     session_store = InMemorySessionStore()
     user_store = SQLiteUserStore(db_path)
@@ -163,6 +177,27 @@ def create_auth_routes() -> APIRouter:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
         return {"user": user}
+
+    # Add dev token endpoint for easy testing
+    if os.getenv("CIRIS_DEV_MODE") == "true":
+
+        @router.post("/dev/token")
+        async def get_dev_token(
+            auth_service: AuthService = Depends(get_auth_service),
+        ) -> TokenResponse:
+            """Get a development token (only available in dev mode)."""
+            if not auth_service:
+                raise HTTPException(status_code=500, detail=oauth_error_msg)
+
+            # Create a dev user session
+            dev_user = {
+                "id": "dev-user-123",
+                "email": "dev@ciris.ai",
+                "name": "Dev User",
+            }
+
+            token = auth_service.create_jwt_token(dev_user)
+            return TokenResponse(access_token=token, token_type="Bearer", user=dev_user)
 
     return router
 

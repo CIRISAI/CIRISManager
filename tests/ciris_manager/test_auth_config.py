@@ -6,8 +6,11 @@ import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
+import pytest
+from pydantic import ValidationError
 
 from ciris_manager.api.auth import load_oauth_config
+from ciris_manager.config.settings import AuthConfig, CIRISManagerConfig
 
 
 class TestAuthConfig:
@@ -95,3 +98,49 @@ class TestAuthConfig:
 
                         assert result is False
                         mock_init.assert_not_called()
+
+
+class TestAuthConfigMode:
+    """Test auth mode configuration."""
+
+    def test_auth_mode_defaults_to_production(self):
+        """Test that auth mode defaults to production for security."""
+        config = AuthConfig()
+        assert config.mode == "production"
+
+    def test_auth_mode_accepts_development(self):
+        """Test that auth mode can be set to development."""
+        config = AuthConfig(mode="development")
+        assert config.mode == "development"
+
+    def test_auth_mode_accepts_production(self):
+        """Test that auth mode can be set to production."""
+        config = AuthConfig(mode="production")
+        assert config.mode == "production"
+
+    def test_auth_mode_rejects_invalid_values(self):
+        """Test that auth mode rejects invalid values."""
+        with pytest.raises(ValidationError) as exc_info:
+            AuthConfig(mode="invalid")
+
+        # Check the error message contains information about valid values
+        error_str = str(exc_info.value)
+        assert "development" in error_str or "production" in error_str
+
+    def test_ciris_manager_config_includes_auth(self):
+        """Test that CIRISManagerConfig includes auth configuration."""
+        config = CIRISManagerConfig()
+        assert hasattr(config, "auth")
+        assert isinstance(config.auth, AuthConfig)
+        assert config.auth.mode == "production"  # Default
+
+    def test_auth_config_from_dict(self):
+        """Test creating auth config from dictionary."""
+        config_dict = {"mode": "development"}
+        config = AuthConfig(**config_dict)
+        assert config.mode == "development"
+
+    def test_full_config_with_auth_mode(self):
+        """Test full config can be created with auth mode."""
+        config = CIRISManagerConfig(auth={"mode": "development"})
+        assert config.auth.mode == "development"

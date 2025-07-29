@@ -46,6 +46,12 @@ def load_oauth_config() -> bool:
         init_auth_service(google_client_id=client_id, google_client_secret=client_secret)
         return True
 
+    # Check for dev mode
+    if os.getenv("CIRIS_DEV_MODE") == "true":
+        logger.info("Dev mode detected, using mock OAuth")
+        init_auth_service(google_client_id="mock-local-testing", google_client_secret="mock-secret")
+        return True
+
     return False
 
 

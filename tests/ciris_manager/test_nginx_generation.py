@@ -4,6 +4,7 @@ Test script for nginx configuration generation.
 
 Tests the template-based nginx config generation with multiple agents.
 """
+
 import sys
 import tempfile
 import shutil
