@@ -319,12 +319,24 @@ class CIRISManager:
             from fastapi import FastAPI
             import uvicorn
             from .api.routes import create_routes
+            from .api.auth import create_auth_routes, load_oauth_config
 
             app = FastAPI(title="CIRISManager API", version="1.0.0")
 
             # Create routes with manager instance
             router = create_routes(self)
             app.include_router(router, prefix="/manager/v1")
+
+            # Include auth routes if in production mode
+            if self.config.auth.mode == "production":
+                auth_router = create_auth_routes()
+                app.include_router(auth_router, prefix="/manager/v1")
+                
+                # Load OAuth configuration
+                if not load_oauth_config():
+                    logger.warning("OAuth not configured. Authentication will not work.")
+                else:
+                    logger.info("OAuth configured successfully")
 
             config = uvicorn.Config(
                 app,
