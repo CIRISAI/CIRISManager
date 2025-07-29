@@ -202,7 +202,7 @@ class TestNginxManager:
 
         assert result is True
 
-        # Should have made 3 calls: docker cp (validate), nginx -t, docker cp (reload), nginx -s reload
+        # Should have made 3+ calls: docker cp, nginx -t, docker cp, nginx -s reload
         assert mock_run.call_count >= 3
 
         # Check that new config only has remaining agent

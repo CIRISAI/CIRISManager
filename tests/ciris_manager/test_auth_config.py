@@ -122,7 +122,7 @@ class TestAuthConfigMode:
         """Test that auth mode rejects invalid values."""
         with pytest.raises(ValidationError) as exc_info:
             AuthConfig(mode="invalid")
-        
+
         # Check the error message contains information about valid values
         error_str = str(exc_info.value)
         assert "development" in error_str or "production" in error_str
@@ -142,7 +142,5 @@ class TestAuthConfigMode:
 
     def test_full_config_with_auth_mode(self):
         """Test full config can be created with auth mode."""
-        config = CIRISManagerConfig(
-            auth={"mode": "development"}
-        )
+        config = CIRISManagerConfig(auth={"mode": "development"})
         assert config.auth.mode == "development"

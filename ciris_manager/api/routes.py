@@ -191,7 +191,10 @@ def create_routes(manager: Any) -> APIRouter:
                 # This is a discovered agent not managed by CIRISManager
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Agent '{agent_id}' was not created by CIRISManager. Please stop it manually using docker-compose.",
+                    detail=(
+                        f"Agent '{agent_id}' was not created by CIRISManager. "
+                        "Please stop it manually using docker-compose."
+                    ),
                 )
             else:
                 raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")

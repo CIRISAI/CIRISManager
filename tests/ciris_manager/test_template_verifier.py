@@ -62,7 +62,9 @@ settings:
         templates = {
             "test": {"checksum": f"sha256:{checksum}", "description": "Test template"},
             "scout": {
-                "checksum": "sha256:b637983cea13976203ed831b88b70ae419d0209ea058ec49937fa74f8b1b6c3a",
+                "checksum": (
+                    "sha256:b637983cea13976203ed831b88b70ae419d0209ea058ec49937fa74f8b1b6c3a"
+                ),
                 "description": "Scout template",
             },
         }

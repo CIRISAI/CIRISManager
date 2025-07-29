@@ -6,8 +6,8 @@ Requires=docker.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/ciris/CIRISAgent
-ExecStart=/home/ciris/venv/bin/python /home/ciris/CIRISAgent/deployment/run-ciris-manager-api.py
+WorkingDirectory=/opt/ciris-manager
+ExecStart=/opt/ciris-manager/venv/bin/python /opt/ciris-manager/deployment/run-ciris-manager-api.py
 Restart=always
 RestartSec=5
 Environment="PYTHONUNBUFFERED=1"

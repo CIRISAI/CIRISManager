@@ -6,11 +6,12 @@ Lightweight agent lifecycle management service for CIRIS agents.
 
 CIRISManager is a standalone service that manages the lifecycle of CIRIS agents. It provides:
 
-- Container management and crash loop detection
-- API for agent discovery and health monitoring
-- OAuth authentication and permission management
-- Nginx configuration management
-- GUI components for agent management
+- Per-agent container lifecycle management with individual docker-compose files
+- Crash loop detection and automatic recovery
+- REST API for agent creation, discovery, and health monitoring
+- OAuth authentication with development/production modes
+- Optional nginx reverse proxy integration
+- Port allocation and management
 
 ## Quick Start
 
@@ -20,9 +21,10 @@ CIRISManager is a standalone service that manages the lifecycle of CIRIS agents.
 
 # Set up environment for local development
 export CIRIS_MANAGER_CONFIG=$(pwd)/config.yml
+export CIRIS_AUTH_MODE=development  # Optional: skip OAuth in development
 
 # Or manually:
-make dev     # Install development dependencies
+make dev     # Install development dependencies  
 make test    # Run tests
 make run-api # Start the API server (requires config export above)
 ```
@@ -32,21 +34,22 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
 ## Features
 
 ### Core Container Management
-- Monitors Docker containers running CIRIS agents
+- Creates and manages individual docker-compose.yml per agent
 - Detects and handles crash loops (3 crashes in 5 minutes)
-- Automatically pulls latest images
+- Automatically pulls latest images from configured registry
 - Graceful shutdown handling
 
-### API Services
-- RESTful API for agent discovery
+### API Services  
+- RESTful API at `/manager/v1/*` for agent operations
 - Health monitoring endpoints
-- OAuth integration for secure access
-- Permission management system
+- OAuth integration with development bypass option
+- Template-based agent creation
 
-### Frontend Components
-- TypeScript client library
-- React components for agent management
-- Real-time agent status updates
+### Architecture
+- Each agent runs in its own isolated environment
+- Agents are created from pre-approved templates
+- Port allocation prevents conflicts between agents
+- Optional nginx integration for production routing
 
 ## Installation
 
@@ -90,19 +93,29 @@ Example configuration:
 manager:
   port: 8888
   host: 127.0.0.1
+  agents_directory: /opt/ciris/agents
+  templates_directory: ./agent_templates
 
+auth:
+  mode: development  # or 'production' for OAuth
+
+nginx:
+  enabled: false  # Set to true for production
+  config_dir: /etc/nginx/sites-enabled
+  
 docker:
-  compose_file: /path/to/docker-compose.yml
+  registry: ghcr.io/cirisai
+  image: ciris-agent:latest
 
 watchdog:
   check_interval: 30
   crash_threshold: 3
   crash_window: 300
 
-container_management:
-  interval: 60
-  pull_images: true
-```
+ports:
+  start: 8000
+  end: 8999
+  reserved: [8080, 8888]
 
 ## Usage
 
@@ -119,13 +132,19 @@ python deployment/run-ciris-manager-api.py
 ### API Endpoints
 
 - `GET /manager/v1/health` - Manager health check
-- `GET /manager/v1/status` - Manager status and components
-- `GET /manager/v1/agents` - List all agents
+- `GET /manager/v1/status` - Manager status and components  
+- `GET /manager/v1/agents` - List all agents (Docker discovery)
 - `GET /manager/v1/agents/{agent_name}` - Get specific agent details
-- `POST /manager/v1/agents` - Create new agent (requires auth)
-- `DELETE /manager/v1/agents/{agent_id}` - Delete agent (requires auth)
-- `GET /manager/v1/templates` - List available templates
-- `GET /manager/v1/ports/allocated` - Show allocated ports
+- `POST /manager/v1/agents` - Create new agent from template
+- `DELETE /manager/v1/agents/{agent_id}` - Delete agent and cleanup
+- `GET /manager/v1/templates` - List available agent templates
+- `GET /manager/v1/ports/allocated` - Show port allocations
+
+### Authentication
+
+- **Development mode**: No auth required (`auth.mode: development`)
+- **Production mode**: Google OAuth required (`auth.mode: production`)
+- OAuth endpoints: `/manager/v1/oauth/login`, `/manager/v1/oauth/callback`
 
 ### Systemd Service
 
@@ -178,11 +197,27 @@ The manager is designed to run alongside CIRIS agents on production servers:
 3. **Service**: Runs as systemd service with automatic restarts
 4. **Updates**: Pull from Git and restart service
 
-Features:
-- Monitor multiple agents via docker-compose
-- Provide centralized API access to agent status
-- Handle OAuth authentication for secure access
-- Integrate with nginx for reverse proxy support
+### Agent Management Architecture
+
+Unlike traditional approaches, CIRISManager creates isolated environments:
+
+```
+/opt/ciris/agents/
+├── scout-abc123/
+│   ├── docker-compose.yml  # Generated per-agent
+│   ├── data/              # Agent data volume
+│   └── logs/              # Agent logs
+└── sage-xyz789/
+    ├── docker-compose.yml
+    ├── data/
+    └── logs/
+```
+
+Each agent gets:
+- Unique port allocation (8000-8999 range)
+- Individual docker-compose configuration
+- Isolated data and log volumes
+- Optional nginx routing
 
 ### Updating
 
@@ -207,7 +242,7 @@ CIRISManager follows a modular architecture:
 - **Core**: Container management and watchdog services
 - **API**: FastAPI-based REST endpoints
 - **Auth**: OAuth and permission management
-- **Frontend**: TypeScript/React components
+- **Nginx**: Dynamic routing configuration for agents
 
 ## Contributing
 

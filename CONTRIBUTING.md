@@ -122,9 +122,11 @@ Then create a Pull Request on GitHub.
 
 ## Code Style
 
-- We use [Ruff](https://docs.astral.sh/ruff/) for formatting and linting
-- Type hints are encouraged where appropriate
+- We use [Ruff](https://docs.astral.sh/ruff/) for both formatting and linting
+- Python 3.11+ type hints are required for new code
 - Docstrings should follow Google style
+- Line length: 100 characters
+- All code must pass `ruff check` and `ruff format`
 
 ## Testing Guidelines
 
@@ -176,7 +178,7 @@ ciris-manager/
 │   └── utils/            # Utility functions
 ├── tests/                # Test suite
 ├── deployment/           # Deployment scripts
-├── frontend/             # TypeScript/React components
+├── deployment/           # Deployment scripts (continued)
 └── docs/                 # Documentation
 ```
 

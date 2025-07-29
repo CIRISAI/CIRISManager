@@ -10,8 +10,8 @@ echo ""
 
 # Check Python version
 echo "📍 Checking Python version..."
-if ! python3 -c "import sys; exit(0 if sys.version_info >= (3,8) else 1)"; then
-    echo "❌ Python 3.8+ is required"
+if ! python3 -c "import sys; exit(0 if sys.version_info >= (3,11) else 1)"; then
+    echo "❌ Python 3.11+ is required"
     exit 1
 fi
 echo "✅ Python $(python3 --version)"
@@ -79,6 +79,12 @@ echo ""
 echo "📚 Next steps:"
 echo "  1. Your config.yml is ready for local development"
 echo "  2. Run 'export CIRIS_MANAGER_CONFIG=$(pwd)/config.yml'"
-echo "  3. Try 'make run-api' to start the server"
+echo "  3. For dev mode: 'export CIRIS_AUTH_MODE=development'"
+echo "  4. Try 'make run-api' to start the server"
+echo ""
+echo "💡 Tips:"
+echo "  - Development mode skips OAuth authentication"
+echo "  - Check docs/API.md for endpoint documentation"
+echo "  - Run 'make test-cov' to see test coverage (target: 80%+)"
 echo ""
 echo "Happy coding! 🎈"

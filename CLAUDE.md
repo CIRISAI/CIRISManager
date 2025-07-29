@@ -59,6 +59,10 @@ ruff check ciris_manager/ tests/
 mypy ciris_manager/
 ```
 
+## Development Best Practices
+
+- Activate venv before running python commands.
+
 ## Architecture Overview
 
 CIRISManager is a lightweight systemd service that manages CIRIS agent lifecycles through Docker containers.
@@ -150,7 +154,7 @@ All I/O operations use async/await for non-blocking execution:
 - Monitors agent health endpoints
 - Manages agent networking and routing
 
-### Frontend Integration
-- TypeScript client library in `frontend/packages/`
-- React components for agent management UI
-- Real-time status updates via polling
+### GUI Integration
+- Integrates with CIRIS GUI from CIRISAgent repository
+- GUI runs as separate container on port 3000
+- Nginx routes traffic between GUI and Manager API
