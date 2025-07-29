@@ -89,8 +89,7 @@ class AuthConfig(BaseModel):
     mode: Literal["development", "production"] = Field(
         default="production",
         description=(
-            "Authentication mode - 'development' disables auth, "
-            "'production' requires OAuth"
+            "Authentication mode - 'development' disables auth, 'production' requires OAuth"
         ),
     )
 
