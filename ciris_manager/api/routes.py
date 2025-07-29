@@ -255,7 +255,7 @@ def create_routes(manager: Any) -> APIRouter:
             # Core CIRIS requirements
             "LLM_PROVIDER=openai",
             "OPENAI_API_KEY=",  # User must provide
-            "DATABASE_URL=sqlite:////data/ciris.db",
+            "DATABASE_URL=sqlite:////app/data/ciris_engine.db",
             "API_HOST=0.0.0.0",
             "API_PORT=8080",  # Will be dynamically assigned
             "JWT_SECRET_KEY=generate-with-openssl-rand-hex-32",
