@@ -1,262 +1,209 @@
 # CIRISManager
 
-Lightweight agent lifecycle management service for CIRIS agents.
+Production-grade lifecycle management for CIRIS agents with automatic nginx configuration.
 
-## Overview
+## What It Does
 
-CIRISManager is a standalone service that manages the lifecycle of CIRIS agents. It provides:
-
-- Per-agent container lifecycle management with individual docker-compose files
-- Crash loop detection and automatic recovery
-- REST API for agent creation, discovery, and health monitoring
-- OAuth authentication with development/production modes
-- Optional nginx reverse proxy integration
-- Port allocation and management
-
-## Quick Start
-
-```bash
-# One-line setup
-./quickstart.sh
-
-# Set up environment for local development
-export CIRIS_MANAGER_CONFIG=$(pwd)/config.yml
-export CIRIS_AUTH_MODE=development  # Optional: skip OAuth in development
-
-# Or manually:
-make dev     # Install development dependencies  
-make test    # Run tests
-make run-api # Start the API server (requires config export above)
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
-
-## Features
-
-### Core Container Management
-- Creates and manages individual docker-compose.yml per agent
-- Detects and handles crash loops (3 crashes in 5 minutes)
-- Automatically pulls latest images from configured registry
-- Graceful shutdown handling
-
-### API Services  
-- RESTful API at `/manager/v1/*` for agent operations
-- Health monitoring endpoints
-- OAuth integration with development bypass option
-- Template-based agent creation
-
-### Architecture
-- Each agent runs in its own isolated environment
-- Agents are created from pre-approved templates
-- Port allocation prevents conflicts between agents
-- Optional nginx integration for production routing
+CIRISManager runs as a systemd service that:
+- Discovers and monitors CIRIS agent containers
+- Generates nginx configurations automatically
+- Detects crash loops and prevents infinite restarts
+- Provides REST API for agent management
+- Handles OAuth authentication for secure access
 
 ## Installation
 
-### Production Deployment
-
 ```bash
-# Quick install - run deployment script directly
-curl -sSL https://raw.githubusercontent.com/CIRISAI/ciris-manager/main/deployment/deploy.sh | bash
-
-# Or clone and run manually
-git clone https://github.com/CIRISAI/ciris-manager.git /opt/ciris-manager
-cd /opt/ciris-manager
-./deployment/deploy.sh
-```
-
-### Development Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/CIRISAI/ciris-manager.git
+# Production deployment
+cd /opt
+git clone https://github.com/CIRISAI/CIRISManager.git ciris-manager
 cd ciris-manager
-
-# Run development setup
-./deployment/setup-development.sh
-
-# Start API server
-./run-api.sh
+./deployment/deploy-production.sh --domain agents.ciris.ai --email admin@ciris.ai
 ```
 
 ## Configuration
 
-Generate a default configuration file:
-
-```bash
-ciris-manager --generate-config --config /etc/ciris-manager/config.yml
-```
-
-Example configuration:
+Default configuration at `/etc/ciris-manager/config.yml`:
 
 ```yaml
+# Manager settings
 manager:
+  host: 0.0.0.0
   port: 8888
-  host: 127.0.0.1
   agents_directory: /opt/ciris/agents
-  templates_directory: ./agent_templates
 
+# Authentication
 auth:
-  mode: development  # or 'production' for OAuth
+  mode: production  # Use OAuth
+  jwt_algorithm: HS256
+  jwt_expiry_hours: 24
 
+# Nginx integration
 nginx:
-  enabled: false  # Set to true for production
-  config_dir: /etc/nginx/sites-enabled
-  
-docker:
-  registry: ghcr.io/cirisai
-  image: ciris-agent:latest
+  enabled: true
+  config_dir: /home/ciris/nginx
+  container_name: ciris-nginx
 
+# Container monitoring
 watchdog:
   check_interval: 30
   crash_threshold: 3
   crash_window: 300
-
-ports:
-  start: 8000
-  end: 8999
-  reserved: [8080, 8888]
-
-## Usage
-
-### Running the Service
-
-```bash
-# Run with configuration file
-ciris-manager --config /etc/ciris-manager/config.yml
-
-# Run API-only mode
-python deployment/run-ciris-manager-api.py
 ```
 
-### API Endpoints
+## Running
 
-- `GET /manager/v1/health` - Manager health check
-- `GET /manager/v1/status` - Manager status and components  
-- `GET /manager/v1/agents` - List all agents (Docker discovery)
-- `GET /manager/v1/agents/{agent_name}` - Get specific agent details
-- `POST /manager/v1/agents` - Create new agent from template
-- `DELETE /manager/v1/agents/{agent_id}` - Delete agent and cleanup
-- `GET /manager/v1/templates` - List available agent templates
-- `GET /manager/v1/ports/allocated` - Show port allocations
+The service runs automatically via systemd:
+
+```bash
+# Check status
+systemctl status ciris-manager-api
+
+# View logs
+journalctl -u ciris-manager-api -f
+
+# Restart after config changes
+systemctl restart ciris-manager-api
+```
+
+## API Endpoints
+
+Base URL: `https://agents.ciris.ai/manager/v1`
+
+### Agent Management
+- `GET /agents` - List all discovered agents
+- `GET /agents/{agent_id}` - Get agent details
+- `POST /agents` - Create new agent from template
+- `DELETE /agents/{agent_id}` - Remove agent
 
 ### Authentication
+- `GET /oauth/login` - Start OAuth flow
+- `GET /oauth/callback` - OAuth callback handler
+- `GET /auth/user` - Get current user info
 
-- **Development mode**: No auth required (`auth.mode: development`)
-- **Production mode**: Google OAuth required (`auth.mode: production`)
-- OAuth endpoints: `/manager/v1/oauth/login`, `/manager/v1/oauth/callback`
+### System
+- `GET /health` - Service health check
+- `GET /templates` - List available agent templates
+- `GET /env/default` - Get default environment variables
 
-### Systemd Service
+## Nginx Management
 
-The deployment script automatically installs systemd services:
+CIRISManager automatically generates nginx configurations when agents change:
 
-```bash
-# Start services
-sudo systemctl start ciris-manager      # Full manager with watchdog
-sudo systemctl start ciris-manager-api  # API-only mode
+1. Discovers agents via Docker labels
+2. Generates complete nginx.conf with SSL
+3. Writes directly to `/home/ciris/nginx/nginx.conf`
+4. Reloads nginx container
 
-# Enable on boot
-sudo systemctl enable ciris-manager
+The generated config includes:
+- HTTP to HTTPS redirect
+- SSL with Let's Encrypt certificates
+- Reverse proxy for GUI and all agents
+- WebSocket support
+- Health check endpoints
 
-# Check status
-sudo systemctl status ciris-manager
-journalctl -u ciris-manager -f
+## Docker Integration
 
-# Update from Git
-ciris-manager-update
-```
+Agents are discovered through:
+- Docker container labels
+- Running state monitoring
+- Port allocation tracking
 
-## Development
+Requirements:
+- Docker socket access (`/var/run/docker.sock`)
+- Containers in same network or host mode
+- Proper container naming conventions
 
-### Running Tests
+## OAuth Setup
 
-```bash
-# Run all tests
-pytest tests/
+Production deployments use Google OAuth:
 
-# Run specific test module
-pytest tests/ciris_manager/test_manager.py
-```
+1. Set environment variables in `/etc/ciris-manager/environment`:
+   ```
+   GOOGLE_CLIENT_ID=your-client-id
+   GOOGLE_CLIENT_SECRET=your-secret
+   MANAGER_JWT_SECRET=random-secret
+   ```
 
-### Frontend Development
+2. Configure OAuth consent screen in Google Cloud Console
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+3. Add redirect URI: `https://agents.ciris.ai/manager/oauth/callback`
 
-## Deployment
+## Creating Agents
 
-### Production Deployment
-
-The manager is designed to run alongside CIRIS agents on production servers:
-
-1. **Installation**: Clone repository to `/opt/ciris-manager`
-2. **Configuration**: Edit `/etc/ciris-manager/config.yml`
-3. **Service**: Runs as systemd service with automatic restarts
-4. **Updates**: Pull from Git and restart service
-
-### Agent Management Architecture
-
-Unlike traditional approaches, CIRISManager creates isolated environments:
-
-```
-/opt/ciris/agents/
-├── scout-abc123/
-│   ├── docker-compose.yml  # Generated per-agent
-│   ├── data/              # Agent data volume
-│   └── logs/              # Agent logs
-└── sage-xyz789/
-    ├── docker-compose.yml
-    ├── data/
-    └── logs/
-```
-
-Each agent gets:
-- Unique port allocation (8000-8999 range)
-- Individual docker-compose configuration
-- Isolated data and log volumes
-- Optional nginx routing
-
-### Updating
-
-To update to the latest version:
+Agents are created from templates:
 
 ```bash
-# Use the provided update script
-ciris-manager-update
-
-# Or manually
-cd /opt/ciris-manager
-git pull origin main
-source venv/bin/activate
-pip install -r requirements.txt
-systemctl restart ciris-manager
+# Via API
+curl -X POST https://agents.ciris.ai/manager/v1/agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template": "echo",
+    "name": "echo-bot",
+    "environment": {
+      "DISCORD_TOKEN": "your-token"
+    }
+  }'
 ```
 
-## Architecture
+Templates define:
+- Base container image
+- Required environment variables
+- Port allocations
+- Resource limits
 
-CIRISManager follows a modular architecture:
+## Monitoring
 
-- **Core**: Container management and watchdog services
-- **API**: FastAPI-based REST endpoints
-- **Auth**: OAuth and permission management
-- **Nginx**: Dynamic routing configuration for agents
+The watchdog service:
+- Checks container health every 30 seconds
+- Detects crash loops (3 crashes in 5 minutes)
+- Prevents infinite restart loops
+- Logs incidents for debugging
 
-## Contributing
+## Directory Structure
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
+```
+/opt/ciris-manager/          # Installation directory
+/etc/ciris-manager/          # Configuration files
+├── config.yml               # Main configuration
+└── environment              # OAuth secrets
+
+/home/ciris/nginx/           # Nginx configurations
+└── nginx.conf               # Generated config
+
+/opt/ciris/agents/           # Agent data
+└── metadata.json            # Agent registry
+```
+
+## Troubleshooting
+
+Check service logs:
+```bash
+# Manager logs
+journalctl -u ciris-manager-api -f
+
+# Container logs
+docker logs ciris-nginx
+docker logs ciris-agent-datum
+
+# Nginx config
+cat /home/ciris/nginx/nginx.conf
+```
+
+Common issues:
+- **OAuth not working**: Check environment variables in `/etc/ciris-manager/environment`
+- **Nginx not updating**: Ensure service has write access to `/home/ciris/nginx`
+- **Agents not discovered**: Verify Docker socket permissions
+
+## Security
+
+- OAuth authentication required in production
+- JWT tokens for API access
+- Role-based permissions (OBSERVER, ADMIN, SYSTEM_ADMIN)
+- Secure systemd service configuration
+- Network isolation between agents
 
 ## License
 
-[Same license as CIRIS Agent]
-
-## Related Projects
-
-- [CIRIS Agent](https://github.com/CIRISAI/CIRISAgent) - The main CIRIS agent repository
-- [CIRIS GUI](https://github.com/CIRISAI/CIRISAgent/tree/main/CIRISGUI) - The main GUI that integrates with this manager
+Apache 2.0 - See LICENSE file
