@@ -233,7 +233,9 @@ def create_routes(manager: Any) -> APIRouter:
                 # For now, just return the template name and description
                 # The actual config should be loaded when a specific template is selected
                 # Just return template metadata - GUI gets env vars from separate endpoint
-                all_templates[template_name] = f"{template_name.replace('-', ' ').title()} agent template"
+                all_templates[template_name] = (
+                    f"{template_name.replace('-', ' ').title()} agent template"
+                )
 
         # For development: if no manifest exists, treat some templates as pre-approved
         if not pre_approved and all_templates:
@@ -259,10 +261,9 @@ def create_routes(manager: Any) -> APIRouter:
             "JWT_SECRET_KEY": "generate-with-openssl-rand-hex-32",
             "ENVIRONMENT": "production",
             "LOG_LEVEL": "INFO",
-            
             # Optional: Admin credentials (not in .env.example but commonly used)
             "ADMIN_USERNAME": "admin",
-            "ADMIN_PASSWORD": "ciris_admin_password"
+            "ADMIN_PASSWORD": "ciris_admin_password",
         }
 
     @router.get("/ports/allocated")
@@ -276,6 +277,5 @@ def create_routes(manager: Any) -> APIRouter:
                 "end": manager.port_manager.end_port,
             },
         }
-
 
     return router
