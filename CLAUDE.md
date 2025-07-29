@@ -158,3 +158,71 @@ All I/O operations use async/await for non-blocking execution:
 - Integrates with CIRIS GUI from CIRISAgent repository
 - GUI runs as separate container on port 3000
 - Nginx routes traffic between GUI and Manager API
+
+## Production Deployment
+
+### Production Server Access
+```bash
+# SSH to production server
+ssh root@108.61.119.117
+
+# CIRIS deployment location
+cd /opt/ciris
+```
+
+### Production Directory Structure
+```
+/opt/ciris/
+├── agents/          # Agent configurations and data
+├── nginx/           # Nginx configurations
+└── nginx-new/       # Nginx staging configurations
+
+/opt/ciris-manager/  # CIRISManager installation
+```
+
+### Container Naming Convention
+Production containers follow the naming pattern:
+- `ciris-nginx` - Reverse proxy
+- `ciris-gui` - Frontend interface
+- `ciris-agent-{name}` - Individual agents (e.g., ciris-agent-datum)
+
+### Checking Production Status
+```bash
+# View running CIRIS containers
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep ciris
+
+# Check container health
+docker inspect ciris-agent-datum --format='{{.State.Health.Status}}'
+
+# View container logs
+docker logs ciris-agent-datum --tail 50 -f
+```
+
+### New Agent Deployment
+
+1. **Prepare Environment File**
+   Create `.env` file for the new agent with required variables:
+   ```env
+   CIRIS_AGENT_NAME=myagent
+   CIRIS_API_PORT=8081
+   OPENAI_API_KEY=your-key
+   # Add other agent-specific variables
+   ```
+
+2. **Add Agent to Docker Compose**
+   Update the docker-compose file in `/opt/ciris` to include the new agent service.
+
+3. **Deploy New Agent**
+   ```bash
+   cd /opt/ciris
+   docker-compose up -d ciris-agent-myagent
+   ```
+
+4. **Update Nginx Configuration**
+   The CIRISManager will automatically detect the new agent and update nginx routing.
+
+### Monitoring and Maintenance
+- Container health is monitored by CIRISManager watchdog
+- Crash loops are detected (3 crashes in 5 minutes)
+- Nginx config is auto-generated when agents change
+- Agent metadata stored in `/opt/ciris/agents/`

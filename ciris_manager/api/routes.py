@@ -250,20 +250,24 @@ def create_routes(manager: Any) -> APIRouter:
     @router.get("/env/default")
     async def get_default_env() -> Dict[str, str]:
         """Get default environment variables for agent creation."""
-        # These are the EXACT variable names CIRIS agents expect (from CIRISAgent/.env.example)
-        return {
+        # Return in .env file format as expected by GUI's parseEnvFile()
+        env_vars = [
             # Core CIRIS requirements
-            "LLM_PROVIDER": "openai",
-            "OPENAI_API_KEY": "",  # User must provide
-            "DATABASE_URL": "sqlite:////data/ciris.db",
-            "API_HOST": "0.0.0.0",
-            "API_PORT": "8080",  # Will be dynamically assigned
-            "JWT_SECRET_KEY": "generate-with-openssl-rand-hex-32",
-            "ENVIRONMENT": "production",
-            "LOG_LEVEL": "INFO",
+            "LLM_PROVIDER=openai",
+            "OPENAI_API_KEY=",  # User must provide
+            "DATABASE_URL=sqlite:////data/ciris.db",
+            "API_HOST=0.0.0.0",
+            "API_PORT=8080",  # Will be dynamically assigned
+            "JWT_SECRET_KEY=generate-with-openssl-rand-hex-32",
+            "ENVIRONMENT=production",
+            "LOG_LEVEL=INFO",
             # Optional: Admin credentials (not in .env.example but commonly used)
-            "ADMIN_USERNAME": "admin",
-            "ADMIN_PASSWORD": "ciris_admin_password",
+            "ADMIN_USERNAME=admin",
+            "ADMIN_PASSWORD=ciris_admin_password",
+        ]
+        
+        return {
+            "content": "\n".join(env_vars)
         }
 
     @router.get("/ports/allocated")
