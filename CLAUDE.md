@@ -163,11 +163,8 @@ All I/O operations use async/await for non-blocking execution:
 
 ### Production Server Access
 ```bash
-# SSH to production server
-ssh root@108.61.119.117
-
-# CIRIS deployment location
-cd /opt/ciris
+# SSH connection details are stored in CLAUDE.local.md
+# CIRIS deployment location: /opt/ciris
 ```
 
 ### Production Directory Structure

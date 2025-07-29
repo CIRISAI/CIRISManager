@@ -167,6 +167,7 @@ test-env/
 local-data/
 config.yml
 run-api.sh
+CLAUDE.local.md
 
 # vercel
 .vercel
