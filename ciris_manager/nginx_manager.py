@@ -166,9 +166,23 @@ http {
             default_agent = next((a for a in agents if a.get("agent_id") == "datum"), agents[0])
 
         server = """    # === MAIN SERVER ===
+    # Redirect HTTP to HTTPS
     server {
         listen 80;
-        server_name _;
+        server_name agents.ciris.ai;
+        return 301 https://$server_name$request_uri;
+    }
+
+    # HTTPS Server
+    server {
+        listen 443 ssl http2;
+        server_name agents.ciris.ai;
+        
+        # SSL configuration
+        ssl_certificate /etc/letsencrypt/live/agents.ciris.ai/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/agents.ciris.ai/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
         
         # Health check endpoint
         location /health {
