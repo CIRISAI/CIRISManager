@@ -331,7 +331,7 @@ class CIRISManager:
             if self.config.auth.mode == "production":
                 auth_router = create_auth_routes()
                 app.include_router(auth_router, prefix="/manager/v1")
-                
+
                 # Load OAuth configuration
                 if not load_oauth_config():
                     logger.warning("OAuth not configured. Authentication will not work.")
@@ -341,13 +341,13 @@ class CIRISManager:
             # Add OAuth callback redirect for Google Console compatibility
             from fastapi import Request
             from fastapi.responses import RedirectResponse
-            
+
             @app.get("/manager/oauth/callback")
             async def oauth_callback_compat(request: Request):
                 """Redirect from Google's registered URL to our actual endpoint"""
                 return RedirectResponse(
                     url=f"/manager/v1/oauth/callback?{request.url.query}",
-                    status_code=307  # Temporary redirect, preserves method
+                    status_code=307,  # Temporary redirect, preserves method
                 )
 
             config = uvicorn.Config(

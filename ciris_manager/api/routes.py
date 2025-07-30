@@ -265,10 +265,8 @@ def create_routes(manager: Any) -> APIRouter:
             "ADMIN_USERNAME=admin",
             "ADMIN_PASSWORD=ciris_admin_password",
         ]
-        
-        return {
-            "content": "\n".join(env_vars)
-        }
+
+        return {"content": "\n".join(env_vars)}
 
     @router.get("/ports/allocated")
     async def get_allocated_ports() -> Dict[str, Any]:

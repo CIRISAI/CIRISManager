@@ -135,19 +135,13 @@ class ComposeGenerator:
             "volumes": {
                 f"{agent_id}_data": {
                     "driver": "local",
-                    "labels": {
-                        "ai.ciris.agents.id": agent_id,
-                        "ai.ciris.agents.type": "data"
-                    }
+                    "labels": {"ai.ciris.agents.id": agent_id, "ai.ciris.agents.type": "data"},
                 },
                 f"{agent_id}_logs": {
-                    "driver": "local", 
-                    "labels": {
-                        "ai.ciris.agents.id": agent_id,
-                        "ai.ciris.agents.type": "logs"
-                    }
-                }
-            }
+                    "driver": "local",
+                    "labels": {"ai.ciris.agents.id": agent_id, "ai.ciris.agents.type": "logs"},
+                },
+            },
         }
 
         return compose_config
