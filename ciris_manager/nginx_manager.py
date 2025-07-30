@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class NginxManager:
     """Manages nginx configuration using template generation."""
 
-    def __init__(self, config_dir: str = "/home/ciris/nginx", container_name: str = "ciris-nginx"):
+    def __init__(self, config_dir: str = "/opt/ciris-manager/nginx", container_name: str = "ciris-nginx"):
         """
         Initialize nginx manager.
 
