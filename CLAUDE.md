@@ -223,3 +223,83 @@ docker logs ciris-agent-datum --tail 50 -f
 - Crash loops are detected (3 crashes in 5 minutes)
 - Nginx config is auto-generated when agents change
 - Agent metadata stored in `/opt/ciris/agents/`
+
+## Nginx Management
+
+### How Nginx Integration Works
+
+CIRISManager generates **partial nginx configurations** that are included in the main nginx.conf:
+
+1. **Configuration Generation**
+   - Manager writes to `/opt/ciris-manager/nginx/agents.conf`
+   - Contains only agent-specific routes and upstreams
+   - Main nginx.conf includes this file via `include` directive
+
+2. **Volume Mount Strategy**
+   ```
+   Host: /opt/ciris-manager/nginx/ → Container: /etc/nginx/conf.d/
+   ```
+   The nginx container sees config changes immediately via volume mount.
+
+3. **Update Flow**
+   ```
+   Agent change detected → Generate agents.conf → Validate config → Reload nginx
+                                                       ↓
+                                                  (rollback if invalid)
+   ```
+
+4. **Route Structure**
+   - `/` → GUI (port 3000)
+   - `/manager/v1/*` → Manager API (port 8888)
+   - `/api/{agent_id}/*` → Individual agents (dynamic ports)
+   - `/v1/*` → Default agent (usually 'datum')
+
+### Troubleshooting Nginx Issues
+
+**Config not updating:**
+```bash
+# Check if agents.conf exists and is readable
+ls -la /opt/ciris-manager/nginx/agents.conf
+
+# Verify nginx container can see the config
+docker exec ciris-nginx ls -la /etc/nginx/conf.d/
+
+# Check nginx error logs
+docker logs ciris-nginx --tail 50
+```
+
+**Validation failures:**
+```bash
+# Test config manually
+docker exec ciris-nginx nginx -t
+
+# Check generated config content
+cat /opt/ciris-manager/nginx/agents.conf
+```
+
+**Permissions issues:**
+- Manager needs write access to `/opt/ciris-manager/nginx/`
+- Nginx container needs read access via volume mount
+- Default owner should be the user running CIRISManager
+
+### Known Issue: Dual Config Loading
+
+**Problem:** The production nginx setup loads TWO separate configs:
+1. **Static config**: `/etc/nginx/conf.d/default.conf` (from `agents.ciris.ai-dev.conf`)
+2. **Dynamic config**: `/etc/nginx/conf.d/agents.conf` (from CIRISManager)
+
+Both files load independently in nginx, potentially causing route conflicts.
+
+**Root Cause:** The docker-compose mounts:
+```yaml
+volumes:
+  - ./nginx/agents.ciris.ai-dev.conf:/etc/nginx/conf.d/default.conf:ro
+  - /opt/ciris-manager/nginx/agents.conf:/etc/nginx/conf.d/agents.conf:ro
+```
+
+**Solution Architecture:**
+1. Static config should handle base infrastructure (SSL, GUI, static routes)
+2. Static config should explicitly `include` the dynamic agent routes
+3. Dynamic config should ONLY contain agent-specific routes
+
+**Implementation Status:** Solution implemented and tested. Ready for production deployment.

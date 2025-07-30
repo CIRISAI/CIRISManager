@@ -41,7 +41,7 @@ auth:
 # Nginx integration
 nginx:
   enabled: true
-  config_dir: /home/ciris/nginx
+  config_dir: /opt/ciris-manager/nginx
   container_name: ciris-nginx
 
 # Container monitoring
@@ -91,16 +91,17 @@ Base URL: `https://agents.ciris.ai/manager/v1`
 CIRISManager automatically generates nginx configurations when agents change:
 
 1. Discovers agents via Docker labels
-2. Generates complete nginx.conf with SSL
-3. Writes directly to `/home/ciris/nginx/nginx.conf`
+2. Generates dynamic agent routes only (agents.conf)
+3. Writes to `/opt/ciris-manager/nginx/agents.conf`
 4. Reloads nginx container
 
 The generated config includes:
-- HTTP to HTTPS redirect
-- SSL with Let's Encrypt certificates
-- Reverse proxy for GUI and all agents
-- WebSocket support
-- Health check endpoints
+- Dynamic agent upstreams and routes
+- Default /v1 route pointing to primary agent
+- WebSocket support for all agents
+- Automatic route updates when agents change
+
+Note: Static infrastructure (SSL, GUI routes) is managed by the nginx template in CIRISAgent
 
 ## Docker Integration
 
@@ -169,8 +170,8 @@ The watchdog service:
 ├── config.yml               # Main configuration
 └── environment              # OAuth secrets
 
-/home/ciris/nginx/           # Nginx configurations
-└── nginx.conf               # Generated config
+/opt/ciris-manager/nginx/    # Nginx configurations
+└── agents.conf              # Generated agent routes
 
 /opt/ciris/agents/           # Agent data
 └── metadata.json            # Agent registry
@@ -188,12 +189,12 @@ docker logs ciris-nginx
 docker logs ciris-agent-datum
 
 # Nginx config
-cat /home/ciris/nginx/nginx.conf
+cat /opt/ciris-manager/nginx/agents.conf
 ```
 
 Common issues:
 - **OAuth not working**: Check environment variables in `/etc/ciris-manager/environment`
-- **Nginx not updating**: Ensure service has write access to `/home/ciris/nginx`
+- **Nginx not updating**: Ensure service has write access to `/opt/ciris-manager/nginx`
 - **Agents not discovered**: Verify Docker socket permissions
 
 ## Security
