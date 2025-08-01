@@ -5,7 +5,7 @@ Provides endpoints for agent creation, discovery, and management.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Header
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import logging
@@ -133,29 +133,29 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Manager UI Routes - Protected by OAuth
     @router.get("/")
-    async def manager_home(user: dict = auth_dependency):
+    async def manager_home(user: dict = auth_dependency) -> FileResponse:
         """Serve manager dashboard for @ciris.ai users."""
         # In production mode, check for @ciris.ai email
         if auth_mode == "production" and not user.get("email", "").endswith("@ciris.ai"):
             raise HTTPException(status_code=403, detail="Access restricted to @ciris.ai users")
-        
+
         # Serve the manager UI
         static_path = Path(__file__).parent.parent.parent / "static" / "manager" / "index.html"
         if not static_path.exists():
             raise HTTPException(status_code=404, detail="Manager UI not found")
-        
+
         return FileResponse(static_path)
-    
+
     @router.get("/manager.js")
-    async def manager_js(user: dict = auth_dependency):
+    async def manager_js(user: dict = auth_dependency) -> FileResponse:
         """Serve manager JavaScript."""
         if auth_mode == "production" and not user.get("email", "").endswith("@ciris.ai"):
             raise HTTPException(status_code=403, detail="Access restricted to @ciris.ai users")
-        
+
         static_path = Path(__file__).parent.parent.parent / "static" / "manager" / "manager.js"
         if not static_path.exists():
             raise HTTPException(status_code=404, detail="Manager JS not found")
-        
+
         return FileResponse(static_path, media_type="application/javascript")
 
     @router.get("/health")
