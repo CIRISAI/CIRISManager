@@ -13,7 +13,7 @@ import jwt
 import sqlite3
 from contextlib import contextmanager
 
-from ciris_manager.models import OAuthToken, OAuthUser, OAuthSession, JWTPayload
+from ciris_manager.models import OAuthToken, OAuthUser, OAuthSession
 
 logger = logging.getLogger(__name__)
 
