@@ -186,10 +186,23 @@ http {
             add_header Content-Type text/plain;
         }
         
-        # Manager GUI (static files)
-        location / {
-            root /home/ciris/CIRISManager/static;
-            try_files $uri /index.html;
+        # Manager UI routes
+        location = / {
+            proxy_pass http://manager/manager/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        location = /manager.js {
+            proxy_pass http://manager/manager/manager.js;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
         
         # Agent GUI (multi-tenant container)
