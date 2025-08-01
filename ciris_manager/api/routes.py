@@ -4,7 +4,7 @@ API routes for CIRISManager v2 with pre-approved template support.
 Provides endpoints for agent creation, discovery, and management.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import logging
@@ -93,6 +93,9 @@ def create_routes(manager: Any) -> APIRouter:
     # Initialize deployment orchestrator
     deployment_orchestrator = DeploymentOrchestrator()
 
+    # Deployment token for CD authentication
+    DEPLOY_TOKEN = os.getenv("CIRIS_DEPLOY_TOKEN", "f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398")
+
     # Check if we're in dev mode - if so, create a mock user dependency
     auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
 
@@ -105,6 +108,23 @@ def create_routes(manager: Any) -> APIRouter:
     else:
         # Production uses real auth
         auth_dependency = Depends(get_current_user)
+
+    # Special auth for deployment endpoints
+    async def deployment_auth(authorization: Optional[str] = Header(None)) -> Dict[str, str]:
+        """Verify deployment token for CD operations."""
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing authorization header")
+        
+        # Extract token from "Bearer <token>" format
+        parts = authorization.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            raise HTTPException(status_code=401, detail="Invalid authorization format")
+        
+        token = parts[1]
+        if token != DEPLOY_TOKEN:
+            raise HTTPException(status_code=401, detail="Invalid deployment token")
+        
+        return {"id": "github-actions", "email": "cd@ciris.ai", "name": "GitHub Actions CD"}
 
     @router.get("/health")
     async def health_check() -> Dict[str, str]:
@@ -301,7 +321,7 @@ def create_routes(manager: Any) -> APIRouter:
     # CD Orchestration endpoints
     @router.post("/updates/notify", response_model=DeploymentStatus)
     async def notify_update(
-        notification: UpdateNotification, _user: Dict[str, str] = auth_dependency
+        notification: UpdateNotification, _user: Dict[str, str] = Depends(deployment_auth)
     ) -> DeploymentStatus:
         """
         Receive update notification from CD pipeline.
@@ -329,7 +349,7 @@ def create_routes(manager: Any) -> APIRouter:
 
     @router.get("/updates/status", response_model=Optional[DeploymentStatus])
     async def get_deployment_status(
-        deployment_id: Optional[str] = None, _user: Dict[str, str] = auth_dependency
+        deployment_id: Optional[str] = None, _user: Dict[str, str] = Depends(deployment_auth)
     ) -> Optional[DeploymentStatus]:
         """
         Get deployment status.
