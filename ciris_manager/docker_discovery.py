@@ -7,6 +7,8 @@ import docker
 from typing import List, Optional, Dict, Any
 import logging
 
+from ciris_manager.models import AgentInfo
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,7 +22,7 @@ class DockerAgentDiscovery:
             logger.error(f"Failed to connect to Docker: {e}")
             self.client = None  # type: ignore[assignment]
 
-    def discover_agents(self) -> List[Dict[str, Any]]:
+    def discover_agents(self) -> List[AgentInfo]:
         """Discover all CIRIS agent containers."""
         if not self.client:
             return []
@@ -52,7 +54,7 @@ class DockerAgentDiscovery:
 
     def _extract_agent_info(
         self, container: Any, env_dict: Dict[str, str]
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[AgentInfo]:
         """Extract agent information from a container."""
         try:
             # Get container details
@@ -98,30 +100,15 @@ class DockerAgentDiscovery:
             if health_check:
                 health_status = health_check.get("Status")
 
-            # Build agent info
-            agent_info = {
-                "agent_id": agent_id,
-                "agent_name": agent_name,
-                "container_name": container.name,
-                "container_id": container.id[:12],
-                "status": container.status,
-                "health": health_status,
-                "api_endpoint": api_endpoint,
-                "api_port": api_port,
-                "created_at": attrs.get("Created"),
-                "started_at": state.get("StartedAt"),
-                "exit_code": state.get("ExitCode", 0),
-                "environment": {
-                    "CIRIS_ADAPTER": env_dict.get("CIRIS_ADAPTER"),
-                    "CIRIS_MOCK_LLM": env_dict.get("CIRIS_MOCK_LLM"),
-                    "CIRIS_PORT": env_dict.get("CIRIS_PORT", "8080"),
-                },
-                "labels": config.get("Labels", {}),
-                "image": config.get("Image"),
-                "restart_policy": attrs.get("HostConfig", {}).get("RestartPolicy", {}).get("Name"),
-            }
-
-            return agent_info
+            # Build agent info - simple and typed
+            return AgentInfo(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                container_name=container.name,
+                api_port=int(api_port) if api_port else None,
+                status=container.status,
+                image=config.get("Image"),
+            )
 
         except Exception as e:
             logger.error(f"Error extracting info from container {container.name}: {e}")

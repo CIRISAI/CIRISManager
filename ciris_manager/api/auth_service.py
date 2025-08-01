@@ -7,23 +7,25 @@ Separates OAuth logic from route handlers for better testability.
 from typing import Optional, Dict, Any, Protocol, Generator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from pydantic import BaseModel, Field
 import secrets
 import logging
 import jwt
 import sqlite3
 from contextlib import contextmanager
 
+from ciris_manager.models import OAuthToken, OAuthUser, OAuthSession, JWTPayload
+
 logger = logging.getLogger(__name__)
 
 
-class TokenResponse(BaseModel):
+class TokenResponse:
     """OAuth token response."""
-
-    access_token: str
-    token_type: str = "Bearer"
-    expires_in: int = Field(default=86400)  # 24 hours
-    user: Dict[str, Any]
+    
+    def __init__(self, access_token: str, user: OAuthUser):
+        self.access_token = access_token
+        self.token_type = "Bearer"
+        self.expires_in = 86400  # 24 hours
+        self.user = user.model_dump()
 
 
 class OAuthProvider(Protocol):
@@ -33,11 +35,11 @@ class OAuthProvider(Protocol):
         """Get OAuth authorization URL."""
         ...
 
-    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> Dict[str, Any]:
+    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> OAuthToken:
         """Exchange authorization code for access token."""
         ...
 
-    async def get_user_info(self, access_token: str) -> Dict[str, Any]:
+    async def get_user_info(self, access_token: str) -> OAuthUser:
         """Get user information from OAuth provider."""
         ...
 
@@ -45,11 +47,11 @@ class OAuthProvider(Protocol):
 class SessionStore(Protocol):
     """Protocol for session storage."""
 
-    def store_session(self, state: str, data: Dict[str, Any]) -> None:
+    def store_session(self, state: str, data: OAuthSession) -> None:
         """Store OAuth session data."""
         ...
 
-    def get_session(self, state: str) -> Optional[Dict[str, Any]]:
+    def get_session(self, state: str) -> Optional[OAuthSession]:
         """Retrieve OAuth session data."""
         ...
 
@@ -78,12 +80,12 @@ class InMemorySessionStore:
     """In-memory session storage implementation."""
 
     def __init__(self) -> None:
-        self._sessions: Dict[str, Dict[str, Any]] = {}
+        self._sessions: Dict[str, OAuthSession] = {}
 
-    def store_session(self, state: str, data: Dict[str, Any]) -> None:
-        self._sessions[state] = {**data, "created_at": datetime.now(timezone.utc).isoformat()}
+    def store_session(self, state: str, data: OAuthSession) -> None:
+        self._sessions[state] = data
 
-    def get_session(self, state: str) -> Optional[Dict[str, Any]]:
+    def get_session(self, state: str) -> Optional[OAuthSession]:
         return self._sessions.get(state)
 
     def delete_session(self, state: str) -> None:
@@ -208,9 +210,12 @@ class AuthService:
         state = self.generate_state_token()
 
         # Store session data
-        self.session_store.store_session(
-            state, {"redirect_uri": redirect_uri, "callback_url": callback_url}
+        session = OAuthSession(
+            redirect_uri=redirect_uri,
+            callback_url=callback_url,
+            created_at=datetime.now(timezone.utc).isoformat()
         )
+        self.session_store.store_session(state, session)
 
         # Get authorization URL
         auth_url = await self.oauth_provider.get_authorization_url(
@@ -235,30 +240,32 @@ class AuthService:
         self.session_store.delete_session(state)
 
         # Exchange code for token
-        token_data = await self.oauth_provider.exchange_code_for_token(
-            code=code, redirect_uri=session_data["callback_url"]
+        token = await self.oauth_provider.exchange_code_for_token(
+            code=code, redirect_uri=session_data.callback_url
         )
 
         # Get user info
-        user_info = await self.oauth_provider.get_user_info(access_token=token_data["access_token"])
+        user_info = await self.oauth_provider.get_user_info(access_token=token.access_token)
 
         # Verify user is authorized
-        email = user_info.get("email", "")
-        if not email.endswith("@ciris.ai"):
+        if not user_info.is_ciris_user:
             raise ValueError("Only @ciris.ai accounts are allowed")
 
         # Store/update user
-        user_id = self.user_store.create_or_update_user(email, user_info)
+        user_id = self.user_store.create_or_update_user(user_info.email, user_info.model_dump())
 
         # Generate JWT
-        jwt_token = self.create_jwt_token(
-            {"user_id": user_id, "email": email, "name": user_info.get("name", "")}
+        jwt_payload = JWTPayload(
+            user_id=user_id,
+            email=user_info.email,
+            name=user_info.name
         )
+        jwt_token = self.create_jwt_token(jwt_payload.model_dump())
 
         return {
             "access_token": jwt_token,
-            "user": user_info,
-            "redirect_uri": session_data["redirect_uri"],
+            "user": user_info.model_dump(),
+            "redirect_uri": session_data.redirect_uri,
         }
 
     def create_jwt_token(self, payload: Dict[str, Any]) -> str:
@@ -307,19 +314,19 @@ class MockOAuthProvider:
         """Return mock authorization URL."""
         return f"{redirect_uri}?state={state}&code=mock-auth-code"
 
-    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> Dict[str, Any]:
+    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> OAuthToken:
         """Return mock token."""
-        return {
-            "access_token": "mock-oauth-token",
-            "token_type": "Bearer",
-            "expires_in": 3600,
-        }
+        return OAuthToken(
+            access_token="mock-oauth-token",
+            token_type="Bearer",
+            expires_in=3600,
+        )
 
-    async def get_user_info(self, access_token: str) -> Dict[str, Any]:
+    async def get_user_info(self, access_token: str) -> OAuthUser:
         """Return mock user info."""
-        return {
-            "id": "dev-user-123",
-            "email": "dev@ciris.ai",  # Changed to pass the @ciris.ai check
-            "name": "Dev User",
-            "picture": "https://via.placeholder.com/150",
-        }
+        return OAuthUser(
+            id="dev-user-123",
+            email="dev@ciris.ai",  # Changed to pass the @ciris.ai check
+            name="Dev User",
+            picture="https://via.placeholder.com/150",
+        )
