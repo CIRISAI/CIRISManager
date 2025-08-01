@@ -196,8 +196,11 @@ def create_auth_routes() -> APIRouter:
                 "name": "Dev User",
             }
 
+            from ciris_manager.models import OAuthUser
+            
+            user = OAuthUser(id="dev-user", email="dev@ciris.ai", name="Dev User")
             token = auth_service.create_jwt_token(dev_user)
-            return TokenResponse(access_token=token, token_type="Bearer", user=dev_user)
+            return TokenResponse(access_token=token, user=user)
 
     return router
 

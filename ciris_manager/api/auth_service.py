@@ -255,8 +255,9 @@ class AuthService:
         user_id = self.user_store.create_or_update_user(user_info.email, user_info.model_dump())
 
         # Generate JWT
-        jwt_payload = JWTPayload(user_id=user_id, email=user_info.email, name=user_info.name)
-        jwt_token = self.create_jwt_token(jwt_payload.model_dump())
+        jwt_token = self.create_jwt_token(
+            {"user_id": user_id, "email": user_info.email, "name": user_info.name}
+        )
 
         return {
             "access_token": jwt_token,

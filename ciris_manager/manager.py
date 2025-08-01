@@ -343,7 +343,7 @@ class CIRISManager:
             from fastapi.responses import RedirectResponse
 
             @app.get("/manager/oauth/callback")
-            async def oauth_callback_compat(request: Request):
+            async def oauth_callback_compat(request: Request) -> RedirectResponse:
                 """Redirect from Google's registered URL to our actual endpoint"""
                 return RedirectResponse(
                     url=f"/manager/v1/oauth/callback?{request.url.query}",

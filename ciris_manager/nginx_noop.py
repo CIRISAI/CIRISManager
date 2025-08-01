@@ -6,7 +6,9 @@ CIRISManager to run without nginx integration when disabled.
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import List
+
+from ciris_manager.models import AgentInfo
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ class NoOpNginxManager:
         """Initialize the no-op manager."""
         logger.info("Nginx integration is disabled. Using No-Op Nginx Manager.")
 
-    def update_config(self, agents: List[Dict[str, Any]]) -> bool:
+    def update_config(self, agents: List[AgentInfo]) -> bool:
         """
         Mock update_config that always succeeds.
 
@@ -46,7 +48,7 @@ class NoOpNginxManager:
         logger.debug("Nginx is disabled, skipping async configuration update")
         return True
 
-    def remove_agent_routes(self, agent_id: str, agents: List[Dict[str, Any]]) -> bool:
+    def remove_agent_routes(self, agent_id: str, agents: List[AgentInfo]) -> bool:
         """
         Mock route removal that always succeeds.
 
