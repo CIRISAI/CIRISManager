@@ -207,13 +207,9 @@ Common issues:
 
 ## Continuous Deployment
 
-CIRISManager orchestrates agent deployments via GitHub Actions:
+CIRISManager orchestrates agent deployments with informed consent. Agents receive update context including changelog, risk level, and peer results before deciding.
 
-1. **GitHub Actions** builds and pushes containers
-2. **CIRISManager** receives notification and orchestrates rollout
-3. **Agents** autonomously decide to accept/defer/reject updates
-
-See [CD Orchestration Guide](docs/CD_ORCHESTRATION.md) for details.
+See [CD Orchestration](docs/CD_ORCHESTRATION.md) for API details.
 
 ## Security
 

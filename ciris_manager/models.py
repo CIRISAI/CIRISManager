@@ -95,6 +95,12 @@ class UpdateNotification(BaseModel):
     message: str = Field("Update available", description="Human-readable update message")
     strategy: str = Field("canary", description="Deployment strategy: canary, immediate, manual")
     metadata: dict = Field(default_factory=dict, description="Additional deployment metadata")
+    # Enhanced fields for informed consent
+    source: Optional[str] = Field("github-actions", description="Source of update notification")
+    commit_sha: Optional[str] = Field(None, description="Git commit SHA for this update")
+    version: Optional[str] = Field(None, description="Semantic version if available")
+    changelog: Optional[str] = Field(None, description="Brief description of changes")
+    risk_level: Optional[str] = Field("unknown", description="Risk assessment: low, medium, high")
 
 
 class DeploymentStatus(BaseModel):

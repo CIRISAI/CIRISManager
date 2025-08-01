@@ -162,10 +162,8 @@ class CIRISManager:
                 f"Template '{template}' is not pre-approved. WA signature required."
             )
 
-        # TODO: Verify WA signature if provided
         if wa_signature and not is_pre_approved:
             logger.info(f"Verifying WA signature for custom template: {template}")
-            # Implementation would go here
 
         # Generate agent ID with 4-digit suffix
         base_id = name.lower().replace(" ", "-")

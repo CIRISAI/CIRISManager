@@ -140,8 +140,7 @@ class DeploymentOrchestrator:
         status = self.deployments[deployment_id]
 
         # Group agents by update readiness
-        # TODO: This will use agent metadata/tags in the future
-        # For now, simple split: 10% explorers, 20% early adopters, 70% general
+        # Simple split: 10% explorers, 20% early adopters, 70% general
         running_agents = [a for a in agents if a.is_running]
 
         if not running_agents:
@@ -252,15 +251,31 @@ class DeploymentOrchestrator:
             Agent update response
         """
         try:
+            # Get deployment status for peer results
+            status = self.deployments.get(deployment_id)
+            peer_results = ""
+            if status:
+                total_attempted = status.agents_updated + status.agents_deferred + status.agents_failed
+                if total_attempted > 0:
+                    peer_results = f"{status.agents_updated}/{total_attempted} peers updated successfully"
+            
+            # Build enhanced notification
+            update_payload = {
+                "new_image": notification.agent_image,
+                "message": notification.message,
+                "deployment_id": deployment_id,
+                "version": notification.version,
+                "changelog": notification.changelog or notification.message,
+                "risk_level": notification.risk_level,
+                "peer_results": peer_results,
+                "commit_sha": notification.commit_sha,
+            }
+            
             # Call agent's graceful shutdown endpoint
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"http://localhost:{agent.api_port}/v1/system/update",
-                    json={
-                        "new_image": notification.agent_image,
-                        "message": notification.message,
-                        "deployment_id": deployment_id,
-                    },
+                    json=update_payload,
                     timeout=30.0,
                 )
 

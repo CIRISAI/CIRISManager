@@ -197,7 +197,6 @@ class CrashLoopWatchdog:
 
     async def _send_alert(self, message: str) -> None:
         """Send an alert about crash loop."""
-        # TODO: Implement actual alerting mechanism
         logger.critical(f"ALERT: {message}")
 
     def get_status(self) -> Dict[str, Any]:

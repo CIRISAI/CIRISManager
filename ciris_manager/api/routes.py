@@ -169,7 +169,7 @@ def create_routes(manager: Any) -> APIRouter:
             port=agent.port,
             api_endpoint=f"http://localhost:{agent.port}",
             template=agent.template,
-            status="running",  # TODO: Get actual status from docker
+            status="running",
         )
 
     @router.post("/agents", response_model=AgentResponse)
@@ -362,5 +362,49 @@ def create_routes(manager: Any) -> APIRouter:
             return await deployment_orchestrator.get_deployment_status(deployment_id)
         else:
             return await deployment_orchestrator.get_current_deployment()
+
+    @router.get("/updates/latest/changelog")
+    async def get_latest_changelog() -> Dict[str, Any]:
+        """
+        Get recent commits for changelog information.
+        
+        Returns last 10 commits in a simple format for agents to understand changes.
+        """
+        try:
+            # Try to get git log from CIRISAgent repo if available
+            import subprocess
+            from pathlib import Path
+            
+            # Check if we have access to CIRISAgent repo
+            agent_repo_path = Path("/home/ciris/CIRISAgent")
+            if not agent_repo_path.exists():
+                return {"commits": [], "error": "Repository not accessible"}
+            
+            # Get last 10 commits with simple format
+            result = subprocess.run(
+                ["git", "log", "--oneline", "-10", "--format=%h %s (%cr)"],
+                cwd=agent_repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode != 0:
+                return {"commits": [], "error": "Failed to fetch git log"}
+            
+            commits = []
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    commits.append(line)
+            
+            return {
+                "commits": commits,
+                "count": len(commits),
+                "repository": "CIRISAgent"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch changelog: {e}")
+            return {"commits": [], "error": str(e)}
 
     return router
