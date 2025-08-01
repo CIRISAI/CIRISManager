@@ -188,7 +188,7 @@ http {
         
         # Manager UI routes
         location = / {
-            proxy_pass http://manager/manager/;
+            proxy_pass http://manager/manager/v1/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -197,7 +197,7 @@ http {
         }
         
         location = /manager.js {
-            proxy_pass http://manager/manager/manager.js;
+            proxy_pass http://manager/manager/v1/manager.js;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
