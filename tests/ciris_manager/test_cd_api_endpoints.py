@@ -90,7 +90,9 @@ class TestCDAPIEndpoints:
         mock_orchestrator.start_deployment = AsyncMock(return_value=mock_status)
 
         # Include deployment token authentication
-        headers = {"Authorization": "Bearer f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398"}
+        # Set test token via environment variable
+        os.environ["CIRIS_DEPLOY_TOKEN"] = "test-deploy-token"
+        headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.post("/manager/v1/updates/notify", json=notification, headers=headers)
 
         assert response.status_code == 200

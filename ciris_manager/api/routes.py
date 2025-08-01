@@ -94,9 +94,7 @@ def create_routes(manager: Any) -> APIRouter:
     deployment_orchestrator = DeploymentOrchestrator()
 
     # Deployment token for CD authentication
-    DEPLOY_TOKEN = os.getenv(
-        "CIRIS_DEPLOY_TOKEN", "f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398"
-    )
+    DEPLOY_TOKEN = os.getenv("CIRIS_DEPLOY_TOKEN")
 
     # Check if we're in dev mode - if so, create a mock user dependency
     auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
@@ -114,6 +112,9 @@ def create_routes(manager: Any) -> APIRouter:
     # Special auth for deployment endpoints
     async def deployment_auth(authorization: Optional[str] = Header(None)) -> Dict[str, str]:
         """Verify deployment token for CD operations."""
+        if not DEPLOY_TOKEN:
+            raise HTTPException(status_code=500, detail="Deployment token not configured")
+            
         if not authorization:
             raise HTTPException(status_code=401, detail="Missing authorization header")
 
