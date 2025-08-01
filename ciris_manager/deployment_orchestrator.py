@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class DeploymentOrchestrator:
     """Orchestrates deployments across agent fleet."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize deployment orchestrator."""
         self.deployments: Dict[str, DeploymentStatus] = {}
         self.current_deployment: Optional[str] = None
@@ -53,7 +53,11 @@ class DeploymentOrchestrator:
             status = DeploymentStatus(
                 deployment_id=deployment_id,
                 agents_total=len(agents),
+                agents_updated=0,
+                agents_deferred=0,
+                agents_failed=0,
                 started_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=None,
                 status="in_progress",
                 message=notification.message,
                 canary_phase="explorers" if notification.strategy == "canary" else None,
@@ -104,20 +108,20 @@ class DeploymentOrchestrator:
 
         except Exception as e:
             logger.error(f"Deployment {deployment_id} failed: {e}")
-            status = self.deployments.get(deployment_id)
-            if status:
-                status.status = "failed"
-                status.message = str(e)
+            deployment_status = self.deployments.get(deployment_id)
+            if deployment_status:
+                deployment_status.status = "failed"
+                deployment_status.message = str(e)
         finally:
             async with self._deployment_lock:
                 if self.current_deployment == deployment_id:
                     self.current_deployment = None
 
             # Mark deployment as completed
-            status = self.deployments.get(deployment_id)
-            if status and status.status == "in_progress":
-                status.status = "completed"
-                status.completed_at = datetime.now(timezone.utc).isoformat()
+            deployment_status = self.deployments.get(deployment_id)
+            if deployment_status and deployment_status.status == "in_progress":
+                deployment_status.status = "completed"
+                deployment_status.completed_at = datetime.now(timezone.utc).isoformat()
 
     async def _run_canary_deployment(
         self,
@@ -273,6 +277,7 @@ class DeploymentOrchestrator:
                         agent_id=agent.agent_id,
                         decision="reject",
                         reason=f"HTTP {response.status_code}",
+                        ready_at=None,
                     )
 
         except httpx.ConnectError:
@@ -281,6 +286,7 @@ class DeploymentOrchestrator:
                 agent_id=agent.agent_id,
                 decision="accept",
                 reason="Agent not reachable (possibly shutting down)",
+                ready_at=None,
             )
         except Exception as e:
             logger.error(f"Failed to update agent {agent.agent_id}: {e}")
@@ -288,4 +294,5 @@ class DeploymentOrchestrator:
                 agent_id=agent.agent_id,
                 decision="reject",
                 reason=str(e),
+                ready_at=None,
             )
