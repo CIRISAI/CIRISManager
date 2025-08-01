@@ -1,6 +1,6 @@
 # CIRISManager
 
-Production-grade lifecycle management for CIRIS agents with automatic nginx configuration.
+Production-grade lifecycle management for CIRIS agents with automatic nginx configuration and CD orchestration.
 
 ## What It Does
 
@@ -10,6 +10,8 @@ CIRISManager runs as a systemd service that:
 - Detects crash loops and prevents infinite restarts
 - Provides REST API for agent management
 - Handles OAuth authentication for secure access
+- Orchestrates continuous deployment with canary rollouts
+- Respects agent autonomy in update decisions
 
 ## Installation
 
@@ -85,6 +87,10 @@ Base URL: `https://agents.ciris.ai/manager/v1`
 - `GET /health` - Service health check
 - `GET /templates` - List available agent templates
 - `GET /env/default` - Get default environment variables
+
+### CD Orchestration
+- `POST /updates/notify` - Receive deployment notification (requires DEPLOY_TOKEN)
+- `GET /updates/status` - Check deployment status (requires DEPLOY_TOKEN)
 
 ## Nginx Management
 
@@ -199,6 +205,16 @@ Common issues:
 - **Nginx not updating**: Ensure service has write access to `/opt/ciris-manager/nginx`
 - **Agents not discovered**: Verify Docker socket permissions
 
+## Continuous Deployment
+
+CIRISManager orchestrates agent deployments via GitHub Actions:
+
+1. **GitHub Actions** builds and pushes containers
+2. **CIRISManager** receives notification and orchestrates rollout
+3. **Agents** autonomously decide to accept/defer/reject updates
+
+See [CD Orchestration Guide](docs/CD_ORCHESTRATION.md) for details.
+
 ## Security
 
 - OAuth authentication required in production
@@ -206,6 +222,7 @@ Common issues:
 - Role-based permissions (OBSERVER, ADMIN, SYSTEM_ADMIN)
 - Secure systemd service configuration
 - Network isolation between agents
+- CD endpoints protected by deployment token
 
 ## License
 
