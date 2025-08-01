@@ -367,42 +367,38 @@ def create_routes(manager: Any) -> APIRouter:
     async def get_latest_changelog() -> Dict[str, Any]:
         """
         Get recent commits for changelog information.
-        
+
         Returns last 10 commits in a simple format for agents to understand changes.
         """
         try:
             # Try to get git log from CIRISAgent repo if available
             import subprocess
             from pathlib import Path
-            
+
             # Check if we have access to CIRISAgent repo
             agent_repo_path = Path("/home/ciris/CIRISAgent")
             if not agent_repo_path.exists():
                 return {"commits": [], "error": "Repository not accessible"}
-            
+
             # Get last 10 commits with simple format
             result = subprocess.run(
                 ["git", "log", "--oneline", "-10", "--format=%h %s (%cr)"],
                 cwd=agent_repo_path,
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
-            
+
             if result.returncode != 0:
                 return {"commits": [], "error": "Failed to fetch git log"}
-            
+
             commits = []
-            for line in result.stdout.strip().split('\n'):
+            for line in result.stdout.strip().split("\n"):
                 if line:
                     commits.append(line)
-            
-            return {
-                "commits": commits,
-                "count": len(commits),
-                "repository": "CIRISAgent"
-            }
-            
+
+            return {"commits": commits, "count": len(commits), "repository": "CIRISAgent"}
+
         except Exception as e:
             logger.error(f"Failed to fetch changelog: {e}")
             return {"commits": [], "error": str(e)}

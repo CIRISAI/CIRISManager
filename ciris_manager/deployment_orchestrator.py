@@ -255,10 +255,14 @@ class DeploymentOrchestrator:
             status = self.deployments.get(deployment_id)
             peer_results = ""
             if status:
-                total_attempted = status.agents_updated + status.agents_deferred + status.agents_failed
+                total_attempted = (
+                    status.agents_updated + status.agents_deferred + status.agents_failed
+                )
                 if total_attempted > 0:
-                    peer_results = f"{status.agents_updated}/{total_attempted} peers updated successfully"
-            
+                    peer_results = (
+                        f"{status.agents_updated}/{total_attempted} peers updated successfully"
+                    )
+
             # Build enhanced notification
             update_payload = {
                 "new_image": notification.agent_image,
@@ -270,7 +274,7 @@ class DeploymentOrchestrator:
                 "peer_results": peer_results,
                 "commit_sha": notification.commit_sha,
             }
-            
+
             # Call agent's graceful shutdown endpoint
             async with httpx.AsyncClient() as client:
                 response = await client.post(
