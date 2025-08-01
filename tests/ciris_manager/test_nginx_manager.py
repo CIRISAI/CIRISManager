@@ -64,16 +64,16 @@ class TestNginxManager:
         assert "server {" in config
 
         # Check upstreams
-        assert "upstream gui {" in config
-        assert "server host.docker.internal:3000;" in config
+        assert "upstream agent_gui {" in config
+        assert "server ciris-gui:3000;" in config
         assert "upstream manager {" in config
         assert "server host.docker.internal:8888;" in config
 
-        # Check agent routes (using regex patterns)
-        assert "location ~ ^/api/agent-scout/" in config
-        assert "proxy_pass http://agent_agent-scout/" in config
-        assert "location ~ ^/api/agent-sage/" in config
-        assert "proxy_pass http://agent_agent-sage/" in config
+        # Check agent routes
+        assert "location /api/scout/" in config
+        assert "proxy_pass http://agent_scout;" in config
+        assert "location /api/sage/" in config
+        assert "proxy_pass http://agent_sage;" in config
 
     @patch("subprocess.run")
     def test_validate_config_success(self, mock_run, nginx_manager):
@@ -87,21 +87,16 @@ class TestNginxManager:
         result = nginx_manager._validate_config()
         assert result is True
 
-        # Should have called docker cp then docker exec
-        assert mock_run.call_count == 2
+        # Should have called docker exec nginx -t
+        assert mock_run.call_count == 1
 
-        # Check the docker cp command
-        cp_call = mock_run.call_args_list[0]
-        assert cp_call[0][0][0] == "docker"
-        assert cp_call[0][0][1] == "cp"
-
-        # Check the nginx test command
-        test_call = mock_run.call_args_list[1]
-        assert test_call[0][0][0] == "docker"
-        assert test_call[0][0][1] == "exec"
-        assert test_call[0][0][2] == "test-nginx"
-        assert test_call[0][0][3] == "nginx"
-        assert test_call[0][0][4] == "-t"
+        # Check the nginx -t command
+        nginx_call = mock_run.call_args_list[0]
+        assert nginx_call[0][0][0] == "docker"
+        assert nginx_call[0][0][1] == "exec"
+        assert nginx_call[0][0][2] == "test-nginx"
+        assert nginx_call[0][0][3] == "nginx"
+        assert nginx_call[0][0][4] == "-t"
 
     @patch("subprocess.run")
     def test_validate_config_failure(self, mock_run, nginx_manager):
@@ -128,11 +123,11 @@ class TestNginxManager:
         result = nginx_manager._reload_nginx()
         assert result is True
 
-        # Should have called docker cp then nginx reload
-        assert mock_run.call_count == 2
+        # Should have called nginx reload
+        assert mock_run.call_count == 1
 
         # Check the reload command
-        reload_call = mock_run.call_args_list[1]
+        reload_call = mock_run.call_args_list[0]
         assert reload_call[0][0][0] == "docker"
         assert reload_call[0][0][1] == "exec"
         assert reload_call[0][0][2] == "test-nginx"
@@ -149,8 +144,8 @@ class TestNginxManager:
         result = nginx_manager.update_config(sample_agents)
         assert result is True
 
-        # Should have called: docker cp (new), nginx -t, docker cp (install), nginx -s reload
-        assert mock_run.call_count == 4
+        # Should have called: nginx -t, nginx -s reload
+        assert mock_run.call_count == 2
 
         # Check that config files were created
         assert nginx_manager.config_path.exists()
@@ -168,8 +163,8 @@ class TestNginxManager:
         result = nginx_manager.update_config(sample_agents)
         assert result is False
 
-        # Should call docker cp and nginx -t, but not reload
-        assert mock_run.call_count == 2
+        # Should call nginx -t, but not reload
+        assert mock_run.call_count == 1
 
         # Original config should be unchanged if it existed
         if nginx_manager.config_path.exists():
@@ -201,7 +196,7 @@ class TestNginxManager:
         mock_run.return_value = MagicMock(returncode=0)
 
         # Remove one agent
-        remaining_agents = [a for a in sample_agents if a["agent_id"] != "agent-scout"]
+        remaining_agents = [a for a in sample_agents if a.agent_id != "agent-scout"]
         result = nginx_manager.remove_agent_routes("agent-scout", remaining_agents)
 
         assert result is True

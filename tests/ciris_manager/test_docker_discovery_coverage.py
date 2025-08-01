@@ -208,10 +208,10 @@ class TestDockerDiscoveryCoverage:
 
         # Should still extract basic info
         assert agent_info is not None
-        assert agent_info["agent_id"] == "test"
-        assert agent_info["container_name"] == "ciris-agent-test"
-        assert agent_info["status"] == "running"
-        assert agent_info["api_port"] is None  # No port info
+        assert agent_info.agent_id == "test"
+        assert agent_info.container_name == "ciris-agent-test"
+        assert agent_info.status == "running"
+        assert agent_info.api_port is None  # No port info
 
     def test_extract_agent_info_with_ports(self):
         """Test _extract_agent_info correctly extracts port information."""
