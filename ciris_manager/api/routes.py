@@ -286,7 +286,7 @@ def create_routes(manager: Any) -> APIRouter:
     async def get_allocated_ports() -> AllocatedPortsResponse:
         """Get allocated ports."""
         return AllocatedPortsResponse(
-            allocated=manager.port_manager.allocated_ports,
+            allocated=list(manager.port_manager.allocated_ports.values()),
             reserved=list(manager.port_manager.reserved_ports),
             range=PortRange(
                 start=manager.port_manager.start_port,

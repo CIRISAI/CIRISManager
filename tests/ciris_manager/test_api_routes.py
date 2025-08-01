@@ -318,13 +318,16 @@ class TestAPIRoutes:
         mock_manager.agent_registry.get_agent.return_value = None
 
         # But agent exists in Docker discovery
+        from ciris_manager.models import AgentInfo
+        
         mock_discovery = Mock()
         mock_discovery.discover_agents.return_value = [
-            {
-                "agent_id": "external-agent",
-                "agent_name": "External Agent",
-                "container_name": "ciris-external-agent",
-            }
+            AgentInfo(
+                agent_id="external-agent",
+                agent_name="External Agent",
+                container_name="ciris-external-agent",
+                status="running",
+            )
         ]
         mock_discovery_class.return_value = mock_discovery
 
