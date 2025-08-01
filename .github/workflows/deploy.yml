@@ -144,12 +144,12 @@ jobs:
             if ! docker ps | grep -q ciris-nginx; then
               echo "Deploying nginx container..."
               cd /opt/ciris-manager
-              docker compose -f docker-compose-production.yml up -d nginx
+              docker-compose -f docker-compose-production.yml up -d nginx
             else
               echo "Nginx container already running, pulling latest config..."
               cd /opt/ciris-manager
-              docker compose -f docker-compose-production.yml pull nginx
-              docker compose -f docker-compose-production.yml up -d nginx
+              docker-compose -f docker-compose-production.yml pull nginx
+              docker-compose -f docker-compose-production.yml up -d nginx
             fi
             
             # Restart CIRISManager API
