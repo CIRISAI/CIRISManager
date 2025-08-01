@@ -63,9 +63,7 @@ class DeploymentOrchestrator:
             self.current_deployment = deployment_id
 
             # Start deployment in background
-            asyncio.create_task(
-                self._run_deployment(deployment_id, notification, agents)
-            )
+            asyncio.create_task(self._run_deployment(deployment_id, notification, agents))
 
             return status
 
@@ -95,7 +93,7 @@ class DeploymentOrchestrator:
         """
         try:
             status = self.deployments[deployment_id]
-            
+
             if notification.strategy == "canary":
                 await self._run_canary_deployment(deployment_id, notification, agents)
             elif notification.strategy == "immediate":
@@ -114,7 +112,7 @@ class DeploymentOrchestrator:
             async with self._deployment_lock:
                 if self.current_deployment == deployment_id:
                     self.current_deployment = None
-                    
+
             # Mark deployment as completed
             status = self.deployments.get(deployment_id)
             if status and status.status == "in_progress":
@@ -136,39 +134,39 @@ class DeploymentOrchestrator:
             agents: List of agents
         """
         status = self.deployments[deployment_id]
-        
+
         # Group agents by update readiness
         # TODO: This will use agent metadata/tags in the future
         # For now, simple split: 10% explorers, 20% early adopters, 70% general
         running_agents = [a for a in agents if a.is_running]
-        
+
         if not running_agents:
             status.message = "No running agents to update"
             return
-            
+
         explorer_count = max(1, len(running_agents) // 10)
         early_adopter_count = max(1, len(running_agents) // 5)
-        
+
         explorers = running_agents[:explorer_count]
-        early_adopters = running_agents[explorer_count:explorer_count + early_adopter_count]
-        general = running_agents[explorer_count + early_adopter_count:]
-        
+        early_adopters = running_agents[explorer_count : explorer_count + early_adopter_count]
+        general = running_agents[explorer_count + early_adopter_count :]
+
         # Phase 1: Explorers
         status.canary_phase = "explorers"
         status.message = f"Updating {len(explorers)} explorer agents"
         await self._update_agent_group(deployment_id, notification, explorers)
-        
+
         # Wait and check health
         await asyncio.sleep(60)  # 1 minute observation period
-        
+
         # Phase 2: Early Adopters
         status.canary_phase = "early_adopters"
         status.message = f"Updating {len(early_adopters)} early adopter agents"
         await self._update_agent_group(deployment_id, notification, early_adopters)
-        
+
         # Wait and check health
         await asyncio.sleep(120)  # 2 minute observation period
-        
+
         # Phase 3: General Population
         status.canary_phase = "general"
         status.message = f"Updating {len(general)} general agents"
@@ -190,7 +188,7 @@ class DeploymentOrchestrator:
         """
         status = self.deployments[deployment_id]
         running_agents = [a for a in agents if a.is_running]
-        
+
         status.message = f"Updating {len(running_agents)} agents immediately"
         await self._update_agent_group(deployment_id, notification, running_agents)
 
@@ -210,16 +208,16 @@ class DeploymentOrchestrator:
         """
         status = self.deployments[deployment_id]
         tasks = []
-        
+
         for agent in agents:
             task = asyncio.create_task(
                 self._update_single_agent(deployment_id, notification, agent)
             )
             tasks.append(task)
-            
+
         # Run updates in parallel
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Count results
         for result in results:
             if isinstance(result, Exception):
@@ -261,7 +259,7 @@ class DeploymentOrchestrator:
                     },
                     timeout=30.0,
                 )
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     return AgentUpdateResponse(
@@ -276,7 +274,7 @@ class DeploymentOrchestrator:
                         decision="reject",
                         reason=f"HTTP {response.status_code}",
                     )
-                    
+
         except httpx.ConnectError:
             # Agent not reachable, might already be shutting down
             return AgentUpdateResponse(

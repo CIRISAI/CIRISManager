@@ -1,0 +1,160 @@
+name: Deploy CIRISManager
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual deployment
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISManager'
+    environment: production
+    
+    steps:
+      - name: Deploy CIRISManager
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: 108.61.119.117
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            
+            echo "Deploying CIRISManager..."
+            
+            # Ensure base directory exists
+            mkdir -p /opt
+            
+            # Clone or update repository
+            if [ ! -d "/opt/ciris-manager" ]; then
+              echo "First time deployment - cloning repository..."
+              git clone https://github.com/CIRISAI/CIRISManager.git /opt/ciris-manager
+            else
+              echo "Updating existing deployment..."
+              cd /opt/ciris-manager
+              git fetch origin
+              git reset --hard origin/main
+            fi
+            
+            cd /opt/ciris-manager
+            
+            # Create virtual environment if it doesn't exist
+            if [ ! -d "venv" ]; then
+              echo "Creating virtual environment..."
+              python3 -m venv venv
+            fi
+            
+            # Activate venv and update dependencies
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install -e .
+            
+            # Ensure config directory exists
+            mkdir -p /etc/ciris-manager
+            
+            # Generate default config if it doesn't exist
+            if [ ! -f "/etc/ciris-manager/config.yml" ]; then
+              echo "Generating default configuration..."
+              ciris-manager --generate-config --config /etc/ciris-manager/config.yml
+            fi
+            
+            # Create update script if it doesn't exist
+            if [ ! -f "/usr/local/bin/ciris-manager-update" ]; then
+              cat > /usr/local/bin/ciris-manager-update << 'SCRIPT'
+            #!/bin/bash
+            cd /opt/ciris-manager
+            git pull origin main
+            source venv/bin/activate
+            pip install -r requirements.txt
+            pip install -e .
+            systemctl restart ciris-manager-api
+            echo "CIRISManager updated successfully"
+            SCRIPT
+              chmod +x /usr/local/bin/ciris-manager-update
+            fi
+            
+            # Create systemd service if it doesn't exist
+            if [ ! -f "/etc/systemd/system/ciris-manager-api.service" ]; then
+              cat > /etc/systemd/system/ciris-manager-api.service << 'SERVICE'
+            [Unit]
+            Description=CIRIS Manager API Service
+            After=network.target docker.service
+            Requires=docker.service
+            
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=/opt/ciris-manager
+            Environment="PATH=/opt/ciris-manager/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            Environment="CIRIS_MANAGER_CONFIG=/etc/ciris-manager/config.yml"
+            ExecStart=/opt/ciris-manager/venv/bin/python deployment/run-ciris-manager-api.py
+            Restart=on-failure
+            RestartSec=10
+            StandardOutput=journal
+            StandardError=journal
+            
+            [Install]
+            WantedBy=multi-user.target
+            SERVICE
+              systemctl daemon-reload
+              systemctl enable ciris-manager-api
+            fi
+            
+            # Create nginx directory for CIRISManager to write configs
+            mkdir -p /home/ciris/nginx
+            chown -R root:root /home/ciris/nginx
+            
+            # Deploy nginx container if not running
+            if ! docker ps | grep -q ciris-nginx; then
+              echo "Deploying nginx container..."
+              cd /opt/ciris-manager
+              docker-compose -f docker-compose-production.yml up -d nginx
+            fi
+            
+            # Restart CIRISManager API
+            echo "Restarting CIRISManager API..."
+            systemctl restart ciris-manager-api
+            
+            # Wait for service to be ready
+            echo "Waiting for CIRISManager to be ready..."
+            for i in {1..30}; do
+              if curl -f http://localhost:8888/manager/v1/health 2>/dev/null; then
+                echo "CIRISManager is healthy!"
+                break
+              fi
+              if [ $i -eq 30 ]; then
+                echo "CIRISManager failed to start!"
+                journalctl -u ciris-manager-api --no-pager -n 50
+                exit 1
+              fi
+              sleep 2
+            done
+            
+            echo "Deployment complete!"
+            
+      - name: Verify Deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: 108.61.119.117
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            # Check service status
+            echo "=== Service Status ==="
+            systemctl status ciris-manager-api --no-pager || true
+            
+            # Check API health
+            echo -e "\n=== API Health Check ==="
+            curl -s http://localhost:8888/manager/v1/health | jq . || echo "Health check failed"
+            
+            # Check nginx status
+            echo -e "\n=== Nginx Status ==="
+            docker ps | grep nginx || echo "Nginx container not running"
+            
+            # Show recent logs
+            echo -e "\n=== Recent Logs ==="
+            journalctl -u ciris-manager-api --no-pager -n 20

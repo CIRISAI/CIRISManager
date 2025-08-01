@@ -89,7 +89,7 @@ def create_routes(manager: Any) -> APIRouter:
         Configured APIRouter
     """
     router = APIRouter()
-    
+
     # Initialize deployment orchestrator
     deployment_orchestrator = DeploymentOrchestrator()
 
@@ -301,27 +301,26 @@ def create_routes(manager: Any) -> APIRouter:
     # CD Orchestration endpoints
     @router.post("/updates/notify", response_model=DeploymentStatus)
     async def notify_update(
-        notification: UpdateNotification,
-        _user: Dict[str, str] = auth_dependency
+        notification: UpdateNotification, _user: Dict[str, str] = auth_dependency
     ) -> DeploymentStatus:
         """
         Receive update notification from CD pipeline.
-        
+
         This is the single API call from GitHub Actions to trigger deployment.
         CIRISManager orchestrates everything else.
         """
         try:
             # Get current agents
             agents = await manager.get_agents()
-            
+
             # Start deployment
-            status = await deployment_orchestrator.start_deployment(
-                notification, agents
+            status = await deployment_orchestrator.start_deployment(notification, agents)
+
+            logger.info(
+                f"Started deployment {status.deployment_id} with strategy {notification.strategy}"
             )
-            
-            logger.info(f"Started deployment {status.deployment_id} with strategy {notification.strategy}")
             return status
-            
+
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
         except Exception as e:
@@ -330,12 +329,11 @@ def create_routes(manager: Any) -> APIRouter:
 
     @router.get("/updates/status", response_model=Optional[DeploymentStatus])
     async def get_deployment_status(
-        deployment_id: Optional[str] = None,
-        _user: Dict[str, str] = auth_dependency
+        deployment_id: Optional[str] = None, _user: Dict[str, str] = auth_dependency
     ) -> Optional[DeploymentStatus]:
         """
         Get deployment status.
-        
+
         If deployment_id is not provided, returns current active deployment.
         """
         if deployment_id:

@@ -88,7 +88,9 @@ class CreateAgentRequest(BaseModel):
 class UpdateNotification(BaseModel):
     """CD update notification from GitHub Actions."""
 
-    agent_image: str = Field(..., description="New agent image (e.g., ghcr.io/cirisai/ciris-agent:latest)")
+    agent_image: str = Field(
+        ..., description="New agent image (e.g., ghcr.io/cirisai/ciris-agent:latest)"
+    )
     gui_image: Optional[str] = Field(None, description="New GUI image if updated")
     message: str = Field("Update available", description="Human-readable update message")
     strategy: str = Field("canary", description="Deployment strategy: canary, immediate, manual")
@@ -103,10 +105,14 @@ class DeploymentStatus(BaseModel):
     agents_updated: int = Field(0, description="Number of agents updated")
     agents_deferred: int = Field(0, description="Number of agents that deferred update")
     agents_failed: int = Field(0, description="Number of agents that failed to update")
-    canary_phase: Optional[str] = Field(None, description="Current canary phase: explorers, early_adopters, general")
+    canary_phase: Optional[str] = Field(
+        None, description="Current canary phase: explorers, early_adopters, general"
+    )
     started_at: str = Field(..., description="Deployment start timestamp")
     completed_at: Optional[str] = Field(None, description="Deployment completion timestamp")
-    status: str = Field("in_progress", description="Deployment status: in_progress, completed, failed, cancelled")
+    status: str = Field(
+        "in_progress", description="Deployment status: in_progress, completed, failed, cancelled"
+    )
     message: str = Field(..., description="Current status message")
 
 
