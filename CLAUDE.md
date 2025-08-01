@@ -115,6 +115,45 @@ CIRISManager is a lightweight systemd service that manages CIRIS agent lifecycle
    - Manages SSL certificates
    - Routes traffic to agents
 
+7. **Deployment Orchestrator** (`deployment_orchestrator.py`)
+   - Receives CD notifications from GitHub Actions
+   - Orchestrates canary deployments (explorers → early adopters → general)
+   - Coordinates graceful agent shutdowns
+   - Tracks deployment progress
+   - Respects agent update decisions
+
+### CD/Deployment Architecture
+
+CIRISManager handles all deployment orchestration through a clean API:
+
+1. **Single API Call from CD**:
+   ```bash
+   POST /manager/v1/updates/notify
+   {
+       "agent_image": "ghcr.io/cirisai/ciris-agent:latest",
+       "gui_image": "ghcr.io/cirisai/ciris-gui:latest", 
+       "message": "Security update available",
+       "strategy": "canary"
+   }
+   ```
+
+2. **Deployment Strategies**:
+   - **Canary**: Staged rollout (10% explorers → 20% early adopters → 70% general)
+   - **Immediate**: All agents at once (emergency updates)
+   - **Manual**: Agents update on their own schedule
+
+3. **Agent Update Flow**:
+   - Manager calls agent's `/v1/system/update` endpoint
+   - Agent responds with decision: accept/defer/reject
+   - Manager respects agent autonomy
+   - Docker's restart policy handles container swap
+
+4. **Progress Tracking**:
+   ```bash
+   GET /manager/v1/updates/status
+   ```
+   Returns deployment progress, agent counts, and current phase.
+
 ### Configuration
 
 Configuration uses a YAML file with these main sections:

@@ -83,3 +83,37 @@ class CreateAgentRequest(BaseModel):
     template: str = Field(..., description="Template name (e.g., 'echo', 'teacher')")
     name: str = Field(..., description="Agent name")
     environment: dict = Field(default_factory=dict, description="Environment variables")
+
+
+class UpdateNotification(BaseModel):
+    """CD update notification from GitHub Actions."""
+
+    agent_image: str = Field(..., description="New agent image (e.g., ghcr.io/cirisai/ciris-agent:latest)")
+    gui_image: Optional[str] = Field(None, description="New GUI image if updated")
+    message: str = Field("Update available", description="Human-readable update message")
+    strategy: str = Field("canary", description="Deployment strategy: canary, immediate, manual")
+    metadata: dict = Field(default_factory=dict, description="Additional deployment metadata")
+
+
+class DeploymentStatus(BaseModel):
+    """Current deployment status."""
+
+    deployment_id: str = Field(..., description="Unique deployment identifier")
+    agents_total: int = Field(..., description="Total number of agents")
+    agents_updated: int = Field(0, description="Number of agents updated")
+    agents_deferred: int = Field(0, description="Number of agents that deferred update")
+    agents_failed: int = Field(0, description="Number of agents that failed to update")
+    canary_phase: Optional[str] = Field(None, description="Current canary phase: explorers, early_adopters, general")
+    started_at: str = Field(..., description="Deployment start timestamp")
+    completed_at: Optional[str] = Field(None, description="Deployment completion timestamp")
+    status: str = Field("in_progress", description="Deployment status: in_progress, completed, failed, cancelled")
+    message: str = Field(..., description="Current status message")
+
+
+class AgentUpdateResponse(BaseModel):
+    """Agent's response to update request."""
+
+    agent_id: str = Field(..., description="Agent identifier")
+    decision: str = Field(..., description="Update decision: accept, defer, reject")
+    reason: Optional[str] = Field(None, description="Reason for decision")
+    ready_at: Optional[str] = Field(None, description="When agent will be ready (if deferred)")

@@ -10,7 +10,8 @@ from typing import Optional, Dict, Any, List
 import logging
 import os
 from .auth import get_current_user_dependency as get_current_user
-from ciris_manager.models import AgentInfo
+from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus
+from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,9 @@ def create_routes(manager: Any) -> APIRouter:
         Configured APIRouter
     """
     router = APIRouter()
+    
+    # Initialize deployment orchestrator
+    deployment_orchestrator = DeploymentOrchestrator()
 
     # Check if we're in dev mode - if so, create a mock user dependency
     auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
@@ -293,5 +297,50 @@ def create_routes(manager: Any) -> APIRouter:
                 end=manager.port_manager.end_port,
             ),
         )
+
+    # CD Orchestration endpoints
+    @router.post("/updates/notify", response_model=DeploymentStatus)
+    async def notify_update(
+        notification: UpdateNotification,
+        _user: Dict[str, str] = auth_dependency
+    ) -> DeploymentStatus:
+        """
+        Receive update notification from CD pipeline.
+        
+        This is the single API call from GitHub Actions to trigger deployment.
+        CIRISManager orchestrates everything else.
+        """
+        try:
+            # Get current agents
+            agents = await manager.get_agents()
+            
+            # Start deployment
+            status = await deployment_orchestrator.start_deployment(
+                notification, agents
+            )
+            
+            logger.info(f"Started deployment {status.deployment_id} with strategy {notification.strategy}")
+            return status
+            
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except Exception as e:
+            logger.error(f"Failed to start deployment: {e}")
+            raise HTTPException(status_code=500, detail="Failed to start deployment")
+
+    @router.get("/updates/status", response_model=Optional[DeploymentStatus])
+    async def get_deployment_status(
+        deployment_id: Optional[str] = None,
+        _user: Dict[str, str] = auth_dependency
+    ) -> Optional[DeploymentStatus]:
+        """
+        Get deployment status.
+        
+        If deployment_id is not provided, returns current active deployment.
+        """
+        if deployment_id:
+            return await deployment_orchestrator.get_deployment_status(deployment_id)
+        else:
+            return await deployment_orchestrator.get_current_deployment()
 
     return router
