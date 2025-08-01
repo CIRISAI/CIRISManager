@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class TokenResponse:
     """OAuth token response."""
-    
+
     def __init__(self, access_token: str, user: OAuthUser):
         self.access_token = access_token
         self.token_type = "Bearer"
@@ -213,7 +213,7 @@ class AuthService:
         session = OAuthSession(
             redirect_uri=redirect_uri,
             callback_url=callback_url,
-            created_at=datetime.now(timezone.utc).isoformat()
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
         self.session_store.store_session(state, session)
 
@@ -255,11 +255,7 @@ class AuthService:
         user_id = self.user_store.create_or_update_user(user_info.email, user_info.model_dump())
 
         # Generate JWT
-        jwt_payload = JWTPayload(
-            user_id=user_id,
-            email=user_info.email,
-            name=user_info.name
-        )
+        jwt_payload = JWTPayload(user_id=user_id, email=user_info.email, name=user_info.name)
         jwt_token = self.create_jwt_token(jwt_payload.model_dump())
 
         return {

@@ -52,15 +52,12 @@ class DockerAgentDiscovery:
 
         return agents
 
-    def _extract_agent_info(
-        self, container: Any, env_dict: Dict[str, str]
-    ) -> Optional[AgentInfo]:
+    def _extract_agent_info(self, container: Any, env_dict: Dict[str, str]) -> Optional[AgentInfo]:
         """Extract agent information from a container."""
         try:
             # Get container details
             attrs = container.attrs
             config = attrs.get("Config", {})
-            state = attrs.get("State", {})
             network_settings = attrs.get("NetworkSettings", {})
 
             # Determine agent ID - REQUIRED for all CIRIS agents
@@ -88,17 +85,6 @@ class DockerAgentDiscovery:
                 if "8080" in container_port and host_bindings:
                     api_port = host_bindings[0].get("HostPort")
                     break
-
-            # Determine API endpoint
-            api_endpoint = None
-            if api_port:
-                api_endpoint = f"http://localhost:{api_port}"
-
-            # Get health status
-            health_status = None
-            health_check = state.get("Health")
-            if health_check:
-                health_status = health_check.get("Status")
 
             # Build agent info - simple and typed
             return AgentInfo(

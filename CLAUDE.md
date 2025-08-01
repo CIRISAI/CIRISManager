@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Core Development Principles
+
+### Simplicity First
+- **One file is better than two with includes** - We generate one complete nginx.conf
+- **Explicit is better than implicit** - No default routes, every API call specifies the agent
+- **Boring is better than clever** - Choose solutions that will work in 5 years
+- **Static is better than dynamic** - Manager GUI uses static HTML/JS, not another container
+
+### Clear Ownership
+- **CIRISManager owns infrastructure** - Nginx, routing, monitoring
+- **CIRISAgent owns applications** - Agents, GUI, business logic
+- **No mixed concerns** - Each repo has a clear, single purpose
+
+### Why These Matter
+Every architectural decision should reduce complexity, not add it. If you can't explain a feature in one sentence, it's too complex. See `docs/NGINX_ARCHITECTURE_LESSONS.md` for detailed examples.
+
 ## Essential Commands
 
 ### Development Setup
@@ -154,10 +170,24 @@ All I/O operations use async/await for non-blocking execution:
 - Monitors agent health endpoints
 - Manages agent networking and routing
 
-### GUI Integration
-- Integrates with CIRIS GUI from CIRISAgent repository
-- GUI runs as separate container on port 3000
-- Nginx routes traffic between GUI and Manager API
+### GUI Architecture
+
+**Two Separate GUIs:**
+1. **Manager GUI**: Static HTML/JS/CSS served by nginx at `/`
+   - Shows agent list, status, resource usage
+   - Start/stop agents, configuration
+   - Lives in CIRISManager/static/
+
+2. **Agent GUI**: React app in container from CIRISAgent
+   - Multi-tenant: `/agent/{agent_id}` 
+   - Chat interface for interacting with agents
+   - Detects mode (standalone vs managed) from URL
+
+**Container Count:**
+- N agent containers (one per agent)
+- 1 GUI container (shared, multi-tenant)
+- 1 nginx container
+- 0 manager GUI containers (static files)
 
 ## Production Deployment
 
@@ -228,41 +258,42 @@ docker logs ciris-agent-datum --tail 50 -f
 
 ### How Nginx Integration Works
 
-CIRISManager generates **partial nginx configurations** that are included in the main nginx.conf:
+CIRISManager generates **complete nginx.conf files** for all routing:
 
 1. **Configuration Generation**
-   - Manager writes to `/opt/ciris-manager/nginx/agents.conf`
-   - Contains only agent-specific routes and upstreams
-   - Main nginx.conf includes this file via `include` directive
+   - Manager writes to `/home/ciris/nginx/nginx.conf`
+   - Contains ALL routes: Manager GUI, Agent GUI, APIs
+   - Single file, no includes, no complexity
 
 2. **Volume Mount Strategy**
    ```
-   Host: /opt/ciris-manager/nginx/ → Container: /etc/nginx/conf.d/
+   Host: /home/ciris/nginx/nginx.conf → Container: /etc/nginx/nginx.conf:ro
    ```
    The nginx container sees config changes immediately via volume mount.
 
 3. **Update Flow**
    ```
-   Agent change detected → Generate agents.conf → Validate config → Reload nginx
-                                                       ↓
-                                                  (rollback if invalid)
+   Agent change detected → Generate nginx.conf → Validate config → Reload nginx
+                                                      ↓
+                                                 (rollback if invalid)
    ```
 
 4. **Route Structure**
-   - `/` → GUI (port 3000)
+   - `/` → Manager GUI (static files)
+   - `/agent/{agent_id}` → Agent GUI (multi-tenant container)
    - `/manager/v1/*` → Manager API (port 8888)
    - `/api/{agent_id}/*` → Individual agents (dynamic ports)
-   - `/v1/*` → Default agent (usually 'datum')
+   - **NO DEFAULT ROUTE** - every API call must specify agent
 
 ### Troubleshooting Nginx Issues
 
 **Config not updating:**
 ```bash
-# Check if agents.conf exists and is readable
-ls -la /opt/ciris-manager/nginx/agents.conf
+# Check if nginx.conf exists and is readable
+ls -la /home/ciris/nginx/nginx.conf
 
 # Verify nginx container can see the config
-docker exec ciris-nginx ls -la /etc/nginx/conf.d/
+docker exec ciris-nginx cat /etc/nginx/nginx.conf | head -20
 
 # Check nginx error logs
 docker logs ciris-nginx --tail 50
@@ -274,32 +305,31 @@ docker logs ciris-nginx --tail 50
 docker exec ciris-nginx nginx -t
 
 # Check generated config content
-cat /opt/ciris-manager/nginx/agents.conf
+cat /home/ciris/nginx/nginx.conf
 ```
 
 **Permissions issues:**
-- Manager needs write access to `/opt/ciris-manager/nginx/`
+- Manager needs write access to `/home/ciris/nginx/`
 - Nginx container needs read access via volume mount
 - Default owner should be the user running CIRISManager
 
-### Known Issue: Dual Config Loading
+### Nginx Architecture
 
-**Problem:** The production nginx setup loads TWO separate configs:
-1. **Static config**: `/etc/nginx/conf.d/default.conf` (from `agents.ciris.ai-dev.conf`)
-2. **Dynamic config**: `/etc/nginx/conf.d/agents.conf` (from CIRISManager)
+**Single Configuration File:**
+CIRISManager generates one complete nginx.conf that includes:
+- SSL/TLS configuration
+- Manager GUI (static files at `/`)
+- Agent GUI routing (`/agent/{agent_id}`)
+- Manager API (`/manager/v1/*`)
+- Agent APIs (`/api/{agent_id}/*`)
 
-Both files load independently in nginx, potentially causing route conflicts.
+**No Dual Config Issues:**
+- One file: `/home/ciris/nginx/nginx.conf`
+- One process writes it: CIRISManager
+- One place to debug: the single config file
 
-**Root Cause:** The docker-compose mounts:
-```yaml
-volumes:
-  - ./nginx/agents.ciris.ai-dev.conf:/etc/nginx/conf.d/default.conf:ro
-  - /opt/ciris-manager/nginx/agents.conf:/etc/nginx/conf.d/agents.conf:ro
-```
-
-**Solution Architecture:**
-1. Static config should handle base infrastructure (SSL, GUI, static routes)
-2. Static config should explicitly `include` the dynamic agent routes
-3. Dynamic config should ONLY contain agent-specific routes
-
-**Implementation Status:** Solution implemented and tested. Ready for production deployment.
+**Container Architecture:**
+- Nginx container: Lives in CIRISManager, handles all routing
+- Agent containers: Serve API at `/v1/*` internally
+- GUI container: Multi-tenant, serves all agents at `/agent/{id}`
+- Manager GUI: Static files served directly by nginx

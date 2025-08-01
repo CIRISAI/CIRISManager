@@ -64,13 +64,14 @@ class TemplateListResponse(BaseModel):
 
 class PortRange(BaseModel):
     """Port range information."""
+
     start: int
     end: int
 
 
 class AllocatedPortsResponse(BaseModel):
     """Response model for allocated ports."""
-    
+
     allocated: List[int]
     reserved: List[int]
     range: PortRange
@@ -125,9 +126,7 @@ def create_routes(manager: Any) -> APIRouter:
         agents = discovery.discover_agents()
 
         # Don't update nginx on GET requests - only update when agents change state
-        
-        # Convert AgentInfo objects to dict for backward compatibility
-        agent_dicts = [agent.model_dump() for agent in agents]
+
         return AgentListResponse(agents=agents)
 
     @router.get("/agents/{agent_name}")
@@ -201,9 +200,7 @@ def create_routes(manager: Any) -> APIRouter:
             discovery = DockerAgentDiscovery()
             discovered_agents = discovery.discover_agents()
 
-            discovered_agent = next(
-                (a for a in discovered_agents if a.agent_id == agent_id), None
-            )
+            discovered_agent = next((a for a in discovered_agents if a.agent_id == agent_id), None)
             if discovered_agent:
                 # This is a discovered agent not managed by CIRISManager
                 raise HTTPException(

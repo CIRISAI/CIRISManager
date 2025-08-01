@@ -72,12 +72,14 @@ def test_nginx_generation():
 
         # Verify key sections exist
         print("\nVerification:")
-        print(f"- Contains 'upstream gui': {'upstream gui' in config}")
+        print(f"- Contains 'upstream agent_gui': {'upstream agent_gui' in config}")
         print(f"- Contains 'upstream manager': {'upstream manager' in config}")
         print(f"- Contains 'upstream agent_datum': {'upstream agent_datum' in config}")
         print(f"- Contains 'upstream agent_sage': {'upstream agent_sage' in config}")
         print(f"- Contains 'upstream agent_scout': {'upstream agent_scout' in config}")
-        print(f"- Contains default route to datum: {'/v1/' in config and 'agent_datum' in config}")
+        print(
+            f"- NO default route (good): {'/v1/' not in config or 'proxy_pass http://agent_' not in config}"
+        )
         print(f"- Contains OAuth routes: {'/v1/auth/oauth/' in config}")
         print(f"- Contains API routes: {'/api/' in config}")
 

@@ -88,20 +88,22 @@ Base URL: `https://agents.ciris.ai/manager/v1`
 
 ## Nginx Management
 
-CIRISManager automatically generates nginx configurations when agents change:
+CIRISManager automatically generates complete nginx configurations when agents change:
 
 1. Discovers agents via Docker labels
-2. Generates dynamic agent routes only (agents.conf)
-3. Writes to `/opt/ciris-manager/nginx/agents.conf`
+2. Generates complete nginx.conf with all routes
+3. Writes to `/home/ciris/nginx/nginx.conf`
 4. Reloads nginx container
 
 The generated config includes:
-- Dynamic agent upstreams and routes
-- Default /v1 route pointing to primary agent
+- SSL/TLS configuration
+- Manager GUI (static files at `/`)
+- Agent GUI routing (`/agent/{agent_id}`)
+- Manager API (`/manager/v1/*`)
+- Agent APIs (`/api/{agent_id}/*`)
 - WebSocket support for all agents
-- Automatic route updates when agents change
 
-Note: Static infrastructure (SSL, GUI routes) is managed by the nginx template in CIRISAgent
+Note: No default routes - every API call must specify which agent
 
 ## Docker Integration
 

@@ -120,7 +120,7 @@ class TestAPIRoutes:
         """Test listing agents with data."""
         # Mock the discovery instance with AgentInfo objects
         from ciris_manager.models import AgentInfo
-        
+
         mock_discovery = Mock()
         mock_agents = [
             AgentInfo(

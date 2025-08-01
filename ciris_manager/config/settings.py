@@ -76,7 +76,7 @@ class NginxConfig(BaseModel):
 
     enabled: bool = Field(default=True, description="Whether nginx integration is enabled")
     config_dir: str = Field(
-        default="/opt/ciris-manager/nginx", description="Directory for nginx configuration files"
+        default="/home/ciris/nginx", description="Directory for nginx configuration files"
     )
     container_name: str = Field(
         default="ciris-nginx", description="Name of the nginx Docker container"
