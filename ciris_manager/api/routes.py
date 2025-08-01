@@ -114,7 +114,7 @@ def create_routes(manager: Any) -> APIRouter:
         """Verify deployment token for CD operations."""
         if not DEPLOY_TOKEN:
             raise HTTPException(status_code=500, detail="Deployment token not configured")
-            
+
         if not authorization:
             raise HTTPException(status_code=401, detail="Missing authorization header")
 
@@ -378,7 +378,7 @@ def create_routes(manager: Any) -> APIRouter:
         # 1. Fetch from GitHub API using the commit SHA
         # 2. Parse from a CHANGELOG.md file
         # 3. Extract from CI/CD metadata
-        
+
         return {
             "latest": {
                 "version": "latest",
@@ -387,23 +387,23 @@ def create_routes(manager: Any) -> APIRouter:
                     {
                         "type": "fix",
                         "description": "Memory leak in telemetry service",
-                        "risk": "low"
+                        "risk": "low",
                     },
                     {
-                        "type": "feat", 
+                        "type": "feat",
                         "description": "Enhanced update notifications with context",
-                        "risk": "low"
+                        "risk": "low",
                     },
                     {
                         "type": "security",
                         "description": "Removed hardcoded deployment token",
-                        "risk": "critical"
-                    }
-                ]
+                        "risk": "critical",
+                    },
+                ],
             },
             "summary": "3 changes: 1 fix, 1 feature, 1 security update",
             "recommended_action": "update",
-            "breaking_changes": False
+            "breaking_changes": False,
         }
 
     return router
