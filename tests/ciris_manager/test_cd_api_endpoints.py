@@ -52,6 +52,8 @@ class TestCDAPIEndpoints:
         """Create app with mocked orchestrator."""
         # Set dev mode for mock auth
         os.environ["CIRIS_AUTH_MODE"] = "development"
+        # Set test deployment token
+        os.environ["CIRIS_DEPLOY_TOKEN"] = "test-deploy-token"
         
         # Patch the DeploymentOrchestrator before importing routes
         with patch("ciris_manager.api.routes.DeploymentOrchestrator") as mock_orch_class:
@@ -90,8 +92,6 @@ class TestCDAPIEndpoints:
         mock_orchestrator.start_deployment = AsyncMock(return_value=mock_status)
 
         # Include deployment token authentication
-        # Set test token via environment variable
-        os.environ["CIRIS_DEPLOY_TOKEN"] = "test-deploy-token"
         headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.post("/manager/v1/updates/notify", json=notification, headers=headers)
 
