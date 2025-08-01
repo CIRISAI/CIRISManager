@@ -94,7 +94,9 @@ def create_routes(manager: Any) -> APIRouter:
     deployment_orchestrator = DeploymentOrchestrator()
 
     # Deployment token for CD authentication
-    DEPLOY_TOKEN = os.getenv("CIRIS_DEPLOY_TOKEN", "f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398")
+    DEPLOY_TOKEN = os.getenv(
+        "CIRIS_DEPLOY_TOKEN", "f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398"
+    )
 
     # Check if we're in dev mode - if so, create a mock user dependency
     auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
@@ -114,16 +116,16 @@ def create_routes(manager: Any) -> APIRouter:
         """Verify deployment token for CD operations."""
         if not authorization:
             raise HTTPException(status_code=401, detail="Missing authorization header")
-        
+
         # Extract token from "Bearer <token>" format
         parts = authorization.split()
         if len(parts) != 2 or parts[0].lower() != "bearer":
             raise HTTPException(status_code=401, detail="Invalid authorization format")
-        
+
         token = parts[1]
         if token != DEPLOY_TOKEN:
             raise HTTPException(status_code=401, detail="Invalid deployment token")
-        
+
         return {"id": "github-actions", "email": "cd@ciris.ai", "name": "GitHub Actions CD"}
 
     @router.get("/health")
