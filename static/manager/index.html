@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIRIS Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .tab-active { 
+            border-bottom: 2px solid #3b82f6; 
+            color: #3b82f6;
+        }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Loading Screen -->
+    <div id="loading" class="flex items-center justify-center min-h-screen">
+        <div class="loader"></div>
+    </div>
+
+    <!-- Main Content (hidden initially) -->
+    <div id="app" class="hidden">
+        <!-- Header -->
+        <header class="bg-white shadow">
+            <div class="container mx-auto px-6 py-4">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-3xl font-bold">CIRIS Manager</h1>
+                        <p class="text-gray-600 mt-1">Manage your CIRIS agents and infrastructure</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="refreshData()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                            <i class="fas fa-sync-alt" id="refresh-icon"></i>
+                            Refresh
+                        </button>
+                        <button onclick="showCreateDialog()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                            <i class="fas fa-plus"></i>
+                            Create Agent
+                        </button>
+                        <button onclick="logout()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                            <i class="fas fa-sign-out-alt"></i>
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Container -->
+        <div class="container mx-auto p-6">
+            <!-- Error Alert -->
+            <div id="error-alert" class="hidden mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                <span id="error-message"></span>
+            </div>
+
+            <!-- Tabs -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="border-b">
+                    <nav class="flex space-x-8 px-6" aria-label="Tabs">
+                        <button onclick="switchTab('agents')" id="agents-tab" class="py-4 px-1 border-b-2 font-medium text-sm tab-active">
+                            Agents
+                        </button>
+                        <button onclick="switchTab('status')" id="status-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
+                            Manager Status
+                        </button>
+                    </nav>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="p-6">
+                    <!-- Agents Tab -->
+                    <div id="agents-content">
+                        <div class="mb-4">
+                            <h2 class="text-xl font-semibold">Active Agents</h2>
+                            <p class="text-gray-600">
+                                <span id="agent-count">0</span> agent(s) currently running
+                            </p>
+                        </div>
+                        <div id="agents-list" class="space-y-4">
+                            <!-- Agents will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- Status Tab -->
+                    <div id="status-content" class="hidden">
+                        <div class="space-y-6">
+                            <div>
+                                <h3 class="text-lg font-semibold mb-2">Manager Status</h3>
+                                <div id="manager-status" class="bg-gray-50 p-4 rounded-lg">
+                                    <!-- Status will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Agent Dialog -->
+    <div id="create-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <h2 class="text-2xl font-bold mb-4">Create New Agent</h2>
+                <form id="create-agent-form" onsubmit="handleCreateAgent(event)">
+                    <div class="space-y-4">
+                        <!-- Template Selection -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Template</label>
+                            <select id="template-select" name="template" required class="w-full p-2 border rounded-lg" onchange="checkTemplateApproval()">
+                                <option value="">Select a template...</option>
+                            </select>
+                        </div>
+
+                        <!-- Agent Name -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Agent Name</label>
+                            <input type="text" name="name" required class="w-full p-2 border rounded-lg" placeholder="my-agent">
+                        </div>
+
+                        <!-- WA Signature (hidden by default) -->
+                        <div id="wa-signature-field" class="hidden">
+                            <label class="block text-sm font-medium mb-1">WA Signature</label>
+                            <input type="text" name="wa_signature" class="w-full p-2 border rounded-lg" placeholder="Required for non-approved templates">
+                        </div>
+
+                        <!-- Environment Variables -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Environment Variables</label>
+                            <div id="env-vars-container" class="space-y-2">
+                                <div class="flex gap-2">
+                                    <input type="text" placeholder="Key" class="flex-1 p-2 border rounded-lg env-key">
+                                    <input type="text" placeholder="Value" class="flex-1 p-2 border rounded-lg env-value">
+                                    <button type="button" onclick="addEnvVar()" class="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dialog Actions -->
+                    <div class="flex justify-end gap-2 mt-6">
+                        <button type="button" onclick="hideCreateDialog()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            Create Agent
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/manager/manager.js"></script>
+</body>
+</html>
