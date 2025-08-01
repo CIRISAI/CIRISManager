@@ -118,51 +118,27 @@ class TestAPIRoutes:
     @patch("ciris_manager.docker_discovery.DockerAgentDiscovery")
     def test_list_agents_with_data(self, mock_discovery_class, client, mock_manager):
         """Test listing agents with data."""
-        # Mock the discovery instance with Docker-style agent data
+        # Mock the discovery instance with AgentInfo objects
+        from ciris_manager.models import AgentInfo
+        
         mock_discovery = Mock()
         mock_agents = [
-            {
-                "agent_id": "agent-scout",
-                "agent_name": "Agent Scout",
-                "container_name": "ciris-agent-scout",
-                "container_id": "abc123def456",
-                "status": "running",
-                "health": "healthy",
-                "api_endpoint": "http://localhost:8081",
-                "api_port": "8081",
-                "created_at": "2025-01-01T00:00:00Z",
-                "started_at": "2025-01-01T00:01:00Z",
-                "exit_code": 0,
-                "environment": {
-                    "CIRIS_ADAPTER": "api",
-                    "CIRIS_MOCK_LLM": "true",
-                    "CIRIS_PORT": "8080",
-                },
-                "labels": {},
-                "image": "ghcr.io/cirisai/ciris-agent:latest",
-                "restart_policy": "unless-stopped",
-            },
-            {
-                "agent_id": "agent-sage",
-                "agent_name": "Agent Sage",
-                "container_name": "ciris-agent-sage",
-                "container_id": "def456ghi789",
-                "status": "running",
-                "health": "healthy",
-                "api_endpoint": "http://localhost:8082",
-                "api_port": "8082",
-                "created_at": "2025-01-01T00:02:00Z",
-                "started_at": "2025-01-01T00:03:00Z",
-                "exit_code": 0,
-                "environment": {
-                    "CIRIS_ADAPTER": "api",
-                    "CIRIS_MOCK_LLM": "true",
-                    "CIRIS_PORT": "8080",
-                },
-                "labels": {},
-                "image": "ghcr.io/cirisai/ciris-agent:latest",
-                "restart_policy": "unless-stopped",
-            },
+            AgentInfo(
+                agent_id="agent-scout",
+                agent_name="Agent Scout",
+                container_name="ciris-agent-scout",
+                api_port=8081,
+                status="running",
+                image="ghcr.io/cirisai/ciris-agent:latest",
+            ),
+            AgentInfo(
+                agent_id="agent-sage",
+                agent_name="Agent Sage",
+                container_name="ciris-agent-sage",
+                api_port=8082,
+                status="running",
+                image="ghcr.io/cirisai/ciris-agent:latest",
+            ),
         ]
         mock_discovery.discover_agents.return_value = mock_agents
         mock_discovery_class.return_value = mock_discovery
@@ -175,7 +151,7 @@ class TestAPIRoutes:
         # Check first agent
         assert data["agents"][0]["agent_id"] == "agent-scout"
         assert data["agents"][0]["agent_name"] == "Agent Scout"
-        assert data["agents"][0]["api_endpoint"] == "http://localhost:8081"
+        assert data["agents"][0]["api_port"] == 8081
 
     def test_get_agent_exists(self, client, mock_manager):
         """Test getting specific agent that exists."""

@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any, List
 import logging
 import os
 from .auth import get_current_user_dependency as get_current_user
+from ciris_manager.models import AgentInfo
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class AgentResponse(BaseModel):
 class AgentListResponse(BaseModel):
     """Response model for agent list."""
 
-    agents: List[Dict[str, Any]]
+    agents: List[AgentInfo]
 
 
 class StatusResponse(BaseModel):
@@ -59,6 +60,20 @@ class TemplateListResponse(BaseModel):
 
     templates: Dict[str, str]  # Template name -> description
     pre_approved: List[str]
+
+
+class PortRange(BaseModel):
+    """Port range information."""
+    start: int
+    end: int
+
+
+class AllocatedPortsResponse(BaseModel):
+    """Response model for allocated ports."""
+    
+    allocated: List[int]
+    reserved: List[int]
+    range: PortRange
 
 
 def create_routes(manager: Any) -> APIRouter:
@@ -110,25 +125,27 @@ def create_routes(manager: Any) -> APIRouter:
         agents = discovery.discover_agents()
 
         # Don't update nginx on GET requests - only update when agents change state
-
+        
+        # Convert AgentInfo objects to dict for backward compatibility
+        agent_dicts = [agent.model_dump() for agent in agents]
         return AgentListResponse(agents=agents)
 
     @router.get("/agents/{agent_name}")
-    async def get_agent(agent_name: str) -> Dict[str, Any]:
+    async def get_agent(agent_name: str) -> AgentResponse:
         """Get specific agent by name."""
         agent = manager.agent_registry.get_agent_by_name(agent_name)
         if not agent:
             raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
 
-        return {
-            "agent_id": agent.agent_id,
-            "name": agent.name,
-            "port": agent.port,
-            "template": agent.template,
-            "api_endpoint": f"http://localhost:{agent.port}",
-            "compose_file": agent.compose_file,
-            "created_at": agent.created_at,
-        }
+        return AgentResponse(
+            agent_id=agent.agent_id,
+            name=agent.name,
+            container=f"ciris-agent-{agent.agent_id}",
+            port=agent.port,
+            api_endpoint=f"http://localhost:{agent.port}",
+            template=agent.template,
+            status="running",  # TODO: Get actual status from docker
+        )
 
     @router.post("/agents", response_model=AgentResponse)
     async def create_agent(
@@ -185,7 +202,7 @@ def create_routes(manager: Any) -> APIRouter:
             discovered_agents = discovery.discover_agents()
 
             discovered_agent = next(
-                (a for a in discovered_agents if a["agent_id"] == agent_id), None
+                (a for a in discovered_agents if a.agent_id == agent_id), None
             )
             if discovered_agent:
                 # This is a discovered agent not managed by CIRISManager
@@ -268,16 +285,16 @@ def create_routes(manager: Any) -> APIRouter:
 
         return {"content": "\n".join(env_vars)}
 
-    @router.get("/ports/allocated")
-    async def get_allocated_ports() -> Dict[str, Any]:
+    @router.get("/ports/allocated", response_model=AllocatedPortsResponse)
+    async def get_allocated_ports() -> AllocatedPortsResponse:
         """Get allocated ports."""
-        return {
-            "allocated": manager.port_manager.allocated_ports,
-            "reserved": list(manager.port_manager.reserved_ports),
-            "range": {
-                "start": manager.port_manager.start_port,
-                "end": manager.port_manager.end_port,
-            },
-        }
+        return AllocatedPortsResponse(
+            allocated=manager.port_manager.allocated_ports,
+            reserved=list(manager.port_manager.reserved_ports),
+            range=PortRange(
+                start=manager.port_manager.start_port,
+                end=manager.port_manager.end_port,
+            ),
+        )
 
     return router

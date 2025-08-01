@@ -2,9 +2,11 @@
 Google OAuth provider implementation.
 """
 
-from typing import Dict, Any, Optional, cast
+from typing import Optional
 import httpx
 import logging
+
+from ciris_manager.models import OAuthToken, OAuthUser
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,7 @@ class GoogleOAuthProvider:
         query_string = "&".join(f"{k}={v}" for k, v in params.items())
         return f"{self.AUTH_URL}?{query_string}"
 
-    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> Dict[str, Any]:
+    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> OAuthToken:
         """Exchange authorization code for access token."""
         data = {
             "code": code,
@@ -66,7 +68,8 @@ class GoogleOAuthProvider:
         try:
             response = await self.http_client.post(self.TOKEN_URL, data=data)
             response.raise_for_status()
-            return cast(Dict[str, Any], response.json())
+            token_data = response.json()
+            return OAuthToken(**token_data)
         except httpx.HTTPStatusError as e:
             logger.error(f"Token exchange failed: {e.response.text}")
             raise ValueError(f"Failed to exchange code: {e.response.status_code}")
@@ -74,14 +77,15 @@ class GoogleOAuthProvider:
             logger.error(f"Token exchange error: {e}")
             raise ValueError("Failed to exchange authorization code")
 
-    async def get_user_info(self, access_token: str) -> Dict[str, Any]:
+    async def get_user_info(self, access_token: str) -> OAuthUser:
         """Get user information from Google."""
         try:
             response = await self.http_client.get(
                 self.USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}
             )
             response.raise_for_status()
-            return cast(Dict[str, Any], response.json())
+            user_data = response.json()
+            return OAuthUser(**user_data)
         except httpx.HTTPStatusError as e:
             logger.error(f"User info fetch failed: {e.response.text}")
             raise ValueError(f"Failed to get user info: {e.response.status_code}")
