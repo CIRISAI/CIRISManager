@@ -117,7 +117,7 @@ class TestCDAPIEndpoints:
             side_effect=ValueError("Deployment already in progress")
         )
 
-        headers = {"Authorization": "Bearer f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398"}
+        headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.post("/manager/v1/updates/notify", json=notification, headers=headers)
 
         assert response.status_code == 409
@@ -140,7 +140,7 @@ class TestCDAPIEndpoints:
         )
         mock_orchestrator.get_deployment_status = AsyncMock(return_value=mock_status)
 
-        headers = {"Authorization": "Bearer f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398"}
+        headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.get(
             "/manager/v1/updates/status",
             params={"deployment_id": "test-deployment-123"},
@@ -171,7 +171,7 @@ class TestCDAPIEndpoints:
         mock_orchestrator.get_current_deployment = AsyncMock(return_value=mock_status)
         mock_orchestrator.get_deployment_status = AsyncMock(return_value=None)
 
-        headers = {"Authorization": "Bearer f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398"}
+        headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.get("/manager/v1/updates/status", headers=headers)
 
         assert response.status_code == 200
@@ -188,7 +188,7 @@ class TestCDAPIEndpoints:
         mock_orchestrator.get_deployment_status = AsyncMock(return_value=None)
         mock_orchestrator.get_current_deployment = AsyncMock(return_value=None)
 
-        headers = {"Authorization": "Bearer f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398"}
+        headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.get(
             "/manager/v1/updates/status",
             params={"deployment_id": "non-existent"},
@@ -219,7 +219,7 @@ class TestCDAPIEndpoints:
         )
         mock_orchestrator.start_deployment = AsyncMock(return_value=mock_status)
 
-        headers = {"Authorization": "Bearer f1cfb8ee418388a521904ea3a04ce0445471a33e5df891195399f1f5a82fc398"}
+        headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.post("/manager/v1/updates/notify", json=notification, headers=headers)
 
         assert response.status_code == 200
