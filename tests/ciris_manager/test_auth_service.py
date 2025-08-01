@@ -17,16 +17,24 @@ class TestInMemorySessionStore:
 
     def test_store_and_retrieve_session(self):
         """Test storing and retrieving session data."""
+        from ciris_manager.models import OAuthSession
+        from datetime import datetime, timezone
+        
         store = InMemorySessionStore()
 
         # Store session
-        store.store_session("test-state", {"redirect_uri": "http://example.com"})
+        session_data = OAuthSession(
+            redirect_uri="http://example.com",
+            callback_url="http://example.com/callback",
+            created_at=datetime.now(timezone.utc).isoformat()
+        )
+        store.store_session("test-state", session_data)
 
         # Retrieve session
         session = store.get_session("test-state")
         assert session is not None
-        assert session["redirect_uri"] == "http://example.com"
-        assert "created_at" in session
+        assert session.redirect_uri == "http://example.com"
+        assert session.created_at is not None
 
     def test_get_nonexistent_session(self):
         """Test retrieving non-existent session."""
@@ -39,7 +47,15 @@ class TestInMemorySessionStore:
         store = InMemorySessionStore()
 
         # Store and delete
-        store.store_session("test-state", {"data": "value"})
+        from ciris_manager.models import OAuthSession
+        from datetime import datetime, timezone
+        
+        session_data = OAuthSession(
+            redirect_uri="http://example.com",
+            callback_url="http://example.com/callback",
+            created_at=datetime.now(timezone.utc).isoformat()
+        )
+        store.store_session("test-state", session_data)
         store.delete_session("test-state")
 
         # Should be gone
@@ -167,30 +183,35 @@ class TestAuthService:
         # Verify session was stored
         session = auth_service.session_store.get_session(state)
         assert session is not None
-        assert session["redirect_uri"] == "http://app.example.com"
+        assert session.redirect_uri == "http://app.example.com"
 
     @pytest.mark.asyncio
     async def test_handle_oauth_callback_success(self, auth_service, mock_oauth_provider):
         """Test successful OAuth callback handling."""
         # Setup state
+        from ciris_manager.models import OAuthSession, OAuthToken, OAuthUser
+        from datetime import datetime, timezone
+        
         state = "test-state"
-        auth_service.session_store.store_session(
-            state,
-            {
-                "redirect_uri": "http://app.example.com",
-                "callback_url": "http://app.example.com/callback",
-            },
+        session_data = OAuthSession(
+            redirect_uri="http://app.example.com",
+            callback_url="http://app.example.com/callback",
+            created_at=datetime.now(timezone.utc).isoformat()
         )
+        auth_service.session_store.store_session(state, session_data)
 
         # Setup mocks
-        mock_oauth_provider.exchange_code_for_token.return_value = {
-            "access_token": "google-access-token"
-        }
-        mock_oauth_provider.get_user_info.return_value = {
-            "email": "user@ciris.ai",
-            "name": "Test User",
-            "picture": "http://example.com/pic.jpg",
-        }
+        mock_oauth_provider.exchange_code_for_token.return_value = OAuthToken(
+            access_token="google-access-token",
+            token_type="Bearer",
+            expires_in=3600
+        )
+        mock_oauth_provider.get_user_info.return_value = OAuthUser(
+            id="123",
+            email="user@ciris.ai",
+            name="Test User",
+            picture="http://example.com/pic.jpg"
+        )
 
         # Handle callback
         result = await auth_service.handle_oauth_callback("test-code", state)
@@ -217,23 +238,28 @@ class TestAuthService:
     async def test_handle_oauth_callback_non_ciris_email(self, auth_service, mock_oauth_provider):
         """Test OAuth callback with non-ciris.ai email."""
         # Setup state
+        from ciris_manager.models import OAuthSession, OAuthToken, OAuthUser
+        from datetime import datetime, timezone
+        
         state = "test-state"
-        auth_service.session_store.store_session(
-            state,
-            {
-                "redirect_uri": "http://app.example.com",
-                "callback_url": "http://app.example.com/callback",
-            },
+        session_data = OAuthSession(
+            redirect_uri="http://app.example.com",
+            callback_url="http://app.example.com/callback",
+            created_at=datetime.now(timezone.utc).isoformat()
         )
+        auth_service.session_store.store_session(state, session_data)
 
         # Setup mocks
-        mock_oauth_provider.exchange_code_for_token.return_value = {
-            "access_token": "google-access-token"
-        }
-        mock_oauth_provider.get_user_info.return_value = {
-            "email": "user@gmail.com",  # Not @ciris.ai
-            "name": "External User",
-        }
+        mock_oauth_provider.exchange_code_for_token.return_value = OAuthToken(
+            access_token="google-access-token",
+            token_type="Bearer",
+            expires_in=3600
+        )
+        mock_oauth_provider.get_user_info.return_value = OAuthUser(
+            id="456",
+            email="user@gmail.com",  # Not @ciris.ai
+            name="External User"
+        )
 
         # Should raise
         with pytest.raises(ValueError, match="@ciris.ai accounts"):

@@ -241,4 +241,4 @@ class TestDockerDiscoveryCoverage:
         agent_info = discovery._extract_agent_info(container, env_dict)
 
         assert agent_info is not None
-        assert agent_info["api_port"] == "8081"  # Port is returned as string
+        assert agent_info.api_port == 8081  # Port is returned as int

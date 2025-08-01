@@ -68,8 +68,8 @@ class TestComposeGenerator:
 
         # Check volumes
         volumes = service["volumes"]
-        assert f"{temp_agent_dir}/data:/app/data" in volumes
-        assert f"{temp_agent_dir}/logs:/app/logs" in volumes
+        assert "agent-scout_data:/app/data" in volumes
+        assert "agent-scout_logs:/app/logs" in volumes
         assert "/home/ciris/shared/oauth:/home/ciris/shared/oauth:ro" in volumes
 
         # Check healthcheck
@@ -138,8 +138,8 @@ class TestComposeGenerator:
 
         volumes = compose["services"]["agent-scout"]["volumes"]
         # Custom OAuth volume path should be used
-        assert f"{temp_agent_dir}/data:/app/data" in volumes
-        assert f"{temp_agent_dir}/logs:/app/logs" in volumes
+        assert "agent-scout_data:/app/data" in volumes
+        assert "agent-scout_logs:/app/logs" in volumes
         assert "/custom/oauth/path:/home/ciris/shared/oauth:ro" in volumes
 
     def test_write_compose_file(self, generator, temp_agent_dir):

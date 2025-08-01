@@ -29,32 +29,34 @@ def test_nginx_generation():
         nginx_manager = NginxManager(config_dir=str(test_dir), container_name="test-nginx")
 
         # Sample agents data (simulating what docker_discovery would return)
+        from ciris_manager.models import AgentInfo
+        
         test_agents = [
-            {
-                "agent_id": "datum",
-                "agent_name": "Datum",
-                "api_port": 8080,
-                "status": "running",
-                "container": "ciris-agent-datum",
-            },
-            {
-                "agent_id": "sage",
-                "agent_name": "Sage",
-                "api_port": 8081,
-                "status": "running",
-                "container": "ciris-agent-sage",
-            },
-            {
-                "agent_id": "scout",
-                "agent_name": "Scout",
-                "api_port": 8082,
-                "status": "stopped",
-                "container": "ciris-agent-scout",
-            },
+            AgentInfo(
+                agent_id="datum",
+                agent_name="Datum",
+                container_name="ciris-agent-datum",
+                api_port=8080,
+                status="running",
+            ),
+            AgentInfo(
+                agent_id="sage",
+                agent_name="Sage",
+                container_name="ciris-agent-sage",
+                api_port=8081,
+                status="running",
+            ),
+            AgentInfo(
+                agent_id="scout",
+                agent_name="Scout",
+                container_name="ciris-agent-scout",
+                api_port=8082,
+                status="stopped",
+            ),
         ]
 
         print("Testing nginx config generation with 3 agents...")
-        print(f"Agents: {[a['agent_name'] for a in test_agents]}")
+        print(f"Agents: {[a.agent_name for a in test_agents]}")
         print()
 
         # Generate config

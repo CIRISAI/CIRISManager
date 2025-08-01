@@ -362,42 +362,37 @@ class TestAPIRoutes:
         response = client.get("/manager/v1/ports/allocated")
         assert response.status_code == 200
         data = response.json()
-        assert data["allocated"] == {"agent-test": 8080}
+        assert data["allocated"] == [8080]
         assert 8888 in data["reserved"]
         assert 3000 in data["reserved"]
         assert data["range"]["start"] == 8080
         assert data["range"]["end"] == 8200
 
-    @patch("pathlib.Path.exists")
-    @patch("pathlib.Path.read_text")
-    def test_get_default_env_exists(self, mock_read_text, mock_exists, client):
-        """Test getting default env when file exists."""
-        mock_exists.return_value = True
-        mock_read_text.return_value = "CIRIS_MOCK_LLM=true\nCIRIS_LOG_LEVEL=DEBUG"
-
+    def test_get_default_env(self, client):
+        """Test getting default env vars."""
         response = client.get("/manager/v1/env/default")
         assert response.status_code == 200
         data = response.json()
-        assert data["content"] == "CIRIS_MOCK_LLM=true\nCIRIS_LOG_LEVEL=DEBUG"
+        # Check that it contains the expected env vars
+        assert "LLM_PROVIDER=openai" in data["content"]
+        assert "DATABASE_URL=sqlite:////app/data/ciris_engine.db" in data["content"]
+        assert "API_HOST=0.0.0.0" in data["content"]
+        assert "API_PORT=8080" in data["content"]
 
-    @patch("pathlib.Path.exists")
-    def test_get_default_env_not_exists(self, mock_exists, client):
-        """Test getting default env when file doesn't exist."""
-        mock_exists.return_value = False
-
+    def test_get_default_env_not_empty(self, client):
+        """Test that default env is never empty."""
         response = client.get("/manager/v1/env/default")
         assert response.status_code == 200
         data = response.json()
-        assert data["content"] == ""
+        assert data["content"] != ""
+        assert len(data["content"]) > 0
 
-    @patch("pathlib.Path.exists")
-    @patch("pathlib.Path.read_text")
-    def test_get_default_env_read_error(self, mock_read_text, mock_exists, client):
-        """Test getting default env when read fails."""
-        mock_exists.return_value = True
-        mock_read_text.side_effect = Exception("Permission denied")
-
+    def test_get_default_env_format(self, client):
+        """Test that default env is in correct format."""
         response = client.get("/manager/v1/env/default")
         assert response.status_code == 200
         data = response.json()
-        assert data["content"] == ""
+        # Check it's in KEY=value format
+        lines = data["content"].split("\n")
+        for line in lines:
+            assert "=" in line

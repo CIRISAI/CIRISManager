@@ -27,19 +27,23 @@ class TestNginxManager:
     @pytest.fixture
     def sample_agents(self):
         """Sample agent data."""
+        from ciris_manager.models import AgentInfo
+        
         return [
-            {
-                "agent_id": "agent-scout",
-                "agent_name": "Scout",
-                "api_port": "8081",
-                "api_endpoint": "http://localhost:8081",
-            },
-            {
-                "agent_id": "agent-sage",
-                "agent_name": "Sage",
-                "api_port": "8082",
-                "api_endpoint": "http://localhost:8082",
-            },
+            AgentInfo(
+                agent_id="agent-scout",
+                agent_name="Scout",
+                container_name="ciris-agent-scout",
+                api_port=8081,
+                status="running",
+            ),
+            AgentInfo(
+                agent_id="agent-sage",
+                agent_name="Sage",
+                container_name="ciris-agent-sage",
+                api_port=8082,
+                status="running",
+            ),
         ]
 
     def test_init(self, nginx_manager, temp_dir):
@@ -231,7 +235,7 @@ class TestNginxManager:
         assert "server {" in config
 
         # Should have GUI and manager upstreams
-        assert "upstream gui {" in config
+        assert "upstream agent_gui {" in config
         assert "upstream manager {" in config
 
         # But no agent-specific routes

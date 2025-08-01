@@ -93,8 +93,8 @@ class TestDockerDiscovery:
 
             # Verify
             assert agent_info is not None
-            assert agent_info["agent_id"] == test_case["agent_id"]
-            assert agent_info["agent_name"] == test_case["expected_name"]
+            assert agent_info.agent_id == test_case["agent_id"]
+            assert agent_info.agent_name == test_case["expected_name"]
 
     def test_requires_ciris_agent_id(self):
         """Test that containers without CIRIS_AGENT_ID are rejected."""

@@ -71,7 +71,9 @@ class TestGoogleOAuthProvider:
         )
 
         # Verify result
-        assert result["access_token"] == "test-access-token"
+        assert result.access_token == "test-access-token"
+        assert result.token_type == "Bearer"
+        assert result.expires_in == 3600
 
         # Verify request
         provider.http_client.post.assert_called_once_with(
@@ -129,8 +131,10 @@ class TestGoogleOAuthProvider:
         result = await provider.get_user_info("test-access-token")
 
         # Verify result
-        assert result["email"] == "user@ciris.ai"
-        assert result["name"] == "Test User"
+        assert result.email == "user@ciris.ai"
+        assert result.name == "Test User"
+        assert result.id == "123456"
+        assert result.picture == "http://example.com/pic.jpg"
 
         # Verify request
         provider.http_client.get.assert_called_once_with(
