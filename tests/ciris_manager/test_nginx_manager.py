@@ -65,15 +65,15 @@ class TestNginxManager:
 
         # Check upstreams
         assert "upstream agent_gui {" in config
-        assert "server ciris-gui:3000;" in config
+        assert "server 127.0.0.1:3000;" in config
         assert "upstream manager {" in config
-        assert "server host.docker.internal:8888;" in config
+        assert "server 127.0.0.1:8888;" in config
 
         # Check agent routes
-        assert "location /api/scout/" in config
-        assert "proxy_pass http://agent_scout;" in config
-        assert "location /api/sage/" in config
-        assert "proxy_pass http://agent_sage;" in config
+        assert "location ~ ^/api/agent-scout/" in config
+        assert "proxy_pass http://agent_agent-scout/" in config
+        assert "location ~ ^/api/agent-sage/" in config
+        assert "proxy_pass http://agent_agent-sage/" in config
 
     @patch("subprocess.run")
     def test_validate_config_success(self, mock_run, nginx_manager):
@@ -104,13 +104,10 @@ class TestNginxManager:
         # Create a test config file
         nginx_manager.new_config_path.write_text("invalid config")
 
-        # Mock successful copy, then failed validation
-        mock_run.side_effect = [
-            MagicMock(returncode=0),  # docker cp succeeds
-            MagicMock(
-                returncode=1, stderr=b"nginx: configuration file test failed"
-            ),  # nginx -t fails
-        ]
+        # Mock failed validation (no docker cp needed with volume mounts)
+        mock_run.return_value = MagicMock(
+            returncode=1, stderr=b"nginx: configuration file test failed"
+        )
 
         result = nginx_manager._validate_config()
         assert result is False
@@ -154,11 +151,8 @@ class TestNginxManager:
     @patch("subprocess.run")
     def test_update_config_validation_failure(self, mock_run, nginx_manager, sample_agents):
         """Test config update with validation failure."""
-        # First docker cp succeeds, then nginx -t fails
-        mock_run.side_effect = [
-            MagicMock(returncode=0),  # docker cp
-            MagicMock(returncode=1, stderr=b"Invalid config"),  # nginx -t
-        ]
+        # nginx -t fails (no docker cp needed)
+        mock_run.return_value = MagicMock(returncode=1, stderr=b"Invalid config")
 
         result = nginx_manager.update_config(sample_agents)
         assert result is False
@@ -201,8 +195,8 @@ class TestNginxManager:
 
         assert result is True
 
-        # Should have made 3+ calls: docker cp, nginx -t, docker cp, nginx -s reload
-        assert mock_run.call_count >= 3
+        # Should have made 2 calls: nginx -t, nginx -s reload (no docker cp needed)
+        assert mock_run.call_count == 2
 
         # Check that new config only has remaining agent
         config = nginx_manager.config_path.read_text()
