@@ -71,6 +71,19 @@ async def oauth_callback_compat(request: Request):
         status_code=307  # Temporary redirect, preserves method
     )
 
+async def startup_event():
+    """Run startup tasks including nginx config sync."""
+    try:
+        # Update nginx config on startup to ensure it's in sync
+        logger.info("Updating nginx configuration on startup...")
+        await manager.update_nginx_config()
+        logger.info("Nginx configuration updated successfully")
+    except Exception as e:
+        logger.error(f"Failed to update nginx configuration on startup: {e}")
+        # Don't fail startup if nginx update fails
+
+app.add_event_handler("startup", startup_event)
+
 if __name__ == "__main__":
     # Run the API server
     uvicorn.run(
