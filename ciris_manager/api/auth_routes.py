@@ -47,7 +47,9 @@ def init_auth_service(
     client_id = google_client_id or os.getenv("GOOGLE_CLIENT_ID")
     client_secret = google_client_secret or os.getenv("GOOGLE_CLIENT_SECRET")
     jwt_secret_value = jwt_secret or os.getenv("MANAGER_JWT_SECRET") or "dev-secret-key"
-    db_path = db_path or Path.home() / ".config" / "ciris-manager" / "auth.db"
+    # Use HOME env var for system services (Path.home() uses /etc/passwd which may be incorrect)
+    home_dir = Path(os.environ.get("HOME", Path.home()))
+    db_path = db_path or home_dir / ".config" / "ciris-manager" / "auth.db"
 
     # Check for dev mode
     # Declare with Protocol type
