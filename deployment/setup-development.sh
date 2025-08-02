@@ -66,15 +66,6 @@ exec python -m ciris_manager.cli --config config/dev.yml
 EOF
 chmod +x run-manager.sh
 
-# Create run script for API only
-cat > run-api.sh << 'EOF'
-#!/bin/bash
-source venv/bin/activate
-export PYTHONPATH="$PWD:$PYTHONPATH"
-export CIRIS_MANAGER_CONFIG="config/dev.yml"
-exec python deployment/run-ciris-manager-api.py
-EOF
-chmod +x run-api.sh
 
 # Create test runner
 cat > run-tests.sh << 'EOF'

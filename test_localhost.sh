@@ -120,9 +120,9 @@ run_unit_tests() {
 test_api_endpoints() {
     log_test "Testing API endpoints"
     
-    # Start API server in background
-    python deployment/run-ciris-manager-api.py > api.log 2>&1 &
-    API_PID=$!
+    # Start manager service (includes API) in background
+    python -m ciris_manager.cli --config test-config.yml > api.log 2>&1 &
+    MANAGER_PID=$!
     sleep 5
     
     # Test health endpoint
@@ -146,9 +146,9 @@ test_api_endpoints() {
         log_fail "OpenAPI documentation not found"
     fi
     
-    # Stop API server
-    kill $API_PID 2>/dev/null || true
-    wait $API_PID 2>/dev/null || true
+    # Stop manager service
+    kill $MANAGER_PID 2>/dev/null || true
+    wait $MANAGER_PID 2>/dev/null || true
 }
 
 # Test container management
@@ -254,9 +254,9 @@ else:
 test_performance() {
     log_test "Testing performance"
     
-    # Start API server
-    python deployment/run-ciris-manager-api.py > perf.log 2>&1 &
-    API_PID=$!
+    # Start manager service for performance test
+    python -m ciris_manager.cli --config test-config.yml > perf.log 2>&1 &
+    MANAGER_PID=$!
     sleep 5
     
     # Measure response time
@@ -276,8 +276,8 @@ test_performance() {
         log_fail "Response time too high: ${avg_time}ms"
     fi
     
-    # Stop API server
-    kill $API_PID 2>/dev/null || true
+    # Stop manager service
+    kill $MANAGER_PID 2>/dev/null || true
 }
 
 # Integration test
@@ -374,7 +374,6 @@ cleanup() {
     echo -e "\n${YELLOW}Cleaning up...${NC}"
     
     # Stop any running processes
-    kill $API_PID 2>/dev/null || true
     kill $MANAGER_PID 2>/dev/null || true
     
     # Remove test containers

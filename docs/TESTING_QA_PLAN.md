@@ -41,7 +41,7 @@ pytest tests/ -m integration -v
 
 # Test with mock LLM
 export MOCK_LLM=true
-python deployment/run-ciris-manager-api.py
+ciris-manager --config config.yml
 ```
 
 ### Phase 2: Component Testing
@@ -57,16 +57,16 @@ python -m pytest tests/ciris_manager/test_watchdog_simple.py -v
 
 #### 2.2 API Testing
 ```bash
-# Start API server
-python deployment/run-ciris-manager-api.py &
-API_PID=$!
+# Start manager service (includes API)
+ciris-manager --config test-config.yml &
+MANAGER_PID=$!
 
 # Test endpoints
 curl http://localhost:8888/manager/v1/health
 curl http://localhost:8888/manager/v1/agents
 
-# Stop API server
-kill $API_PID
+# Stop manager service
+kill $MANAGER_PID
 ```
 
 #### 2.3 Authentication Testing
@@ -192,7 +192,6 @@ curl -sSL https://raw.githubusercontent.com/CIRISAI/ciris-manager/main/deploymen
 
 # Verify installation
 systemctl status ciris-manager
-systemctl status ciris-manager-api
 ```
 
 #### Step 2: Configuration
@@ -241,8 +240,6 @@ systemctl status ciris-manager
 # Manager logs
 journalctl -u ciris-manager --since "1 hour ago"
 
-# API logs
-journalctl -u ciris-manager-api --since "1 hour ago"
 
 # Agent logs
 docker logs ciris-agent-<id>

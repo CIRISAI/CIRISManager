@@ -1,7 +1,7 @@
 # Makefile for CIRISManager
 # Standard development commands
 
-.PHONY: help install dev test test-cov lint format clean run-api run docs
+.PHONY: help install dev test test-cov lint format clean run docs
 
 help:  ## Show this help message
 	@echo "Usage: make [target]"
@@ -36,17 +36,6 @@ clean:  ## Clean up generated files
 	find . -type f -name "*.pyc" -delete
 	rm -rf .coverage htmlcov/ .pytest_cache/ .ruff_cache/ .mypy_cache/
 	rm -rf test-env/ build/ dist/ *.egg-info/
-
-run-api:  ## Run the API server (development mode)
-	@if [ -z "$$CIRIS_MANAGER_CONFIG" ] && [ ! -f "config.yml" ]; then \
-		echo "❌ No config found! Run: export CIRIS_MANAGER_CONFIG=\$$(pwd)/config.yml"; \
-		echo "   Or run ./quickstart.sh to set up local development"; \
-		exit 1; \
-	fi
-	@if [ -z "$$CIRIS_MANAGER_CONFIG" ]; then \
-		export CIRIS_MANAGER_CONFIG=$$(pwd)/config.yml; \
-	fi
-	CIRIS_MANAGER_CONFIG=$${CIRIS_MANAGER_CONFIG:-$$(pwd)/config.yml} python deployment/run-ciris-manager-api.py
 
 run:  ## Run the full manager service
 	ciris-manager --config config.example.yml

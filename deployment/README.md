@@ -23,7 +23,6 @@ CIRISManager is deployed by cloning the Git repository directly on the target se
   - Generates default configuration
 
 - **`ciris-manager.service`** - Systemd service for full manager (watchdog + API)
-- **`ciris-manager-api.service`** - Systemd service for API-only mode
 
 ### Development Setup
 
@@ -33,12 +32,9 @@ CIRISManager is deployed by cloning the Git repository directly on the target se
   - Generates development scripts
   - Sets up pre-commit hooks (optional)
 
-- **`run-ciris-manager-api.py`** - Python script to run API server directly
-
 ### Legacy Scripts
 
 - **`install-ciris-manager.sh`** - Legacy installation script (kept for reference)
-- **`deploy-ciris-manager.sh`** - Legacy deployment script (kept for reference)
 
 ## Usage
 
@@ -104,14 +100,13 @@ watchdog:
 
 ## Services
 
-Two systemd services are created:
+The systemd service is created:
 
-1. **ciris-manager** - Full service with container watchdog
-2. **ciris-manager-api** - API-only mode for agent discovery
+**ciris-manager** - Full service with container watchdog and API
 
 Start with:
 ```bash
-systemctl start ciris-manager      # or ciris-manager-api
+systemctl start ciris-manager
 systemctl enable ciris-manager     # Enable on boot
 ```
 
@@ -120,5 +115,4 @@ systemctl enable ciris-manager     # Enable on boot
 View logs with:
 ```bash
 journalctl -u ciris-manager -f
-journalctl -u ciris-manager-api -f
 ```

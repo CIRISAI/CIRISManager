@@ -34,9 +34,6 @@ pip install -r requirements.txt
 # Full service with container management and watchdog
 ciris-manager --config /etc/ciris-manager/config.yml
 
-# API-only mode (no container management)
-python deployment/run-ciris-manager-api.py
-
 # Generate default configuration
 ciris-manager --generate-config --config /etc/ciris-manager/config.yml
 ```

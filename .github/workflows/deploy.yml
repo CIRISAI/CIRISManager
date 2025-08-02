@@ -103,42 +103,41 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt
             pip install -e .
-            systemctl restart ciris-manager-api
+            systemctl restart ciris-manager
             echo "CIRISManager updated successfully"
             SCRIPT
               chmod +x /usr/local/bin/ciris-manager-update
             fi
             
             # Create systemd service if it doesn't exist
-            if [ ! -f "/etc/systemd/system/ciris-manager-api.service" ]; then
-              cat > /etc/systemd/system/ciris-manager-api.service << 'SERVICE'
-            [Unit]
-            Description=CIRIS Manager API Service
-            After=network.target docker.service
-            Requires=docker.service
-            
-            [Service]
-            Type=simple
-            User=root
-            WorkingDirectory=/opt/ciris-manager
-            Environment="PATH=/opt/ciris-manager/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-            Environment="CIRIS_MANAGER_CONFIG=/etc/ciris-manager/config.yml"
-            ExecStart=/opt/ciris-manager/venv/bin/python deployment/run-ciris-manager-api.py
-            Restart=on-failure
-            RestartSec=10
-            StandardOutput=journal
-            StandardError=journal
-            
-            [Install]
-            WantedBy=multi-user.target
-            SERVICE
+            if [ ! -f "/etc/systemd/system/ciris-manager.service" ]; then
+              # Copy the proper service file
+              cp /opt/ciris-manager/deployment/ciris-manager.service /etc/systemd/system/
               systemctl daemon-reload
-              systemctl enable ciris-manager-api
+              systemctl enable ciris-manager
             fi
+            
+            # Ensure ciris-manager user exists and is in correct groups
+            if ! id "ciris-manager" &>/dev/null; then
+              useradd -r -s /bin/false -d /var/lib/ciris-manager -c "CIRIS Manager Service" ciris-manager
+            fi
+            
+            # Create ciris group if it doesn't exist
+            if ! getent group ciris &>/dev/null; then
+              groupadd ciris
+            fi
+            
+            # Add ciris-manager to necessary groups
+            usermod -aG docker ciris-manager
+            usermod -aG ciris ciris-manager
             
             # Create nginx directory for CIRISManager to write configs
             mkdir -p /home/ciris/nginx
             chown -R ciris-manager:ciris /home/ciris/nginx
+            chmod 775 /home/ciris/nginx
+            
+            # Ensure ciris home directory has proper permissions for group access
+            chmod 755 /home/ciris
             
             # Deploy nginx container if not running
             if ! docker ps | grep -q ciris-nginx; then
@@ -152,9 +151,9 @@ jobs:
               docker-compose -f docker-compose-production.yml up -d nginx
             fi
             
-            # Restart CIRISManager API
-            echo "Restarting CIRISManager API..."
-            systemctl restart ciris-manager-api
+            # Restart CIRISManager
+            echo "Restarting CIRISManager..."
+            systemctl restart ciris-manager
             
             # Wait for service to be ready
             echo "Waiting for CIRISManager to be ready..."
@@ -165,7 +164,7 @@ jobs:
               fi
               if [ $i -eq 30 ]; then
                 echo "CIRISManager failed to start!"
-                journalctl -u ciris-manager-api --no-pager -n 50
+                journalctl -u ciris-manager --no-pager -n 50
                 exit 1
               fi
               sleep 2
@@ -182,7 +181,7 @@ jobs:
           script: |
             # Check service status
             echo "=== Service Status ==="
-            systemctl status ciris-manager-api --no-pager || true
+            systemctl status ciris-manager --no-pager || true
             
             # Check API health
             echo -e "\n=== API Health Check ==="
@@ -194,4 +193,4 @@ jobs:
             
             # Show recent logs
             echo -e "\n=== Recent Logs ==="
-            journalctl -u ciris-manager-api --no-pager -n 20
+            journalctl -u ciris-manager --no-pager -n 20

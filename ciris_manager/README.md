@@ -16,8 +16,6 @@ The API provides:
 - `/manager/v1/agents/{agent_id}/health` - Agent health check
 - `/manager/v1/system/health` - Manager health status
 
-Production runs API-only mode via `deployment/run-ciris-manager-api.py`
-
 ## Phase 1 Complete: Core Watchdog and Container Management ✅
 
 ### What's Implemented

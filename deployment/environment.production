@@ -46,3 +46,6 @@ CORS_ALLOW_CREDENTIALS=true
 
 # System limits
 MALLOC_ARENA_MAX=2
+
+# User home directory (required for SQLite database path)
+HOME=/var/lib/ciris-manager
