@@ -213,7 +213,10 @@ class DockerImageCleanup:
             # Also clean up dangling images
             try:
                 dangling = self.client.images.prune(filters={"dangling": True})
-                logger.info(f"Removed {len(dangling.get('ImagesDeleted', []))} dangling images")
+                if dangling and dangling.get('ImagesDeleted'):
+                    logger.info(f"Removed {len(dangling.get('ImagesDeleted', []))} dangling images")
+                else:
+                    logger.info("No dangling images to remove")
             except Exception as e:
                 logger.error(f"Failed to prune dangling images: {e}")
 

@@ -48,12 +48,20 @@ class NginxManager:
             True if successful, False otherwise
         """
         try:
+            # Ensure config directory exists with proper permissions
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            
             # 1. Generate new config
             new_config = self.generate_config(agents)
 
             # 2. Write to temporary file
-            self.new_config_path.write_text(new_config)
-            logger.info(f"Generated new nginx config with {len(agents)} agents")
+            try:
+                self.new_config_path.write_text(new_config)
+                logger.info(f"Generated new nginx config with {len(agents)} agents")
+            except PermissionError as e:
+                logger.error(f"Permission denied writing nginx config to {self.new_config_path}: {e}")
+                logger.error(f"Ensure the CIRISManager process has write access to {self.config_dir}")
+                return False
 
             # 3. Backup current config if it exists
             if self.config_path.exists():
