@@ -117,8 +117,34 @@ class DockerRegistryClient:
             Authorization header value or None
         """
         if registry == "ghcr.io" and self.auth_token:
-            # GitHub Container Registry uses bearer token
-            return f"Bearer {self.auth_token}"
+            # GitHub Container Registry requires token exchange
+            # First, we need to get a token from the ghcr.io token service
+            token_url = f"https://ghcr.io/token?service=ghcr.io&scope=repository:{repository}:pull"
+            
+            # Use the GitHub PAT as Basic auth (username:token)
+            # For GitHub tokens, any username works, commonly use the token itself
+            import base64
+            auth_string = base64.b64encode(f"{self.auth_token}:{self.auth_token}".encode()).decode()
+            
+            try:
+                response = await self._client.get(
+                    token_url,
+                    headers={"Authorization": f"Basic {auth_string}"}
+                )
+                
+                if response.status_code == 200:
+                    token_data = response.json()
+                    docker_token = token_data.get("token")
+                    if docker_token:
+                        return f"Bearer {docker_token}"
+                    else:
+                        logger.error("No token in ghcr.io response")
+                else:
+                    logger.error(f"Failed to get ghcr.io token: {response.status_code}")
+            except Exception as e:
+                logger.error(f"Error getting ghcr.io token: {e}")
+            
+            return None
         elif registry == "registry-1.docker.io":
             # Docker Hub requires token exchange
             # For now, we'll skip auth for public images
