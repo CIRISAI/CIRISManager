@@ -4,7 +4,7 @@ API routes for CIRISManager v2 with pre-approved template support.
 Provides endpoints for agent creation, discovery, and management.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
@@ -159,14 +159,71 @@ def create_routes(manager: Any) -> APIRouter:
         return FileResponse(static_path, media_type="application/javascript")
     
     @router.get("/callback")
-    async def manager_callback(token: Optional[str] = None) -> FileResponse:
+    async def manager_callback(token: Optional[str] = None) -> Response:
         """Handle OAuth callback redirect to Manager UI with token."""
-        # Redirect to the main manager page - the token in URL will be handled by JavaScript
-        static_path = Path(__file__).parent.parent.parent / "static" / "manager" / "index.html"
-        if not static_path.exists():
-            raise HTTPException(status_code=404, detail="Manager UI not found")
+        from fastapi.responses import HTMLResponse
         
-        return FileResponse(static_path)
+        # Serve a minimal HTML page that extracts the token and redirects
+        html_content = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Redirecting...</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .loading {
+            text-align: center;
+        }
+        .spinner {
+            border: 3px solid #333;
+            border-top: 3px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading">
+        <div class="spinner"></div>
+        <p>Completing authentication...</p>
+    </div>
+    <script>
+        // Extract token from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        
+        if (token) {
+            // Store token in localStorage
+            localStorage.setItem('managerToken', token);
+            
+            // Redirect to manager dashboard
+            window.location.href = '/manager/';
+        } else {
+            // No token, redirect to login
+            window.location.href = '/manager/';
+        }
+    </script>
+</body>
+</html>
+"""
+        
+        return HTMLResponse(content=html_content)
 
     @router.get("/health")
     async def health_check() -> Dict[str, str]:
