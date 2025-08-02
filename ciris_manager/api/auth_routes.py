@@ -155,6 +155,10 @@ def create_auth_routes() -> APIRouter:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             logger.error(f"OAuth callback failed: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            logger.error(f"Exception args: {e.args}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise HTTPException(status_code=500, detail="Authentication failed")
 
     @router.post("/oauth/logout")
