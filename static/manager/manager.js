@@ -443,8 +443,25 @@ function formatDate(dateString) {
 }
 
 // Logout
-function logout() {
-    window.location.href = '/manager/oauth/logout';
+async function logout() {
+    try {
+        const response = await fetch('/manager/v1/oauth/logout', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
+            }
+        });
+        
+        if (response.ok) {
+            // Clear token and redirect to login
+            localStorage.removeItem('managerToken');
+            window.location.href = '/manager/v1/oauth/login';
+        } else {
+            console.error('Logout failed:', response.status);
+        }
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
 }
 
 // Show error message
