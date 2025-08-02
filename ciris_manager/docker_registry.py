@@ -41,7 +41,10 @@ class DockerRegistryClient:
             auth_header = await self._get_auth_header(registry, repository)
 
             # Fetch manifest to get digest
-            headers = {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}
+            # Support both Docker v2 and OCI image formats
+            headers = {
+                "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json"
+            }
             if auth_header:
                 headers["Authorization"] = auth_header
 
