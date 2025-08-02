@@ -185,7 +185,7 @@ def create_routes(manager: Any) -> APIRouter:
         }
         .spinner {
             border: 3px solid #333;
-            border-top: 3px solid #4CAF50;
+            border-top: 3px solid #3b82f6;
             border-radius: 50%;
             width: 40px;
             height: 40px;
