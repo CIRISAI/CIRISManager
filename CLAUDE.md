@@ -232,7 +232,15 @@ All I/O operations use async/await for non-blocking execution:
 
 ### Production Server Access
 ```bash
-# SSH connection details are stored in CLAUDE.local.md
+# SSH connection details
+ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
+
+# Note: Use IP address for SSH, not domain (Cloudflare proxied)
+# Domain: agents.ciris.ai
+# IP: 108.61.119.117
+# User: root
+# Key: ~/.ssh/ciris_deploy
+
 # CIRIS deployment location: /opt/ciris
 ```
 
@@ -251,6 +259,29 @@ Production containers follow the naming pattern:
 - `ciris-nginx` - Reverse proxy
 - `ciris-gui` - Frontend interface
 - `ciris-agent-{name}` - Individual agents (e.g., ciris-agent-datum)
+
+### CIRISManager Service
+CIRISManager runs as a systemd service, NOT as a Docker container:
+```bash
+# Check service status
+systemctl status ciris-manager
+
+# View service logs
+journalctl -u ciris-manager -f
+
+# Restart service (if needed)
+systemctl restart ciris-manager
+
+# Service configuration
+/etc/systemd/system/ciris-manager.service
+```
+
+The manager service:
+- Runs directly on the host (not in Docker)
+- Manages Docker containers via Docker socket
+- Provides API on port 8888
+- Generates nginx configurations
+- Handles deployments and monitoring
 
 ### Checking Production Status
 ```bash

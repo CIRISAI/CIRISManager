@@ -19,7 +19,6 @@ from ciris_manager.template_verifier import TemplateVerifier
 from ciris_manager.agent_registry import AgentRegistry
 from ciris_manager.compose_generator import ComposeGenerator
 from ciris_manager.nginx_manager import NginxManager
-from ciris_manager.nginx_noop import NoOpNginxManager
 from ciris_manager.docker_image_cleanup import DockerImageCleanup
 
 logger = logging.getLogger(__name__)
@@ -69,26 +68,15 @@ class CIRISManager:
             default_image=self.config.docker.image,
         )
 
-        # Initialize nginx manager based on configuration
-        self.nginx_manager: Union[NginxManager, NoOpNginxManager]
-
+        # Initialize nginx manager - fail fast if there are issues
         if self.config.nginx.enabled:
-            try:
-                # Try to initialize the real nginx manager
-                self.nginx_manager = NginxManager(
-                    config_dir=self.config.nginx.config_dir,
-                    container_name=self.config.nginx.container_name,
-                )
-                logger.info("Successfully initialized Nginx Manager")
-            except Exception as e:
-                # If it fails, fall back to no-op manager
-                logger.error(f"Nginx is enabled but failed to initialize: {e}")
-                logger.warning("Falling back to No-Op Nginx Manager")
-                self.nginx_manager = NoOpNginxManager()
+            self.nginx_manager = NginxManager(
+                config_dir=self.config.nginx.config_dir,
+                container_name=self.config.nginx.container_name,
+            )
+            logger.info("Successfully initialized Nginx Manager")
         else:
-            # If explicitly disabled, use the no-op manager
-            logger.info("Nginx is disabled in configuration")
-            self.nginx_manager = NoOpNginxManager()
+            raise RuntimeError("Nginx must be enabled - CIRISManager requires nginx for routing")
 
         # Initialize existing components
 
