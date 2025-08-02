@@ -53,8 +53,8 @@ def test_nginx_config_with_typed_agents():
         # Verify NO default route
         assert "location /v1/" not in config
 
-        # Verify static file serving for Manager GUI
-        assert "root /home/ciris/CIRISManager/static" in config
+        # Verify manager routes exist
+        assert "location /manager/" in config
 
         print("✓ Nginx config generation works with typed models")
 
@@ -71,7 +71,8 @@ def test_empty_agents_list():
         # Should still have basic structure
         assert "upstream agent_gui" in config
         assert "upstream manager" in config
-        assert "root /home/ciris/CIRISManager/static" in config
+        # No static file serving needed - handled by FastAPI
+        assert "location /health" in config
 
         # But no agent routes
         assert "upstream agent_" not in config.replace("upstream agent_gui", "")
