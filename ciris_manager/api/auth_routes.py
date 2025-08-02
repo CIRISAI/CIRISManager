@@ -206,6 +206,7 @@ def create_auth_routes() -> APIRouter:
 
 
 def get_current_user_dependency(
+    request: Request,
     authorization: Optional[str] = Header(None),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> Dict[str, Any]:
@@ -215,7 +216,15 @@ def get_current_user_dependency(
             status_code=500, detail="OAuth not configured"
         )  # Keep for external dependency
 
+    # Try authorization header first
     user = auth_service.get_current_user(authorization)
+    
+    # If no auth header, try cookie
+    if not user:
+        token = request.cookies.get("manager_token")
+        if token:
+            user = auth_service.get_current_user(f"Bearer {token}")
+    
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
