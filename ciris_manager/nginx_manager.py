@@ -33,12 +33,14 @@ class NginxManager:
         self.config_path = self.config_dir / "nginx.conf"
         self.new_config_path = self.config_dir / "nginx.conf.new"
         self.backup_path = self.config_dir / "nginx.conf.backup"
-        
+
         # Verify directory exists but don't try to create it
         # The directory should be created by deployment/docker setup
         if not self.config_dir.exists():
-            raise RuntimeError(f"Nginx config directory {self.config_dir} does not exist. "
-                             "This should be created by deployment scripts with proper permissions.")
+            raise RuntimeError(
+                f"Nginx config directory {self.config_dir} does not exist. "
+                "This should be created by deployment scripts with proper permissions."
+            )
 
     def update_config(self, agents: List[AgentInfo]) -> bool:
         """
