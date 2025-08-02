@@ -4,7 +4,6 @@ Test no-op deployment handling in deployment orchestrator.
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, timezone
 
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
 from ciris_manager.models import UpdateNotification, AgentInfo

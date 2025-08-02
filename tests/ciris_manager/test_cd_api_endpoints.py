@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 import os
 
 from ciris_manager.models import (
-    UpdateNotification,
     DeploymentStatus,
     AgentInfo,
 )

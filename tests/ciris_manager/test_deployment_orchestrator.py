@@ -3,16 +3,13 @@ Tests for deployment orchestrator.
 """
 
 import pytest
-from datetime import datetime, timezone
 from unittest.mock import Mock, AsyncMock, patch
 import asyncio
 
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
 from ciris_manager.models import (
     UpdateNotification,
-    DeploymentStatus,
     AgentInfo,
-    AgentUpdateResponse,
 )
 
 
@@ -112,7 +109,7 @@ class TestDeploymentOrchestrator:
             # Mock the update method to complete immediately
             mock_update.return_value = None
 
-            status = await orchestrator.start_deployment(update_notification, sample_agents)
+            await orchestrator.start_deployment(update_notification, sample_agents)
 
             # Wait a bit for background task to start
             await asyncio.sleep(0.1)

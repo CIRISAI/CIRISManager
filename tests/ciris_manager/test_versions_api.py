@@ -6,7 +6,6 @@ import pytest
 from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
-import os
 
 from ciris_manager.api.routes import create_routes
 from ciris_manager.models import AgentInfo, DeploymentStatus
