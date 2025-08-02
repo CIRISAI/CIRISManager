@@ -71,6 +71,15 @@ async def oauth_callback_compat(request: Request):
         status_code=307  # Temporary redirect, preserves method
     )
 
+# Add Manager callback redirect for OAuth flow
+@app.get("/manager/callback")
+async def manager_callback_compat(request: Request):
+    """Redirect from manager callback to v1 endpoint"""
+    return RedirectResponse(
+        url=f"/manager/v1/callback?{request.url.query}",
+        status_code=307  # Temporary redirect, preserves method
+    )
+
 async def startup_event():
     """Run startup tasks including nginx config sync."""
     try:
