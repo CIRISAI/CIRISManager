@@ -30,7 +30,7 @@ def test_nginx_generation():
 
         # Sample agents data (simulating what docker_discovery would return)
         from ciris_manager.models import AgentInfo
-        
+
         test_agents = [
             AgentInfo(
                 agent_id="datum",

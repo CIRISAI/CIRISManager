@@ -19,14 +19,14 @@ class TestInMemorySessionStore:
         """Test storing and retrieving session data."""
         from ciris_manager.models import OAuthSession
         from datetime import datetime, timezone
-        
+
         store = InMemorySessionStore()
 
         # Store session
         session_data = OAuthSession(
             redirect_uri="http://example.com",
             callback_url="http://example.com/callback",
-            created_at=datetime.now(timezone.utc).isoformat()
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
         store.store_session("test-state", session_data)
 
@@ -49,11 +49,11 @@ class TestInMemorySessionStore:
         # Store and delete
         from ciris_manager.models import OAuthSession
         from datetime import datetime, timezone
-        
+
         session_data = OAuthSession(
             redirect_uri="http://example.com",
             callback_url="http://example.com/callback",
-            created_at=datetime.now(timezone.utc).isoformat()
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
         store.store_session("test-state", session_data)
         store.delete_session("test-state")
@@ -191,26 +191,21 @@ class TestAuthService:
         # Setup state
         from ciris_manager.models import OAuthSession, OAuthToken, OAuthUser
         from datetime import datetime, timezone
-        
+
         state = "test-state"
         session_data = OAuthSession(
             redirect_uri="http://app.example.com",
             callback_url="http://app.example.com/callback",
-            created_at=datetime.now(timezone.utc).isoformat()
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
         auth_service.session_store.store_session(state, session_data)
 
         # Setup mocks
         mock_oauth_provider.exchange_code_for_token.return_value = OAuthToken(
-            access_token="google-access-token",
-            token_type="Bearer",
-            expires_in=3600
+            access_token="google-access-token", token_type="Bearer", expires_in=3600
         )
         mock_oauth_provider.get_user_info.return_value = OAuthUser(
-            id="123",
-            email="user@ciris.ai",
-            name="Test User",
-            picture="http://example.com/pic.jpg"
+            id="123", email="user@ciris.ai", name="Test User", picture="http://example.com/pic.jpg"
         )
 
         # Handle callback
@@ -240,25 +235,23 @@ class TestAuthService:
         # Setup state
         from ciris_manager.models import OAuthSession, OAuthToken, OAuthUser
         from datetime import datetime, timezone
-        
+
         state = "test-state"
         session_data = OAuthSession(
             redirect_uri="http://app.example.com",
             callback_url="http://app.example.com/callback",
-            created_at=datetime.now(timezone.utc).isoformat()
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
         auth_service.session_store.store_session(state, session_data)
 
         # Setup mocks
         mock_oauth_provider.exchange_code_for_token.return_value = OAuthToken(
-            access_token="google-access-token",
-            token_type="Bearer",
-            expires_in=3600
+            access_token="google-access-token", token_type="Bearer", expires_in=3600
         )
         mock_oauth_provider.get_user_info.return_value = OAuthUser(
             id="456",
             email="user@gmail.com",  # Not @ciris.ai
-            name="External User"
+            name="External User",
         )
 
         # Should raise

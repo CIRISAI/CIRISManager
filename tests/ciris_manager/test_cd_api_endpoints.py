@@ -23,22 +23,24 @@ class TestCDAPIEndpoints:
         """Create mock manager."""
         manager = Mock()
         manager.agent_registry = Mock()
-        manager.agent_registry.list_agents = Mock(return_value=[
-            AgentInfo(
-                agent_id="agent-1",
-                agent_name="Agent 1",
-                container_name="ciris-agent-1",
-                api_port=8080,
-                status="running",
-            ),
-            AgentInfo(
-                agent_id="agent-2",
-                agent_name="Agent 2",
-                container_name="ciris-agent-2",
-                api_port=8081,
-                status="running",
-            ),
-        ])
+        manager.agent_registry.list_agents = Mock(
+            return_value=[
+                AgentInfo(
+                    agent_id="agent-1",
+                    agent_name="Agent 1",
+                    container_name="ciris-agent-1",
+                    api_port=8080,
+                    status="running",
+                ),
+                AgentInfo(
+                    agent_id="agent-2",
+                    agent_name="Agent 2",
+                    container_name="ciris-agent-2",
+                    api_port=8081,
+                    status="running",
+                ),
+            ]
+        )
         return manager
 
     @pytest.fixture
@@ -54,25 +56,25 @@ class TestCDAPIEndpoints:
         os.environ["CIRIS_AUTH_MODE"] = "development"
         # Set test deployment token
         os.environ["CIRIS_DEPLOY_TOKEN"] = "test-deploy-token"
-        
+
         # Patch the DeploymentOrchestrator before importing routes
         with patch("ciris_manager.api.routes.DeploymentOrchestrator") as mock_orch_class:
             mock_orch_class.return_value = mock_orchestrator
-            
+
             # Now import and create routes
             from ciris_manager.api.routes import create_routes
-            
+
             app = FastAPI()
             router = create_routes(mock_manager)
             app.include_router(router, prefix="/manager/v1")
-            
+
             yield app, mock_orchestrator
 
     def test_notify_update_success(self, app_with_mocked_orchestrator):
         """Test successful update notification."""
         app, mock_orchestrator = app_with_mocked_orchestrator
         client = TestClient(app)
-        
+
         notification = {
             "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0",
             "gui_image": "ghcr.io/cirisai/ciris-gui:v2.0",
@@ -106,7 +108,7 @@ class TestCDAPIEndpoints:
         """Test notification rejected when deployment in progress."""
         app, mock_orchestrator = app_with_mocked_orchestrator
         client = TestClient(app)
-        
+
         notification = {
             "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0",
             "message": "Another update",
@@ -127,7 +129,7 @@ class TestCDAPIEndpoints:
         """Test getting deployment status by ID."""
         app, mock_orchestrator = app_with_mocked_orchestrator
         client = TestClient(app)
-        
+
         mock_status = DeploymentStatus(
             deployment_id="test-deployment-123",
             agents_total=10,
@@ -144,7 +146,7 @@ class TestCDAPIEndpoints:
         response = client.get(
             "/manager/v1/updates/status",
             params={"deployment_id": "test-deployment-123"},
-            headers=headers
+            headers=headers,
         )
 
         assert response.status_code == 200
@@ -158,7 +160,7 @@ class TestCDAPIEndpoints:
         """Test getting current active deployment."""
         app, mock_orchestrator = app_with_mocked_orchestrator
         client = TestClient(app)
-        
+
         mock_status = DeploymentStatus(
             deployment_id="current-deployment",
             agents_total=20,
@@ -184,15 +186,13 @@ class TestCDAPIEndpoints:
         """Test getting status for non-existent deployment."""
         app, mock_orchestrator = app_with_mocked_orchestrator
         client = TestClient(app)
-        
+
         mock_orchestrator.get_deployment_status = AsyncMock(return_value=None)
         mock_orchestrator.get_current_deployment = AsyncMock(return_value=None)
 
         headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.get(
-            "/manager/v1/updates/status",
-            params={"deployment_id": "non-existent"},
-            headers=headers
+            "/manager/v1/updates/status", params={"deployment_id": "non-existent"}, headers=headers
         )
 
         assert response.status_code == 200
@@ -202,7 +202,7 @@ class TestCDAPIEndpoints:
         """Test immediate deployment strategy."""
         app, mock_orchestrator = app_with_mocked_orchestrator
         client = TestClient(app)
-        
+
         notification = {
             "agent_image": "ghcr.io/cirisai/ciris-agent:emergency",
             "message": "Emergency security patch",

@@ -77,7 +77,9 @@ class CIRISManager:
 
         # Initialize nginx manager - fail fast if there are issues
         if self.config.nginx.enabled:
-            logger.info(f"Initializing Nginx Manager with config_dir: {self.config.nginx.config_dir}")
+            logger.info(
+                f"Initializing Nginx Manager with config_dir: {self.config.nginx.config_dir}"
+            )
             try:
                 self.nginx_manager = NginxManager(
                     config_dir=self.config.nginx.config_dir,

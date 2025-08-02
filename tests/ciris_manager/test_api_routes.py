@@ -319,7 +319,7 @@ class TestAPIRoutes:
 
         # But agent exists in Docker discovery
         from ciris_manager.models import AgentInfo
-        
+
         mock_discovery = Mock()
         mock_discovery.discover_agents.return_value = [
             AgentInfo(

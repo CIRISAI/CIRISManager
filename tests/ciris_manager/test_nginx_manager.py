@@ -28,7 +28,7 @@ class TestNginxManager:
     def sample_agents(self):
         """Sample agent data."""
         from ciris_manager.models import AgentInfo
-        
+
         return [
             AgentInfo(
                 agent_id="agent-scout",
