@@ -321,15 +321,24 @@ http {
 
     def _reload_nginx(self) -> bool:
         """Reload nginx configuration."""
+        logger.info(f"Reloading nginx container: {self.container_name}")
         # Just reload - config is already in place via volume mount
         result = subprocess.run(
             ["docker", "exec", self.container_name, "nginx", "-s", "reload"], capture_output=True
         )
 
         if result.returncode != 0:
-            logger.error(f"Nginx reload failed: {result.stderr.decode()}")
+            stderr = result.stderr.decode()
+            stdout = result.stdout.decode()
+            logger.error(f"Nginx reload failed with return code {result.returncode}")
+            logger.error(f"STDERR: {stderr}")
+            logger.error(f"STDOUT: {stdout}")
             return False
 
+        # Log any warnings from nginx (like the http2 deprecation)
+        if result.stderr:
+            logger.warning(f"Nginx reload warnings: {result.stderr.decode()}")
+        
         return True
 
     def _rollback(self) -> None:

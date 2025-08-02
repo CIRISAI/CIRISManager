@@ -301,7 +301,10 @@ class CIRISManager:
         self._running = True
 
         # Generate initial nginx config
-        await self.update_nginx_config()
+        logger.info("Updating nginx configuration on startup...")
+        success = await self.update_nginx_config()
+        if not success:
+            logger.error("Failed to update nginx configuration on startup")
 
         # Start the new container management loop
         asyncio.create_task(self.container_management_loop())
