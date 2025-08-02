@@ -218,13 +218,13 @@ def get_current_user_dependency(
 
     # Try authorization header first
     user = auth_service.get_current_user(authorization)
-    
+
     # If no auth header, try cookie
     if not user:
         token = request.cookies.get("manager_token")
         if token:
             user = auth_service.get_current_user(f"Bearer {token}")
-    
+
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
