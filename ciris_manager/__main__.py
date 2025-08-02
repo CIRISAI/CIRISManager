@@ -89,9 +89,9 @@ def main() -> int:
         return 0
     except PermissionError as e:
         logger.error(f"Permission error: {e}")
-        logger.error(f"File/Directory: {e.filename}")
-        logger.error(f"Error number: {e.errno}")
-        logger.error(f"Full traceback:", exc_info=True)
+        logger.error(f"File/Directory: {getattr(e, 'filename', 'unknown')}")
+        logger.error(f"Error number: {getattr(e, 'errno', 'unknown')}")
+        logger.error("Full traceback:", exc_info=True)
         # Print to stderr for systemd journal
         print(f"Error running CIRISManager: {e}", file=sys.stderr)
         return 1

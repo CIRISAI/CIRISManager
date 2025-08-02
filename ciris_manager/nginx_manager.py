@@ -56,7 +56,7 @@ class NginxManager:
             logger.error(f"No write permission for nginx directory: {self.config_dir}")
             try:
                 current_user = pwd.getpwuid(os.getuid()).pw_name
-            except:
+            except Exception:
                 current_user = f"uid={os.getuid()}"
             logger.error(f"Current user: {current_user}")
             logger.error(f"Directory owner: {self.config_dir.stat().st_uid}")
@@ -92,7 +92,7 @@ class NginxManager:
                     current_user = pwd.getpwuid(os.getuid()).pw_name
                     current_uid = os.getuid()
                     current_gid = os.getgid()
-                except:
+                except Exception:
                     current_user = "unknown"
                     current_uid = os.getuid()
                     current_gid = os.getgid()
