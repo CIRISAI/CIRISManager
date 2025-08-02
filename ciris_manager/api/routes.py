@@ -157,6 +157,16 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=404, detail="Manager JS not found")
 
         return FileResponse(static_path, media_type="application/javascript")
+    
+    @router.get("/callback")
+    async def manager_callback(token: Optional[str] = None) -> FileResponse:
+        """Handle OAuth callback redirect to Manager UI with token."""
+        # Redirect to the main manager page - the token in URL will be handled by JavaScript
+        static_path = Path(__file__).parent.parent.parent / "static" / "manager" / "index.html"
+        if not static_path.exists():
+            raise HTTPException(status_code=404, detail="Manager UI not found")
+        
+        return FileResponse(static_path)
 
     @router.get("/health")
     async def health_check() -> Dict[str, str]:

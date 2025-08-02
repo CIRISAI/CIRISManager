@@ -89,7 +89,7 @@ def _get_redirect_uri(request: Request, redirect_uri: Optional[str]) -> str:
     """Determine redirect URI after OAuth."""
     if redirect_uri:
         return redirect_uri
-    return f"{request.url.scheme}://{request.url.netloc}/manager"
+    return f"{request.url.scheme}://{request.url.netloc}/manager/"
 
 
 def create_auth_routes() -> APIRouter:
