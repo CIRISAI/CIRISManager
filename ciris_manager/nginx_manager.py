@@ -53,9 +53,6 @@ class NginxManager:
             True if successful, False otherwise
         """
         try:
-            # Ensure config directory exists with proper permissions
-            self.config_dir.mkdir(parents=True, exist_ok=True)
-
             # 1. Generate new config
             new_config = self.generate_config(agents)
 
