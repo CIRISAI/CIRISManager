@@ -98,7 +98,7 @@ class TestAuthRoutes:
         # Verify flow was initiated with correct parameters
         mock_auth_service.initiate_oauth_flow.assert_called_once()
         call_args = mock_auth_service.initiate_oauth_flow.call_args[1]
-        assert call_args["redirect_uri"] == "http://testserver/manager"
+        assert call_args["redirect_uri"] == "http://testserver/manager/"
         # testserver is not localhost, so it gets production callback URL
         assert call_args["callback_url"] == "https://agents.ciris.ai/manager/oauth/callback"
 
