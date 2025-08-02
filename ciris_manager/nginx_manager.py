@@ -36,11 +36,32 @@ class NginxManager:
 
         # Verify directory exists but don't try to create it
         # The directory should be created by deployment/docker setup
+        logger.info(f"Checking nginx config directory: {self.config_dir}")
         if not self.config_dir.exists():
+            logger.error(f"Nginx config directory does not exist: {self.config_dir}")
             raise RuntimeError(
                 f"Nginx config directory {self.config_dir} does not exist. "
                 "This should be created by deployment scripts with proper permissions."
             )
+        
+        # Check if we can write to the directory
+        logger.info(f"Testing write permissions for nginx directory: {self.config_dir}")
+        test_file = self.config_dir / ".write_test"
+        try:
+            test_file.write_text("test")
+            test_file.unlink()
+            logger.info(f"Write permissions OK for {self.config_dir}")
+        except PermissionError as e:
+            import pwd
+            logger.error(f"No write permission for nginx directory: {self.config_dir}")
+            try:
+                current_user = pwd.getpwuid(os.getuid()).pw_name
+            except:
+                current_user = f"uid={os.getuid()}"
+            logger.error(f"Current user: {current_user}")
+            logger.error(f"Directory owner: {self.config_dir.stat().st_uid}")
+            logger.error(f"Directory permissions: {oct(self.config_dir.stat().st_mode)}")
+            raise RuntimeError(f"No write permission for nginx directory {self.config_dir}: {e}")
 
     def update_config(self, agents: List[AgentInfo]) -> bool:
         """
@@ -58,12 +79,32 @@ class NginxManager:
 
             # 2. Write to temporary file
             try:
+                logger.debug(f"Attempting to write config to: {self.new_config_path}")
+                logger.debug(f"Config size: {len(new_config)} bytes")
                 self.new_config_path.write_text(new_config)
                 logger.info(f"Generated new nginx config with {len(agents)} agents")
             except PermissionError as e:
+                import pwd
                 logger.error(
                     f"Permission denied writing nginx config to {self.new_config_path}: {e}"
                 )
+                try:
+                    current_user = pwd.getpwuid(os.getuid()).pw_name
+                    current_uid = os.getuid()
+                    current_gid = os.getgid()
+                except:
+                    current_user = "unknown"
+                    current_uid = os.getuid()
+                    current_gid = os.getgid()
+                
+                logger.error(f"Running as: {current_user} (uid={current_uid}, gid={current_gid})")
+                logger.error(f"Directory: {self.config_dir}")
+                logger.error(f"Directory exists: {self.config_dir.exists()}")
+                if self.config_dir.exists():
+                    stat = self.config_dir.stat()
+                    logger.error(f"Directory owner: uid={stat.st_uid}, gid={stat.st_gid}")
+                    logger.error(f"Directory perms: {oct(stat.st_mode)}")
+                
                 logger.error(
                     f"Ensure the CIRISManager process has write access to {self.config_dir}"
                 )

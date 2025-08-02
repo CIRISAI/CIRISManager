@@ -37,7 +37,6 @@ mkdir -p "$EXPORT_DIR"
 # Export last 24 hours of logs
 echo "Exporting CIRIS Manager logs..."
 journalctl -u ciris-manager --since "24 hours ago" > "$EXPORT_DIR/ciris-manager_$TIMESTAMP.log"
-journalctl -u ciris-manager-api --since "24 hours ago" > "$EXPORT_DIR/ciris-manager-api_$TIMESTAMP.log"
 
 # Compress logs
 gzip "$EXPORT_DIR"/*.log
@@ -75,8 +74,7 @@ else
     
     # Check if services are running
     systemctl is-active --quiet ciris-manager || echo "[$timestamp] ciris-manager service is not running" >> "$LOG_FILE"
-    systemctl is-active --quiet ciris-manager-api || echo "[$timestamp] ciris-manager-api service is not running" >> "$LOG_FILE"
-    
+        
     exit 1
 fi
 EOF
@@ -100,7 +98,7 @@ EOF
 cat > /etc/systemd/system/ciris-health-check.service << EOF
 [Unit]
 Description=CIRIS Manager Health Check
-After=ciris-manager-api.service
+After=ciris-manager.service
 
 [Service]
 Type=oneshot
@@ -160,8 +158,7 @@ cat > /etc/logrotate.d/ciris-manager << EOF
     sharedscripts
     postrotate
         # Signal any processes that need to reopen log files
-        systemctl reload ciris-manager-api 2>/dev/null || true
-    endscript
+            endscript
 }
 
 /var/log/nginx/ciris-manager-*.log {
@@ -190,7 +187,6 @@ echo
 
 echo "Services:"
 systemctl status ciris-manager --no-pager | grep -E "(Active:|Main PID:)"
-systemctl status ciris-manager-api --no-pager | grep -E "(Active:|Main PID:)"
 echo
 
 echo "Health Check:"
@@ -209,7 +205,7 @@ docker ps --filter "label=ciris.agent" --format "table {{.Names}}\t{{.Status}}\t
 echo
 
 echo "Recent Logs:"
-journalctl -u ciris-manager -u ciris-manager-api --since "10 minutes ago" --no-pager | tail -10
+journalctl -u ciris-manager --since "10 minutes ago" --no-pager | tail -10
 EOF
 
 chmod +x /usr/local/bin/ciris-status.sh

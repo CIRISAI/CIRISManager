@@ -131,8 +131,7 @@ jobs:
             usermod -aG docker ciris-manager
             usermod -aG ciris ciris-manager
             
-            # Create nginx directory for CIRISManager to write configs
-            mkdir -p /home/ciris/nginx
+            # Fix permissions on existing nginx directory
             chown -R ciris-manager:ciris /home/ciris/nginx
             chmod 775 /home/ciris/nginx
             

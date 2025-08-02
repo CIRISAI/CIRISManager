@@ -1,6 +1,6 @@
 [Unit]
 Description=CIRIS Manager Backup
-After=ciris-manager.service ciris-manager-api.service
+After=ciris-manager.service
 
 [Service]
 Type=oneshot

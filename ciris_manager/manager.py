@@ -38,11 +38,18 @@ class CIRISManager:
         Args:
             config: Configuration object, uses defaults if not provided
         """
+        logger.info("Initializing CIRISManager...")
         self.config = config or CIRISManagerConfig()
 
         # Create necessary directories
         self.agents_dir = Path(self.config.manager.agents_directory)
-        self.agents_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Creating agents directory: {self.agents_dir}")
+        try:
+            self.agents_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Agents directory ready: {self.agents_dir}")
+        except Exception as e:
+            logger.error(f"Failed to create agents directory {self.agents_dir}: {e}")
+            raise
 
         # Initialize new components
         metadata_path = self.agents_dir / "metadata.json"
@@ -70,11 +77,18 @@ class CIRISManager:
 
         # Initialize nginx manager - fail fast if there are issues
         if self.config.nginx.enabled:
-            self.nginx_manager = NginxManager(
-                config_dir=self.config.nginx.config_dir,
-                container_name=self.config.nginx.container_name,
-            )
-            logger.info("Successfully initialized Nginx Manager")
+            logger.info(f"Initializing Nginx Manager with config_dir: {self.config.nginx.config_dir}")
+            try:
+                self.nginx_manager = NginxManager(
+                    config_dir=self.config.nginx.config_dir,
+                    container_name=self.config.nginx.container_name,
+                )
+                logger.info("Successfully initialized Nginx Manager")
+            except Exception as e:
+                logger.error(f"Failed to initialize Nginx Manager: {e}")
+                logger.error(f"Config dir: {self.config.nginx.config_dir}")
+                logger.error(f"Container name: {self.config.nginx.container_name}")
+                raise
         else:
             raise RuntimeError("Nginx must be enabled - CIRISManager requires nginx for routing")
 

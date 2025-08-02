@@ -227,7 +227,6 @@ chown ciris-manager:ciris-manager "$CONFIG_DIR/environment"
 # Step 7: Install systemd services
 print_status "Installing systemd services..."
 cp "$INSTALL_DIR/deployment/ciris-manager.service" /etc/systemd/system/
-cp "$INSTALL_DIR/deployment/ciris-manager-api.service" /etc/systemd/system/
 cp "$INSTALL_DIR/deployment/ciris-backup.service" /etc/systemd/system/
 cp "$INSTALL_DIR/deployment/ciris-backup.timer" /etc/systemd/system/
 
@@ -297,7 +296,6 @@ done
 # Step 13: Enable services
 print_status "Enabling services..."
 systemctl enable ciris-manager.service
-systemctl enable ciris-manager-api.service
 systemctl enable ciris-backup.timer
 
 # Step 14: Pre-flight checks
@@ -315,7 +313,6 @@ sudo -u ciris-manager "$INSTALL_DIR/venv/bin/python" -m ciris_manager.config.set
 print_status "Starting services..."
 systemctl start ciris-manager
 sleep 2
-systemctl start ciris-manager-api
 
 # Start nginx container
 print_status "Starting nginx container..."
@@ -328,7 +325,7 @@ sleep 5
 
 # Check service status
 SERVICES_OK=true
-for service in ciris-manager ciris-manager-api; do
+for service in ciris-manager; do
     if systemctl is-active --quiet $service; then
         print_status "$service is running"
     else
@@ -372,12 +369,12 @@ if [ "$SERVICES_OK" = true ]; then
     echo "Next steps:"
     echo "1. Edit configuration: $CONFIG_DIR/config.yml"
     echo "2. Set OAuth credentials: $CONFIG_DIR/environment"
-    echo "3. Restart services: systemctl restart ciris-manager ciris-manager-api"
-    echo "4. View logs: journalctl -u ciris-manager -u ciris-manager-api -f"
+    echo "3. Restart services: systemctl restart ciris-manager"
+    echo "4. View logs: journalctl -u ciris-manager -f"
     echo "5. Check status: ciris-status.sh"
 else
     print_error "Deployment completed with errors!"
     echo ""
     echo "Check logs for details:"
-    echo "  journalctl -u ciris-manager -u ciris-manager-api -n 50"
+    echo "  journalctl -u ciris-manager -n 50"
 fi
