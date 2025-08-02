@@ -338,7 +338,7 @@ http {
         # Log any warnings from nginx (like the http2 deprecation)
         if result.stderr:
             logger.warning(f"Nginx reload warnings: {result.stderr.decode()}")
-        
+
         return True
 
     def _rollback(self) -> None:
