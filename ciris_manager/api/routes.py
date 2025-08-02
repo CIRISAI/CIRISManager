@@ -430,7 +430,7 @@ def create_routes(manager: Any) -> APIRouter:
         """
         try:
             # Get current agents
-            agents = await manager.get_agents()
+            agents = manager.agent_registry.list_agents()
 
             # Start deployment
             status = await deployment_orchestrator.start_deployment(notification, agents)

@@ -23,7 +23,8 @@ class TestCDAPIEndpoints:
     def mock_manager(self):
         """Create mock manager."""
         manager = Mock()
-        manager.get_agents = AsyncMock(return_value=[
+        manager.agent_registry = Mock()
+        manager.agent_registry.list_agents = Mock(return_value=[
             AgentInfo(
                 agent_id="agent-1",
                 agent_name="Agent 1",
