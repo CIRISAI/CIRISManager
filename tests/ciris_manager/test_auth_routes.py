@@ -214,8 +214,11 @@ class TestAuthRoutes:
             return mock_auth_service
 
         with patch("ciris_manager.api.auth_routes.get_auth_service", mock_get_service):
+            mock_request = Mock(cookies={})
             user = get_current_user_dependency(
-                authorization="Bearer test-token", auth_service=mock_auth_service
+                request=mock_request,
+                authorization="Bearer test-token", 
+                auth_service=mock_auth_service
             )
             assert user["email"] == "test@ciris.ai"
 
@@ -229,8 +232,11 @@ class TestAuthRoutes:
 
         with patch("ciris_manager.api.auth_routes.get_auth_service", mock_get_service):
             with pytest.raises(HTTPException) as exc:
+                mock_request = Mock(cookies={})
                 get_current_user_dependency(
-                    authorization="Bearer invalid", auth_service=mock_auth_service
+                    request=mock_request,
+                    authorization="Bearer invalid", 
+                    auth_service=mock_auth_service
                 )
 
             assert exc.value.status_code == 401
@@ -239,7 +245,37 @@ class TestAuthRoutes:
     def test_get_current_user_dependency_no_service(self):
         """Test get_current_user_dependency without service."""
         with pytest.raises(HTTPException) as exc:
-            get_current_user_dependency(authorization="Bearer token", auth_service=None)
+            mock_request = Mock(cookies={})
+            get_current_user_dependency(
+                request=mock_request,
+                authorization="Bearer token", 
+                auth_service=None
+            )
 
         assert exc.value.status_code == 500
         assert exc.value.detail == "OAuth not configured"
+
+    def test_get_current_user_dependency_with_cookie(self, mock_auth_service):
+        """Test get_current_user_dependency with cookie auth."""
+        mock_auth_service.get_current_user.side_effect = [
+            None,  # First call with authorization header returns None
+            {"user_id": 1, "email": "test@ciris.ai"}  # Second call with cookie returns user
+        ]
+
+        # Create a mock that returns our auth service
+        def mock_get_service():
+            return mock_auth_service
+
+        with patch("ciris_manager.api.auth_routes.get_auth_service", mock_get_service):
+            mock_request = Mock(cookies={"manager_token": "test-token"})
+            user = get_current_user_dependency(
+                request=mock_request,
+                authorization=None,
+                auth_service=mock_auth_service
+            )
+            assert user["email"] == "test@ciris.ai"
+            
+            # Verify it tried header first, then cookie
+            assert mock_auth_service.get_current_user.call_count == 2
+            mock_auth_service.get_current_user.assert_any_call(None)
+            mock_auth_service.get_current_user.assert_any_call("Bearer test-token")
