@@ -97,7 +97,7 @@ class CIRISManager:
             crash_threshold=self.config.watchdog.crash_threshold,
             crash_window=self.config.watchdog.crash_window,
         )
-        
+
         # Initialize Docker image cleanup service
         self.image_cleanup = DockerImageCleanup(versions_to_keep=2)
 
@@ -312,10 +312,10 @@ class CIRISManager:
         # Start API server if configured
         if hasattr(self.config.manager, "port") and self.config.manager.port:
             asyncio.create_task(self._start_api_server())
-        
+
         # Start periodic Docker image cleanup (runs every 24 hours)
         asyncio.create_task(self.image_cleanup.run_periodic_cleanup(interval_hours=24))
-        
+
         # Run initial cleanup on startup
         asyncio.create_task(self._run_initial_cleanup())
 
@@ -496,7 +496,7 @@ class CIRISManager:
         try:
             logger.info("Running initial Docker image cleanup")
             results = await self.image_cleanup.cleanup_images()
-            
+
             total_removed = sum(results.values())
             if total_removed > 0:
                 logger.info(f"Initial cleanup removed {total_removed} old images")
@@ -505,7 +505,7 @@ class CIRISManager:
                         logger.info(f"  {repo}: removed {count} images")
             else:
                 logger.info("No old images to clean up")
-                
+
         except Exception as e:
             logger.error(f"Initial image cleanup failed: {e}")
 

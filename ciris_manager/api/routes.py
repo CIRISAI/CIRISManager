@@ -506,10 +506,12 @@ def create_routes(manager: Any) -> APIRouter:
         }
 
     @router.get("/versions/adoption")
-    async def get_version_adoption(_user: Dict[str, str] = Depends(get_current_user)) -> Dict[str, Any]:
+    async def get_version_adoption(
+        _user: Dict[str, str] = Depends(get_current_user),
+    ) -> Dict[str, Any]:
         """
         Get version adoption data for all agents.
-        
+
         Returns information about:
         - Current latest versions
         - Agent adoption status
@@ -517,60 +519,69 @@ def create_routes(manager: Any) -> APIRouter:
         """
         # Get all agents with their metadata
         from ciris_manager.docker_discovery import DockerAgentDiscovery
+
         discovery = DockerAgentDiscovery()
         agents = discovery.discover_agents()
-        
+
         # Get agent metadata from registry
         agent_versions = []
         for agent in agents:
             registry_agent = manager.agent_registry.get_agent(agent.agent_id)
             if registry_agent:
-                metadata = registry_agent.metadata if hasattr(registry_agent, 'metadata') else {}
+                metadata = registry_agent.metadata if hasattr(registry_agent, "metadata") else {}
                 current_images = metadata.get("current_images", {})
-                
-                agent_versions.append({
-                    "agent_id": agent.agent_id,
-                    "agent_name": agent.agent_name,
-                    "status": agent.status,
-                    "current_agent_image": current_images.get("agent", "unknown"),
-                    "current_gui_image": current_images.get("gui", "unknown"),
-                    "last_updated": metadata.get("last_updated", "never"),
-                })
+
+                agent_versions.append(
+                    {
+                        "agent_id": agent.agent_id,
+                        "agent_name": agent.agent_name,
+                        "status": agent.status,
+                        "current_agent_image": current_images.get("agent", "unknown"),
+                        "current_gui_image": current_images.get("gui", "unknown"),
+                        "last_updated": metadata.get("last_updated", "never"),
+                    }
+                )
             else:
-                agent_versions.append({
-                    "agent_id": agent.agent_id,
-                    "agent_name": agent.agent_name,
-                    "status": agent.status,
-                    "current_agent_image": "unknown",
-                    "current_gui_image": "unknown",
-                    "last_updated": "never",
-                })
-        
+                agent_versions.append(
+                    {
+                        "agent_id": agent.agent_id,
+                        "agent_name": agent.agent_name,
+                        "status": agent.status,
+                        "current_agent_image": "unknown",
+                        "current_gui_image": "unknown",
+                        "last_updated": "never",
+                    }
+                )
+
         # Get latest versions from environment or config
-        latest_agent_image = os.getenv("CIRIS_LATEST_AGENT_IMAGE", "ghcr.io/cirisai/ciris-agent:latest")
+        latest_agent_image = os.getenv(
+            "CIRIS_LATEST_AGENT_IMAGE", "ghcr.io/cirisai/ciris-agent:latest"
+        )
         latest_gui_image = os.getenv("CIRIS_LATEST_GUI_IMAGE", "ghcr.io/cirisai/ciris-gui:latest")
-        
+
         # Get current deployment if any
         current_deployment = await deployment_orchestrator.get_current_deployment()
-        
+
         # Get recent deployments
         recent_deployments = []
         for deployment_id, status in deployment_orchestrator.deployments.items():
             if status.completed_at:  # Only show completed deployments
-                recent_deployments.append({
-                    "deployment_id": deployment_id,
-                    "started_at": status.started_at,
-                    "completed_at": status.completed_at,
-                    "agents_updated": status.agents_updated,
-                    "agents_total": status.agents_total,
-                    "message": status.message,
-                    "status": status.status,
-                })
-        
+                recent_deployments.append(
+                    {
+                        "deployment_id": deployment_id,
+                        "started_at": status.started_at,
+                        "completed_at": status.completed_at,
+                        "agents_updated": status.agents_updated,
+                        "agents_total": status.agents_total,
+                        "message": status.message,
+                        "status": status.status,
+                    }
+                )
+
         # Sort by completed_at descending
         recent_deployments.sort(key=lambda x: x["completed_at"] or "", reverse=True)
         recent_deployments = recent_deployments[:10]  # Last 10 deployments
-        
+
         return {
             "latest_versions": {
                 "agent_image": latest_agent_image,
