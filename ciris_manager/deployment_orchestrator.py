@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from uuid import uuid4
 import httpx
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class DeploymentOrchestrator:
     """Orchestrates deployments across agent fleet."""
 
-    def __init__(self, manager=None) -> None:
+    def __init__(self, manager: Optional[Any] = None) -> None:
         """Initialize deployment orchestrator."""
         self.deployments: Dict[str, DeploymentStatus] = {}
         self.current_deployment: Optional[str] = None
@@ -416,6 +416,10 @@ class DeploymentOrchestrator:
         """
         try:
             # Get the agent from registry
+            if not self.manager:
+                logger.warning("No manager instance available for metadata update")
+                return
+                
             agent_info = self.manager.agent_registry.get_agent(agent_id)
             if not agent_info:
                 logger.warning(f"Agent {agent_id} not found in registry")

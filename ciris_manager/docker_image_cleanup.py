@@ -7,7 +7,7 @@ Keeps N-2 versions or the oldest version currently in use by agents.
 
 import asyncio
 import logging
-from typing import List, Set, Dict, Optional
+from typing import List, Set, Dict, Optional, Any
 from datetime import datetime
 import docker
 
@@ -60,7 +60,7 @@ class DockerImageCleanup:
         Returns:
             Dictionary mapping repository names to list of images
         """
-        grouped = {}
+        grouped: Dict[str, List] = {}
 
         for image in images:
             if not image.tags:
@@ -96,7 +96,7 @@ class DockerImageCleanup:
             Sorted list of images
         """
 
-        def get_created_time(image):
+        def get_created_time(image: Any) -> datetime:
             try:
                 # Parse creation time from image attributes
                 created = image.attrs.get("Created", "")
@@ -223,7 +223,7 @@ class DockerImageCleanup:
             logger.error(f"Image cleanup failed: {e}")
             return {}
 
-    async def run_periodic_cleanup(self, interval_hours: int = 24):
+    async def run_periodic_cleanup(self, interval_hours: int = 24) -> None:
         """
         Run cleanup periodically.
 

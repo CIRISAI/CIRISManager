@@ -53,9 +53,10 @@ class DockerRegistryClient:
                 digest = response.headers.get("Docker-Content-Digest")
                 if digest:
                     logger.info(f"Resolved {image_ref} to {digest}")
-                    return digest
+                    return str(digest)
                 else:
                     logger.warning(f"No digest found for {image_ref}")
+                    return None
             else:
                 logger.error(f"Failed to resolve {image_ref}: {response.status_code}")
 
@@ -125,6 +126,6 @@ class DockerRegistryClient:
 
         return None
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the HTTP client."""
         await self._client.aclose()

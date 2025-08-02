@@ -579,7 +579,7 @@ def create_routes(manager: Any) -> APIRouter:
                 )
 
         # Sort by completed_at descending
-        recent_deployments.sort(key=lambda x: x["completed_at"] or "", reverse=True)
+        recent_deployments.sort(key=lambda x: str(x["completed_at"] or ""), reverse=True)
         recent_deployments = recent_deployments[:10]  # Last 10 deployments
 
         return {
