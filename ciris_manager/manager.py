@@ -10,7 +10,7 @@ import logging
 import signal
 import secrets
 from pathlib import Path
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any
 
 from ciris_manager.core.watchdog import CrashLoopWatchdog
 from ciris_manager.config.settings import CIRISManagerConfig
