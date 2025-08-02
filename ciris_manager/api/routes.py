@@ -157,12 +157,12 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=404, detail="Manager JS not found")
 
         return FileResponse(static_path, media_type="application/javascript")
-    
+
     @router.get("/callback")
     async def manager_callback(token: Optional[str] = None) -> Response:
         """Handle OAuth callback redirect to Manager UI with token."""
         from fastapi.responses import HTMLResponse
-        
+
         # Serve a minimal HTML page that extracts the token and redirects
         html_content = """
 <!DOCTYPE html>
@@ -222,7 +222,7 @@ def create_routes(manager: Any) -> APIRouter:
 </body>
 </html>
 """
-        
+
         return HTMLResponse(content=html_content)
 
     @router.get("/health")
