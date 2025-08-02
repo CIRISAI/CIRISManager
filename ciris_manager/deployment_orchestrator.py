@@ -419,7 +419,7 @@ class DeploymentOrchestrator:
             if not self.manager:
                 logger.warning("No manager instance available for metadata update")
                 return
-                
+
             agent_info = self.manager.agent_registry.get_agent(agent_id)
             if not agent_info:
                 logger.warning(f"Agent {agent_id} not found in registry")
