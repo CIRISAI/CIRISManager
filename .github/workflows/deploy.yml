@@ -138,7 +138,7 @@ jobs:
             
             # Create nginx directory for CIRISManager to write configs
             mkdir -p /home/ciris/nginx
-            chown -R root:root /home/ciris/nginx
+            chown -R ciris-manager:ciris /home/ciris/nginx
             
             # Deploy nginx container if not running
             if ! docker ps | grep -q ciris-nginx; then
