@@ -6,6 +6,7 @@ Handles canary deployments, graceful shutdowns, and agent update coordination.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
@@ -17,6 +18,7 @@ from ciris_manager.models import (
     DeploymentStatus,
     AgentUpdateResponse,
 )
+from ciris_manager.docker_registry import DockerRegistryClient
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +26,16 @@ logger = logging.getLogger(__name__)
 class DeploymentOrchestrator:
     """Orchestrates deployments across agent fleet."""
 
-    def __init__(self) -> None:
+    def __init__(self, manager=None) -> None:
         """Initialize deployment orchestrator."""
         self.deployments: Dict[str, DeploymentStatus] = {}
         self.current_deployment: Optional[str] = None
         self._deployment_lock = asyncio.Lock()
+        self.manager = manager
+
+        # Initialize Docker registry client with GitHub token if available
+        github_token = os.getenv("GITHUB_TOKEN") or os.getenv("CIRIS_GITHUB_TOKEN")
+        self.registry_client = DockerRegistryClient(auth_token=github_token)
 
     async def start_deployment(
         self,
@@ -49,10 +56,29 @@ class DeploymentOrchestrator:
             if self.current_deployment:
                 raise ValueError(f"Deployment {self.current_deployment} already in progress")
 
+            # Check if any agents actually need updating
+            agents_needing_update = await self._check_agents_need_update(notification, agents)
+
+            if not agents_needing_update:
+                # No agents need updating - this is a no-op deployment
+                logger.info("No agents need updating - images unchanged")
+                return DeploymentStatus(
+                    deployment_id=str(uuid4()),
+                    agents_total=len(agents),
+                    agents_updated=0,
+                    agents_deferred=0,
+                    agents_failed=0,
+                    started_at=datetime.now(timezone.utc).isoformat(),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                    status="completed",
+                    message="No update needed - images unchanged",
+                    canary_phase=None,
+                )
+
             deployment_id = str(uuid4())
             status = DeploymentStatus(
                 deployment_id=deployment_id,
-                agents_total=len(agents),
+                agents_total=len(agents_needing_update),
                 agents_updated=0,
                 agents_deferred=0,
                 agents_failed=0,
@@ -66,10 +92,68 @@ class DeploymentOrchestrator:
             self.deployments[deployment_id] = status
             self.current_deployment = deployment_id
 
-            # Start deployment in background
-            asyncio.create_task(self._run_deployment(deployment_id, notification, agents))
+            # Start deployment in background with only agents that need updates
+            asyncio.create_task(
+                self._run_deployment(deployment_id, notification, agents_needing_update)
+            )
 
             return status
+
+    async def _check_agents_need_update(
+        self,
+        notification: UpdateNotification,
+        agents: List[AgentInfo],
+    ) -> List[AgentInfo]:
+        """
+        Check which agents actually need updating based on image digests.
+
+        Args:
+            notification: Update notification with new images
+            agents: List of all agents
+
+        Returns:
+            List of agents that need updating
+        """
+        # Resolve new image digests
+        new_agent_digest = None
+        new_gui_digest = None
+
+        if notification.agent_image:
+            new_agent_digest = await self.registry_client.resolve_image_digest(
+                notification.agent_image
+            )
+
+        if notification.gui_image:
+            new_gui_digest = await self.registry_client.resolve_image_digest(notification.gui_image)
+
+        # Check each agent to see if it needs updating
+        agents_needing_update = []
+
+        for agent in agents:
+            # Get current image digests from agent registry metadata
+            current_images = {}
+            if self.manager:
+                registry_agent = self.manager.agent_registry.get_agent(agent.agent_id)
+                if registry_agent and hasattr(registry_agent, "metadata"):
+                    current_images = registry_agent.metadata.get("current_images", {})
+
+            current_agent_digest = current_images.get("agent")
+            current_gui_digest = current_images.get("gui")
+
+            # Check if either image changed
+            agent_changed = new_agent_digest and new_agent_digest != current_agent_digest
+            gui_changed = new_gui_digest and new_gui_digest != current_gui_digest
+
+            if agent_changed or gui_changed:
+                logger.info(
+                    f"Agent {agent.agent_name} needs update: "
+                    f"agent_changed={agent_changed}, gui_changed={gui_changed}"
+                )
+                agents_needing_update.append(agent)
+            else:
+                logger.info(f"Agent {agent.agent_name} is up to date")
+
+        return agents_needing_update
 
     async def get_deployment_status(self, deployment_id: str) -> Optional[DeploymentStatus]:
         """Get status of a deployment."""
@@ -285,9 +369,15 @@ class DeploymentOrchestrator:
 
                 if response.status_code == 200:
                     data = response.json()
+                    decision = data.get("decision", "accept")
+
+                    # If agent accepted the update, update its metadata with new image digests
+                    if decision == "accept" and self.manager:
+                        await self._update_agent_metadata(agent.agent_id, notification)
+
                     return AgentUpdateResponse(
                         agent_id=agent.agent_id,
-                        decision=data.get("decision", "accept"),
+                        decision=decision,
                         reason=data.get("reason"),
                         ready_at=data.get("ready_at"),
                     )
@@ -315,3 +405,44 @@ class DeploymentOrchestrator:
                 reason=str(e),
                 ready_at=None,
             )
+
+    async def _update_agent_metadata(self, agent_id: str, notification: UpdateNotification) -> None:
+        """
+        Update agent metadata with current image digests after successful deployment.
+
+        Args:
+            agent_id: Agent identifier
+            notification: Update notification with new images
+        """
+        try:
+            # Get the agent from registry
+            agent_info = self.manager.agent_registry.get_agent(agent_id)
+            if not agent_info:
+                logger.warning(f"Agent {agent_id} not found in registry")
+                return
+
+            # Update image digests in metadata
+            if not hasattr(agent_info, "metadata"):
+                agent_info.metadata = {}
+
+            agent_info.metadata["current_images"] = {}
+
+            # Store the resolved digests
+            if notification.agent_image:
+                digest = await self.registry_client.resolve_image_digest(notification.agent_image)
+                if digest:
+                    agent_info.metadata["current_images"]["agent"] = digest
+
+            if notification.gui_image:
+                digest = await self.registry_client.resolve_image_digest(notification.gui_image)
+                if digest:
+                    agent_info.metadata["current_images"]["gui"] = digest
+
+            agent_info.metadata["last_updated"] = datetime.now(timezone.utc).isoformat()
+
+            # Save the updated metadata
+            self.manager.agent_registry._save_metadata()
+            logger.info(f"Updated metadata for agent {agent_id} with new image digests")
+
+        except Exception as e:
+            logger.error(f"Failed to update agent metadata: {e}")

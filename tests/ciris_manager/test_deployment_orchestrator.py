@@ -22,7 +22,11 @@ class TestDeploymentOrchestrator:
     @pytest.fixture
     def orchestrator(self):
         """Create deployment orchestrator."""
-        return DeploymentOrchestrator()
+        orchestrator = DeploymentOrchestrator()
+        # Mock the registry client to avoid real network calls
+        orchestrator.registry_client = Mock()
+        orchestrator.registry_client.resolve_image_digest = AsyncMock(return_value="sha256:test123")
+        return orchestrator
 
     @pytest.fixture
     def update_notification(self):
@@ -54,6 +58,14 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_start_deployment(self, orchestrator, update_notification, sample_agents):
         """Test starting a deployment."""
+        # Mock registry client to return different digests (indicating images changed)
+        orchestrator.registry_client.resolve_image_digest = AsyncMock(
+            side_effect=[
+                "sha256:newagent123",  # New agent image
+                "sha256:newgui456",  # New GUI image
+            ]
+        )
+
         status = await orchestrator.start_deployment(update_notification, sample_agents)
 
         assert status.deployment_id is not None
@@ -94,7 +106,9 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_canary_deployment_phases(self, orchestrator, update_notification, sample_agents):
         """Test canary deployment phases."""
-        with patch.object(orchestrator, "_update_agent_group", new_callable=AsyncMock) as mock_update:
+        with patch.object(
+            orchestrator, "_update_agent_group", new_callable=AsyncMock
+        ) as mock_update:
             # Mock the update method to complete immediately
             mock_update.return_value = None
 
@@ -116,7 +130,9 @@ class TestDeploymentOrchestrator:
             strategy="immediate",
         )
 
-        with patch.object(orchestrator, "_update_agent_group", new_callable=AsyncMock) as mock_update:
+        with patch.object(
+            orchestrator, "_update_agent_group", new_callable=AsyncMock
+        ) as mock_update:
             mock_update.return_value = None
 
             status = await orchestrator.start_deployment(notification, sample_agents)

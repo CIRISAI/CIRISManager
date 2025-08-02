@@ -25,6 +25,7 @@ class AgentInfo:
         template: str,
         compose_file: str,
         created_at: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -32,6 +33,7 @@ class AgentInfo:
         self.template = template
         self.compose_file = compose_file
         self.created_at = created_at or datetime.now(timezone.utc).isoformat()
+        self.metadata = metadata or {}
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -41,6 +43,7 @@ class AgentInfo:
             "template": self.template,
             "compose_file": self.compose_file,
             "created_at": self.created_at,
+            "metadata": self.metadata,
         }
 
     @classmethod
@@ -53,6 +56,7 @@ class AgentInfo:
             template=data["template"],
             compose_file=data["compose_file"],
             created_at=data.get("created_at"),
+            metadata=data.get("metadata", {}),
         )
 
 

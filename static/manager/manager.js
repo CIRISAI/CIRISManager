@@ -140,6 +140,11 @@ function switchTab(tab) {
         content.classList.add('hidden');
     });
     document.getElementById(`${tab}-content`).classList.remove('hidden');
+    
+    // Fetch version data when switching to versions tab
+    if (tab === 'versions') {
+        fetchVersionData();
+    }
 }
 
 // Refresh data
@@ -288,6 +293,153 @@ async function deleteAgent(agentId) {
 // Open agent UI
 function openAgentUI(agentId) {
     window.open(`/agent/${agentId}`, '_blank');
+}
+
+// Fetch version adoption data
+async function fetchVersionData() {
+    try {
+        const response = await fetch('/manager/v1/versions/adoption', { 
+            credentials: 'include' 
+        });
+        
+        if (!response.ok) throw new Error(`Failed to fetch version data: ${response.status}`);
+        
+        const data = await response.json();
+        renderVersionData(data);
+    } catch (error) {
+        showError('Failed to fetch version data: ' + error.message);
+    }
+}
+
+// Render version data
+function renderVersionData(data) {
+    // Render latest versions
+    const latestVersions = data.latest_versions || {};
+    document.getElementById('current-agent-image').textContent = latestVersions.agent_image || 'Unknown';
+    document.getElementById('current-gui-image').textContent = latestVersions.gui_image || 'Unknown';
+    
+    // Extract digests from version data (if available)
+    document.getElementById('current-agent-digest').textContent = 'N/A';
+    document.getElementById('current-gui-digest').textContent = 'N/A';
+    
+    // Render deployment status
+    const deploymentStatus = document.getElementById('deployment-status');
+    if (data.current_deployment) {
+        const deployment = data.current_deployment;
+        deploymentStatus.innerHTML = `
+            <div class="space-y-2">
+                <div class="flex justify-between">
+                    <span class="font-medium">Deployment ID:</span>
+                    <span class="text-sm font-mono">${escapeHtml(deployment.deployment_id)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="font-medium">Status:</span>
+                    <span class="px-2 py-1 text-xs rounded ${
+                        deployment.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' : 
+                        deployment.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                        'bg-red-100 text-red-800'
+                    }">${escapeHtml(deployment.status)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="font-medium">Progress:</span>
+                    <span>${deployment.agents_updated} / ${deployment.agents_total} agents</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="font-medium">Message:</span>
+                    <span class="text-sm">${escapeHtml(deployment.message)}</span>
+                </div>
+            </div>
+        `;
+    } else {
+        deploymentStatus.innerHTML = '<p class="text-gray-600">No active deployment</p>';
+    }
+    
+    // Render agent version table
+    const tableBody = document.getElementById('agent-versions-table');
+    if (data.agent_versions && data.agent_versions.length > 0) {
+        tableBody.innerHTML = data.agent_versions.map(agent => {
+            const isUpToDate = (
+                agent.current_agent_image === latestVersions.agent_image &&
+                agent.current_gui_image === latestVersions.gui_image
+            );
+            
+            return `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ${escapeHtml(agent.agent_name)}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            agent.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                        }">
+                            ${escapeHtml(agent.status)}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span class="font-mono text-xs">${formatImageDigest(agent.current_agent_image)}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span class="font-mono text-xs">${formatImageDigest(agent.current_gui_image)}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${agent.last_updated === 'never' ? 'Never' : formatDate(agent.last_updated)}
+                        ${isUpToDate ? 
+                            '<span class="ml-2 text-green-600"><i class="fas fa-check-circle"></i></span>' : 
+                            '<span class="ml-2 text-yellow-600"><i class="fas fa-exclamation-circle"></i></span>'
+                        }
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } else {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="5" class="px-6 py-4 text-center text-gray-500">
+                    No agent version data available
+                </td>
+            </tr>
+        `;
+    }
+    
+    // Render deployment history
+    const historyContainer = document.getElementById('deployment-history');
+    if (data.recent_deployments && data.recent_deployments.length > 0) {
+        historyContainer.innerHTML = data.recent_deployments.map(deployment => `
+            <div class="bg-gray-50 p-3 rounded flex justify-between items-center">
+                <div>
+                    <div class="text-sm font-medium">${escapeHtml(deployment.message)}</div>
+                    <div class="text-xs text-gray-500">
+                        ${formatDate(deployment.completed_at)} - 
+                        ${deployment.agents_updated} of ${deployment.agents_total} agents updated
+                    </div>
+                </div>
+                <span class="px-2 py-1 text-xs rounded ${
+                    deployment.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                    'bg-red-100 text-red-800'
+                }">
+                    ${escapeHtml(deployment.status)}
+                </span>
+            </div>
+        `).join('');
+    } else {
+        historyContainer.innerHTML = '<p class="text-gray-500 text-sm">No deployment history available</p>';
+    }
+}
+
+// Format image digest for display
+function formatImageDigest(digest) {
+    if (!digest || digest === 'unknown') return 'Unknown';
+    if (digest.startsWith('sha256:')) {
+        return digest.substring(0, 19) + '...';
+    }
+    return digest;
+}
+
+// Format date
+function formatDate(dateString) {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
 }
 
 // Logout
