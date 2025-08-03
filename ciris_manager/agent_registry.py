@@ -26,6 +26,7 @@ class AgentInfo:
         compose_file: str,
         created_at: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        oauth_status: Optional[str] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -34,6 +35,7 @@ class AgentInfo:
         self.compose_file = compose_file
         self.created_at = created_at or datetime.now(timezone.utc).isoformat()
         self.metadata = metadata or {}
+        self.oauth_status = oauth_status
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -44,6 +46,7 @@ class AgentInfo:
             "compose_file": self.compose_file,
             "created_at": self.created_at,
             "metadata": self.metadata,
+            "oauth_status": self.oauth_status,
         }
 
     @classmethod
@@ -57,6 +60,7 @@ class AgentInfo:
             compose_file=data["compose_file"],
             created_at=data.get("created_at"),
             metadata=data.get("metadata", {}),
+            oauth_status=data.get("oauth_status"),
         )
 
 
