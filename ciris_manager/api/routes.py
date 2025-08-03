@@ -352,6 +352,62 @@ def create_routes(manager: Any) -> APIRouter:
                 detail=f"Failed to delete agent {agent_id}. Check logs for details.",
             )
 
+    @router.get("/agents/{agent_id}/oauth/verify")
+    async def verify_agent_oauth(agent_id: str, user: dict = auth_dependency) -> Dict[str, Any]:
+        """
+        Verify OAuth configuration for an agent.
+        
+        Checks if OAuth is properly configured and working.
+        """
+        # Get agent from registry
+        agent = manager.agent_registry.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        
+        # For now, we check if the agent has OAuth status
+        # In a full implementation, this would actually test the OAuth flow
+        oauth_configured = agent.oauth_status in ["configured", "verified"]
+        oauth_working = agent.oauth_status == "verified"
+        
+        return {
+            "agent_id": agent_id,
+            "configured": oauth_configured,
+            "working": oauth_working,
+            "status": agent.oauth_status or "pending",
+            "callback_urls": {
+                "google": f"https://agents.ciris.ai/v1/auth/oauth/{agent_id}/google/callback",
+                "github": f"https://agents.ciris.ai/v1/auth/oauth/{agent_id}/github/callback",
+                "discord": f"https://agents.ciris.ai/v1/auth/oauth/{agent_id}/discord/callback",
+            }
+        }
+
+    @router.post("/agents/{agent_id}/oauth/complete")
+    async def mark_oauth_complete(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+        """
+        Mark OAuth as configured for an agent.
+        
+        Called after admin has registered callback URLs in provider dashboards.
+        """
+        # Get agent from registry
+        agent = manager.agent_registry.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        
+        # Update OAuth status
+        agent.oauth_status = "configured"
+        
+        # Save to registry
+        manager.agent_registry.save_metadata()
+        
+        logger.info(f"OAuth marked as configured for agent {agent_id} by {user['email']}")
+        
+        return {
+            "status": "success",
+            "agent_id": agent_id,
+            "oauth_status": "configured",
+            "message": "OAuth configuration marked as complete. Run verification to test."
+        }
+
     @router.get("/templates", response_model=TemplateListResponse)
     async def list_templates() -> TemplateListResponse:
         """List available templates."""

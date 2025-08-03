@@ -17,6 +17,9 @@ class AgentInfo(BaseModel):
     api_port: Optional[int] = Field(None, description="API port if running")
     status: str = Field("stopped", description="Container status: running, stopped, etc")
     image: Optional[str] = Field(None, description="Docker image")
+    oauth_status: Optional[str] = Field(
+        None, description="OAuth configuration status: pending, configured, verified"
+    )
 
     # Computed properties for common access patterns
     @property
@@ -28,6 +31,11 @@ class AgentInfo(BaseModel):
     def has_port(self) -> bool:
         """Does the agent have a valid port assigned?"""
         return self.api_port is not None and self.api_port > 0
+
+    @property
+    def has_oauth(self) -> bool:
+        """Is OAuth configured for this agent?"""
+        return self.oauth_status in ["configured", "verified"]
 
 
 class PortAllocation(BaseModel):

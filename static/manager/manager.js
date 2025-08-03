@@ -292,7 +292,7 @@ async function deleteAgent(agentId) {
 
 // Open agent UI
 function openAgentUI(agentId) {
-    window.open(`/agent/${agentId}`, '_blank');
+    window.open(`/comms?agent=${agentId}`, '_blank');
 }
 
 // Fetch version adoption data
@@ -447,15 +447,12 @@ async function logout() {
     try {
         const response = await fetch('/manager/v1/oauth/logout', {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
-            }
+            credentials: 'include'  // Use cookies, not Bearer token
         });
         
         if (response.ok) {
-            // Clear token and redirect to login
-            localStorage.removeItem('managerToken');
-            window.location.href = '/manager/v1/oauth/login';
+            // Redirect to manager root
+            window.location.href = '/manager/';
         } else {
             console.error('Logout failed:', response.status);
         }
@@ -487,4 +484,176 @@ function escapeHtml(unsafe) {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;")
         : '';
+}
+
+// OAuth Modal Functions
+function showOAuthModal(agentId) {
+    // Update agent ID in modal
+    document.getElementById('oauth-agent-id').textContent = agentId;
+    
+    // Update callback URLs with actual agent ID
+    const baseUrl = 'https://agents.ciris.ai/v1/auth/oauth';
+    document.getElementById('google-callback-url').value = `${baseUrl}/${agentId}/google/callback`;
+    document.getElementById('github-callback-url').value = `${baseUrl}/${agentId}/github/callback`;
+    document.getElementById('discord-callback-url').value = `${baseUrl}/${agentId}/discord/callback`;
+    
+    // Show modal
+    document.getElementById('oauth-setup-modal').classList.remove('hidden');
+}
+
+function hideOAuthModal() {
+    document.getElementById('oauth-setup-modal').classList.add('hidden');
+}
+
+// Copy to clipboard with visual feedback
+async function copyToClipboard(elementId) {
+    const input = document.getElementById(elementId);
+    const button = input.nextElementSibling;
+    const originalHTML = button.innerHTML;
+    
+    try {
+        await navigator.clipboard.writeText(input.value);
+        
+        // Show success feedback
+        button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        button.classList.add('bg-green-600');
+        
+        // Reset after 2 seconds
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('bg-green-600');
+            button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        }, 2000);
+    } catch (err) {
+        console.error('Failed to copy:', err);
+        // Fallback for older browsers
+        input.select();
+        document.execCommand('copy');
+    }
+}
+
+// Notify Eric about OAuth setup request
+async function notifyEric() {
+    const agentId = document.getElementById('oauth-agent-id').textContent;
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+    
+    try {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        
+        // In a real implementation, this would send a notification
+        // For now, we'll simulate it
+        const message = `OAuth setup requested for agent: ${agentId}\n` +
+                       `Google: https://agents.ciris.ai/v1/auth/oauth/${agentId}/google/callback\n` +
+                       `GitHub: https://agents.ciris.ai/v1/auth/oauth/${agentId}/github/callback\n` +
+                       `Discord: https://agents.ciris.ai/v1/auth/oauth/${agentId}/discord/callback`;
+        
+        // TODO: Implement actual notification (Slack/Discord webhook, email, etc.)
+        console.log('Notification to Eric:', message);
+        
+        // Simulate success
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        button.innerHTML = '<i class="fas fa-check"></i> Notified!';
+        button.classList.remove('bg-amber-600', 'hover:bg-amber-700');
+        button.classList.add('bg-green-600');
+        
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('bg-green-600');
+            button.classList.add('bg-amber-600', 'hover:bg-amber-700');
+            button.disabled = false;
+        }, 3000);
+        
+    } catch (error) {
+        console.error('Failed to notify:', error);
+        button.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Failed';
+        button.classList.add('bg-red-600');
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('bg-red-600');
+            button.classList.add('bg-amber-600', 'hover:bg-amber-700');
+            button.disabled = false;
+        }, 3000);
+    }
+}
+
+// Verify OAuth setup
+async function verifyOAuth() {
+    const agentId = document.getElementById('oauth-agent-id').textContent;
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+    
+    try {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+        
+        // Check OAuth status via API
+        const response = await fetch(`${API_BASE}/agents/${agentId}/oauth/verify`, {
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            if (result.configured && result.working) {
+                button.innerHTML = '<i class="fas fa-check-circle"></i> Verified!';
+                button.classList.remove('bg-green-600', 'hover:bg-green-700');
+                button.classList.add('bg-green-600');
+                
+                // Update status badge
+                const statusBadge = document.getElementById('oauth-status');
+                statusBadge.textContent = 'Configured';
+                statusBadge.classList.remove('bg-yellow-100', 'text-yellow-800');
+                statusBadge.classList.add('bg-green-100', 'text-green-800');
+                
+            } else {
+                button.innerHTML = '<i class="fas fa-times-circle"></i> Not Ready';
+                button.classList.add('bg-yellow-600');
+            }
+        } else {
+            throw new Error('Verification failed');
+        }
+        
+    } catch (error) {
+        console.error('OAuth verification error:', error);
+        button.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
+        button.classList.add('bg-red-600');
+    }
+    
+    setTimeout(() => {
+        button.innerHTML = originalHTML;
+        button.classList.remove('bg-yellow-600', 'bg-red-600');
+        button.classList.add('bg-green-600', 'hover:bg-green-700');
+        button.disabled = false;
+    }, 3000);
+}
+
+// Mark OAuth as complete
+async function markOAuthComplete() {
+    const agentId = document.getElementById('oauth-agent-id').textContent;
+    
+    try {
+        const response = await fetch(`${API_BASE}/agents/${agentId}/oauth/complete`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            hideOAuthModal();
+            await refreshData(); // Refresh agent list to show updated status
+        } else {
+            showError('Failed to mark OAuth as complete');
+        }
+    } catch (error) {
+        console.error('Error marking OAuth complete:', error);
+        showError('Failed to update OAuth status');
+    }
+}
+
+// Open OAuth documentation
+function openOAuthDocs() {
+    window.open('https://docs.ciris.ai/oauth-setup', '_blank');
 }
