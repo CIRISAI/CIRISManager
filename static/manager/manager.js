@@ -492,7 +492,7 @@ function showOAuthModal(agentId) {
     document.getElementById('oauth-agent-id').textContent = agentId;
     
     // Update callback URLs with actual agent ID
-    const baseUrl = 'https://agents.ciris.ai/v1/auth/oauth';
+    const baseUrl = `${window.location.origin}/v1/auth/oauth`;
     document.getElementById('google-callback-url').value = `${baseUrl}/${agentId}/google/callback`;
     document.getElementById('github-callback-url').value = `${baseUrl}/${agentId}/github/callback`;
     document.getElementById('discord-callback-url').value = `${baseUrl}/${agentId}/discord/callback`;
