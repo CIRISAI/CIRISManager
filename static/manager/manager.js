@@ -295,7 +295,7 @@ async function deleteAgent(agentId) {
 
 // Open agent UI
 function openAgentUI(agentId) {
-    window.open(`/comms?agent=${agentId}`, '_blank');
+    window.open(`/agent/${agentId}`, '_blank');
 }
 
 // Fetch version adoption data
