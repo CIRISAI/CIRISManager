@@ -500,6 +500,12 @@ function showOAuthModal(agentId) {
     document.getElementById('github-callback-url').value = `${baseUrl}/${agentId}/github/callback`;
     document.getElementById('discord-callback-url').value = `${baseUrl}/${agentId}/discord/callback`;
 
+    // Update agent ID in env var example
+    const agentIdExample = document.getElementById('agent-id-example');
+    if (agentIdExample) {
+        agentIdExample.textContent = agentId;
+    }
+
     // Show modal
     document.getElementById('oauth-setup-modal').classList.remove('hidden');
 }
