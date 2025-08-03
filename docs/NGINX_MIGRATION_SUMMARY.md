@@ -9,7 +9,7 @@
 - Default route `/v1/` pointed to arbitrary "default" agent
 - Confusion about which repository owned routing
 
-### After  
+### After
 - Nginx lives in CIRISManager repository (infrastructure ownership)
 - Single nginx.conf file with all configuration
 - Config written to `/home/ciris/nginx/nginx.conf`
@@ -55,7 +55,7 @@
 
 ### Why Single File?
 - Debugging simplicity - one place to look
-- No include complexity or load order issues  
+- No include complexity or load order issues
 - Complete view of routing in one file
 - Atomic updates (write new, validate, swap)
 
@@ -91,7 +91,7 @@ Updated test files to verify:
 
 See `docs/NGINX_ARCHITECTURE_LESSONS.md` for detailed exploration of:
 - Why simplicity beats cleverness
-- Why explicit beats implicit  
+- Why explicit beats implicit
 - Why boring solutions last longer
 - Why one file beats many with includes
 

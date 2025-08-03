@@ -128,7 +128,7 @@ CIRISManager handles all deployment orchestration through a clean API:
    POST /manager/v1/updates/notify
    {
        "agent_image": "ghcr.io/cirisai/ciris-agent:latest",
-       "gui_image": "ghcr.io/cirisai/ciris-gui:latest", 
+       "gui_image": "ghcr.io/cirisai/ciris-gui:latest",
        "message": "Security update available",
        "strategy": "canary"
    }
@@ -215,7 +215,7 @@ All I/O operations use async/await for non-blocking execution:
    - Lives in CIRISManager/static/
 
 2. **Agent GUI**: React app in container from CIRISAgent
-   - Multi-tenant: `/agent/{agent_id}` 
+   - Multi-tenant: `/agent/{agent_id}`
    - Chat interface for interacting with agents
    - Detects mode (standalone vs managed) from URL
 

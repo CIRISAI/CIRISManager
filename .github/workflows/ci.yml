@@ -12,32 +12,32 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -e .[dev]
-    
+
     - name: Run linting
       run: |
         ruff check ciris_manager/
         ruff format --check ciris_manager/
-    
+
     - name: Run type checking
       run: |
         mypy ciris_manager/
-    
+
     - name: Run tests
       run: |
         pytest tests/ -v --cov=ciris_manager --cov-report=term-missing
 
   # Docker build removed - deployment via git clone instead
-  
+
   # SDK can be published separately when needed
   # The Python API is the primary interface

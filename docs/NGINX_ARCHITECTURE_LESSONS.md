@@ -20,7 +20,7 @@ That's it. One file, one writer, one reader.
 
 **The Failed Approach**:
 - Static config with infrastructure routes
-- Dynamic config with agent routes  
+- Dynamic config with agent routes
 - Include directive to combine them
 - Two volume mounts in docker-compose
 
@@ -41,7 +41,7 @@ That's it. One file, one writer, one reader.
 
 **Why It's Wrong**:
 1. **Ambiguity** - Which agent is "default"? Changes per deployment
-2. **Hidden coupling** - Code using `/v1/` breaks when default changes  
+2. **Hidden coupling** - Code using `/v1/` breaks when default changes
 3. **Testing issues** - Can't test multi-agent scenarios properly
 4. **OAuth confusion** - Callback URLs become ambiguous
 5. **Documentation lies** - Examples show `/v1/` but don't say which agent
@@ -92,7 +92,7 @@ Served directly by nginx at `/`.
 
 **Simple Math**:
 - N agents = N containers
-- 1 GUI container (multi-tenant, from CIRISAgent)  
+- 1 GUI container (multi-tenant, from CIRISAgent)
 - 1 nginx container (from CIRISManager)
 - 0 manager GUI containers (static files)
 
@@ -127,7 +127,7 @@ Things we explicitly don't support:
 ## Testing What Matters
 
 **Don't Test**: nginx syntax (nginx -t does that)
-**Do Test**: 
+**Do Test**:
 - Routes exist for each agent
 - No default routes sneak in
 - Manager GUI accessible at `/`
@@ -144,7 +144,7 @@ If you can't explain it simply, it's too complex.
 ## Remember
 
 - Clever is the enemy of maintainable
-- One file is better than two with includes  
+- One file is better than two with includes
 - Explicit routes are better than implicit defaults
 - Static files are better than another container
 - Simple explanations indicate simple architectures

@@ -17,7 +17,7 @@
 **Key Learning**: SystemD security directives can override filesystem permissions. Even with correct ownership and chmod, `ProtectHome=true` will block access.
 
 ### 2. OAuth Authentication Failure (CURRENT ISSUE)
-**Symptoms**: 
+**Symptoms**:
 - Manager GUI redirects to Google OAuth successfully
 - After OAuth callback, returns `{"detail":"Authentication failed"}`
 - This suggests OAuth flow completes but token validation fails

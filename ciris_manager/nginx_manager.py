@@ -165,20 +165,20 @@ http {
     # Default MIME types and settings
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
-    
+
     # Performance settings
     sendfile on;
     tcp_nopush on;
     tcp_nodelay on;
     keepalive_timeout 65;
-    
+
     # Logging
     access_log /var/log/nginx/access.log;
     error_log /var/log/nginx/error.log;
-    
+
     # Size limits
     client_max_body_size 10M;
-    
+
 """
 
     def _generate_upstreams(self, agents: List[AgentInfo]) -> str:
@@ -190,8 +190,8 @@ http {
     upstream agent_gui {
         server 127.0.0.1:3000;
     }
-    
-    # Manager API upstream  
+
+    # Manager API upstream
     upstream manager {
         server 127.0.0.1:8888;
     }
@@ -229,20 +229,20 @@ http {
     server {
         listen 443 ssl http2;
         server_name agents.ciris.ai;
-        
+
         # SSL configuration
         ssl_certificate /etc/letsencrypt/live/agents.ciris.ai/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/agents.ciris.ai/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_ciphers HIGH:!aNULL:!MD5;
-        
+
         # Health check endpoint
         location /health {
             access_log off;
             return 200 "healthy\\n";
             add_header Content-Type text/plain;
         }
-        
+
         # Root and all GUI routes - Next.js handles routing internally
         location / {
             proxy_pass http://agent_gui;
@@ -255,7 +255,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
-        
+
         # Manager UI routes
         location /manager/ {
             proxy_pass http://manager/manager/v1/;
@@ -265,7 +265,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
-        
+
         # Agent GUI (multi-tenant container)
         location ~ ^/agent/([^/]+) {
             proxy_pass http://agent_gui;
@@ -278,7 +278,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
-        
+
         # Manager OAuth callback (for Google OAuth compatibility)
         location /manager/oauth/callback {
             proxy_pass http://manager/manager/oauth/callback;
@@ -288,7 +288,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
-        
+
         # Manager routes
         location /manager/v1/ {
             proxy_pass http://manager/manager/v1/;
@@ -321,7 +321,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }}
-        
+
         # {agent.agent_name} API routes
         location ~ ^/api/{agent.agent_id}/(.*)$ {{
             proxy_pass http://agent_{agent.agent_id}/v1/$1$is_args$args;
@@ -332,7 +332,7 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_read_timeout 300s;
             proxy_connect_timeout 75s;
-            
+
             # WebSocket support
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";

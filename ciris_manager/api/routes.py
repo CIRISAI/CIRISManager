@@ -207,11 +207,11 @@ def create_routes(manager: Any) -> APIRouter:
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('token');
-        
+
         if (token) {
             // Store token in localStorage
             localStorage.setItem('managerToken', token);
-            
+
             // Redirect to manager dashboard
             window.location.href = '/manager/';
         } else {

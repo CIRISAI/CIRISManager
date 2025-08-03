@@ -41,65 +41,65 @@ check_root() {
 # Check dependencies
 check_dependencies() {
     log "${YELLOW}Checking dependencies...${NC}"
-    
+
     # Check Python 3.8+
     if ! command -v python3 &> /dev/null; then
         error_exit "Python 3 is not installed"
     fi
-    
+
     python_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
     if [[ $(echo "$python_version < 3.8" | bc) -eq 1 ]]; then
         error_exit "Python 3.8 or higher is required (found $python_version)"
     fi
-    
+
     # Check Docker
     if ! command -v docker &> /dev/null; then
         error_exit "Docker is not installed"
     fi
-    
+
     # Check docker-compose
     if ! command -v docker-compose &> /dev/null; then
         error_exit "docker-compose is not installed"
     fi
-    
+
     # Check pip
     if ! command -v pip3 &> /dev/null; then
         error_exit "pip3 is not installed"
     fi
-    
+
     log "${GREEN}✓ All dependencies satisfied${NC}"
 }
 
 # Install CIRISManager
 install_manager() {
     log "${YELLOW}Installing CIRISManager...${NC}"
-    
+
     # Check if directory exists
     if [[ ! -d "$INSTALL_DIR" ]]; then
         error_exit "CIRIS installation not found at $INSTALL_DIR"
     fi
-    
+
     cd "$INSTALL_DIR"
-    
+
     # Install package
     log "Installing Python package..."
     pip3 install -e . >> "$LOG_FILE" 2>&1 || error_exit "Failed to install Python package"
-    
+
     # Verify installation
     if ! command -v ciris-manager &> /dev/null; then
         error_exit "CIRISManager installation failed - command not found"
     fi
-    
+
     log "${GREEN}✓ CIRISManager installed${NC}"
 }
 
 # Create configuration
 create_config() {
     log "${YELLOW}Creating configuration...${NC}"
-    
+
     # Create config directory
     mkdir -p "$CONFIG_DIR"
-    
+
     # Check for existing config
     if [[ -f "$CONFIG_DIR/config.yml" ]]; then
         log "${YELLOW}Configuration already exists at $CONFIG_DIR/config.yml${NC}"
@@ -110,7 +110,7 @@ create_config() {
             return
         fi
     fi
-    
+
     # Determine compose file location
     if [[ -f "$INSTALL_DIR/deployment/docker-compose.production.yml" ]]; then
         COMPOSE_FILE="$INSTALL_DIR/deployment/docker-compose.production.yml"
@@ -121,7 +121,7 @@ create_config() {
     else
         COMPOSE_FILE="$INSTALL_DIR/deployment/docker-compose.dev.yml"
     fi
-    
+
     # Generate configuration
     cat > "$CONFIG_DIR/config.yml" << EOF
 # CIRISManager Configuration
@@ -147,45 +147,45 @@ container_management:
   interval: 60          # Run docker-compose up -d every 60 seconds
   pull_images: true     # Pull latest images before starting
 EOF
-    
+
     log "${GREEN}✓ Configuration created at $CONFIG_DIR/config.yml${NC}"
 }
 
 # Install systemd service
 install_service() {
     log "${YELLOW}Installing systemd service...${NC}"
-    
+
     # Check if service already exists
     if systemctl list-unit-files | grep -q ciris-manager.service; then
         log "${YELLOW}Service already exists${NC}"
         systemctl stop ciris-manager 2>/dev/null || true
     fi
-    
+
     # Copy service file
     cp "$INSTALL_DIR/deployment/ciris-manager.service" "$SERVICE_FILE" || \
         error_exit "Failed to copy service file"
-    
+
     # Update WorkingDirectory in service file
     sed -i "s|WorkingDirectory=.*|WorkingDirectory=$INSTALL_DIR|g" "$SERVICE_FILE"
-    
+
     # Reload systemd
     systemctl daemon-reload
-    
+
     # Enable service
     systemctl enable ciris-manager || error_exit "Failed to enable service"
-    
+
     log "${GREEN}✓ Systemd service installed${NC}"
 }
 
 # Start service
 start_service() {
     log "${YELLOW}Starting CIRISManager service...${NC}"
-    
+
     systemctl start ciris-manager || error_exit "Failed to start service"
-    
+
     # Wait for startup
     sleep 2
-    
+
     # Check status
     if systemctl is-active --quiet ciris-manager; then
         log "${GREEN}✓ CIRISManager is running${NC}"
@@ -199,7 +199,7 @@ show_status() {
     log "\n${GREEN}Installation Complete!${NC}"
     log "\n${YELLOW}Service Status:${NC}"
     systemctl status ciris-manager --no-pager || true
-    
+
     log "\n${YELLOW}Useful Commands:${NC}"
     log "  View logs:         sudo journalctl -u ciris-manager -f"
     log "  Check status:      sudo systemctl status ciris-manager"
@@ -215,7 +215,7 @@ main() {
     log "================================"
     log "Log file: $LOG_FILE"
     echo
-    
+
     check_root
     check_dependencies
     install_manager

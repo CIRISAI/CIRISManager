@@ -13,38 +13,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -e .[dev]
-      
+
       - name: Run linting
         run: |
           ruff check ciris_manager/
           ruff format --check ciris_manager/
-      
+
       - name: Run type checking
         run: |
           mypy ciris_manager/
-      
+
       - name: Run tests
         run: |
           pytest tests/ -v --cov=ciris_manager --cov-report=term-missing
-    
+
   deploy:
     name: Deploy to Production
     needs: ci  # Only deploy if CI passes
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISManager'
     environment: production
-    
+
     steps:
       - name: Deploy CIRISManager
         uses: appleboy/ssh-action@v1.0.0
@@ -54,12 +54,12 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -e
-            
+
             echo "Deploying CIRISManager..."
-            
+
             # Ensure base directory exists
             mkdir -p /opt
-            
+
             # Clone or update repository
             if [ ! -d "/opt/ciris-manager" ]; then
               echo "First time deployment - cloning repository..."
@@ -70,30 +70,30 @@ jobs:
               git fetch origin
               git reset --hard origin/main
             fi
-            
+
             cd /opt/ciris-manager
-            
+
             # Create virtual environment if it doesn't exist
             if [ ! -d "venv" ]; then
               echo "Creating virtual environment..."
               python3 -m venv venv
             fi
-            
+
             # Activate venv and update dependencies
             source venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt
             pip install -e .
-            
+
             # Ensure config directory exists
             mkdir -p /etc/ciris-manager
-            
+
             # Generate default config if it doesn't exist
             if [ ! -f "/etc/ciris-manager/config.yml" ]; then
               echo "Generating default configuration..."
               ciris-manager --generate-config --config /etc/ciris-manager/config.yml
             fi
-            
+
             # Create update script if it doesn't exist
             if [ ! -f "/usr/local/bin/ciris-manager-update" ]; then
               cat > /usr/local/bin/ciris-manager-update << 'SCRIPT'
@@ -108,7 +108,7 @@ jobs:
             SCRIPT
               chmod +x /usr/local/bin/ciris-manager-update
             fi
-            
+
             # Create systemd service if it doesn't exist
             if [ ! -f "/etc/systemd/system/ciris-manager.service" ]; then
               # Copy the proper service file
@@ -116,28 +116,28 @@ jobs:
               systemctl daemon-reload
               systemctl enable ciris-manager
             fi
-            
+
             # Ensure ciris-manager user exists and is in correct groups
             if ! id "ciris-manager" &>/dev/null; then
               useradd -r -s /bin/false -d /var/lib/ciris-manager -c "CIRIS Manager Service" ciris-manager
             fi
-            
+
             # Create ciris group if it doesn't exist
             if ! getent group ciris &>/dev/null; then
               groupadd ciris
             fi
-            
+
             # Add ciris-manager to necessary groups
             usermod -aG docker ciris-manager
             usermod -aG ciris ciris-manager
-            
+
             # Fix permissions on existing nginx directory
             chown -R ciris-manager:ciris /home/ciris/nginx
             chmod 775 /home/ciris/nginx
-            
+
             # Ensure ciris home directory has proper permissions for group access
             chmod 755 /home/ciris
-            
+
             # Deploy nginx container if not running
             if ! docker ps | grep -q ciris-nginx; then
               echo "Deploying nginx container..."
@@ -149,11 +149,11 @@ jobs:
               docker-compose -f docker-compose-production.yml pull nginx
               docker-compose -f docker-compose-production.yml up -d nginx
             fi
-            
+
             # Restart CIRISManager
             echo "Restarting CIRISManager..."
             systemctl restart ciris-manager
-            
+
             # Wait for service to be ready
             echo "Waiting for CIRISManager to be ready..."
             for i in {1..30}; do
@@ -168,9 +168,9 @@ jobs:
               fi
               sleep 2
             done
-            
+
             echo "Deployment complete!"
-            
+
       - name: Verify Deployment
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -181,15 +181,15 @@ jobs:
             # Check service status
             echo "=== Service Status ==="
             systemctl status ciris-manager --no-pager || true
-            
+
             # Check API health
             echo -e "\n=== API Health Check ==="
             curl -s http://localhost:8888/manager/v1/health | jq . || echo "Health check failed"
-            
+
             # Check nginx status
             echo -e "\n=== Nginx Status ==="
             docker ps | grep nginx || echo "Nginx container not running"
-            
+
             # Show recent logs
             echo -e "\n=== Recent Logs ==="
             journalctl -u ciris-manager --no-pager -n 20

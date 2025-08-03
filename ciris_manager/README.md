@@ -146,7 +146,7 @@ python test_ciris_manager_integration.py
 ## Next Phases
 
 - **Phase 2**: API endpoints for agent discovery
-- **Phase 3**: Agent creation with WA signatures  
+- **Phase 3**: Agent creation with WA signatures
 - **Phase 4**: GUI integration
 - **Phase 5**: Local auth for update notifications
 

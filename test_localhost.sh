@@ -32,7 +32,7 @@ log_fail() {
 # Check prerequisites
 check_prerequisites() {
     log_test "Checking prerequisites"
-    
+
     # Python version
     if python3 -c "import sys; exit(0 if sys.version_info >= (3,8) else 1)"; then
         log_pass "Python 3.8+ found"
@@ -40,7 +40,7 @@ check_prerequisites() {
         log_fail "Python 3.8+ required"
         exit 1
     fi
-    
+
     # Docker
     if command -v docker &> /dev/null; then
         log_pass "Docker installed"
@@ -48,7 +48,7 @@ check_prerequisites() {
         log_fail "Docker not found"
         exit 1
     fi
-    
+
     # Docker daemon running
     if docker ps &> /dev/null; then
         log_pass "Docker daemon running"
@@ -61,7 +61,7 @@ check_prerequisites() {
 # Setup test environment
 setup_test_env() {
     log_test "Setting up test environment"
-    
+
     # Create virtual environment
     if [ ! -d "test-env" ]; then
         python3 -m venv test-env
@@ -69,12 +69,12 @@ setup_test_env() {
     else
         log_pass "Virtual environment exists"
     fi
-    
+
     # Activate and install
     source test-env/bin/activate
     pip install -q -e ".[dev]"
     log_pass "Dependencies installed"
-    
+
     # Create test config
     cat > test-config.yml << 'EOF'
 manager:
@@ -92,18 +92,18 @@ api:
   cors_origins: ["http://localhost:3000"]
 EOF
     log_pass "Test configuration created"
-    
+
     export CIRIS_MANAGER_CONFIG=$(pwd)/test-config.yml
 }
 
 # Run unit tests
 run_unit_tests() {
     log_test "Running unit tests"
-    
+
     # Run pytest with coverage
     if pytest tests/ -v --tb=short --cov=ciris_manager --cov-report=term-missing > test-results.log 2>&1; then
         log_pass "All unit tests passed"
-        
+
         # Check coverage
         coverage=$(grep "TOTAL" test-results.log | awk '{print $4}' | sed 's/%//')
         if [ "${coverage%.*}" -ge 70 ]; then
@@ -119,33 +119,33 @@ run_unit_tests() {
 # Test API endpoints
 test_api_endpoints() {
     log_test "Testing API endpoints"
-    
+
     # Start manager service (includes API) in background
     python -m ciris_manager.cli --config test-config.yml > api.log 2>&1 &
     MANAGER_PID=$!
     sleep 5
-    
+
     # Test health endpoint
     if curl -s http://localhost:8888/manager/v1/system/health | grep -q "healthy"; then
         log_pass "Health endpoint working"
     else
         log_fail "Health endpoint not responding"
     fi
-    
+
     # Test agents endpoint
     if curl -s http://localhost:8888/manager/v1/agents | grep -q "agents"; then
         log_pass "Agents endpoint working"
     else
         log_fail "Agents endpoint not responding"
     fi
-    
+
     # Test OpenAPI docs
     if curl -s http://localhost:8888/docs | grep -q "swagger"; then
         log_pass "OpenAPI documentation available"
     else
         log_fail "OpenAPI documentation not found"
     fi
-    
+
     # Stop manager service
     kill $MANAGER_PID 2>/dev/null || true
     wait $MANAGER_PID 2>/dev/null || true
@@ -154,13 +154,13 @@ test_api_endpoints() {
 # Test container management
 test_container_management() {
     log_test "Testing container management"
-    
+
     # Create a test container
     docker run -d --name test-ciris-agent \
         --label ciris.agent=true \
         --label ciris.name=test-agent \
         alpine sleep 3600
-    
+
     # Test discovery
     python -c "
 from ciris_manager.docker_discovery import DockerDiscovery
@@ -174,7 +174,7 @@ async def test():
 result = asyncio.run(test())
 exit(0 if result else 1)
 " && log_pass "Container discovery working" || log_fail "Container discovery failed"
-    
+
     # Cleanup
     docker rm -f test-ciris-agent &>/dev/null || true
 }
@@ -182,7 +182,7 @@ exit(0 if result else 1)
 # Test crash loop detection
 test_crash_loop_detection() {
     log_test "Testing crash loop detection"
-    
+
     python -c "
 from ciris_manager.core.watchdog import CrashLoopWatchdog
 import time
@@ -192,7 +192,7 @@ watchdog = CrashLoopWatchdog(crash_threshold=3, crash_window=10)
 # Simulate crashes
 for _ in range(3):
     watchdog.record_crash('test-container')
-    
+
 if watchdog.is_crash_looping('test-container'):
     exit(0)
 else:
@@ -203,28 +203,28 @@ else:
 # Test port allocation
 test_port_allocation() {
     log_test "Testing port allocation"
-    
+
     python -c "
 from ciris_manager.port_manager import PortManager
 import asyncio
 
 async def test():
     pm = PortManager()
-    
+
     # Allocate port
     port1 = await pm.allocate_port('agent1')
     if not (8100 <= port1 <= 8199):
         return False
-        
+
     # Ensure unique allocation
     port2 = await pm.allocate_port('agent2')
     if port1 == port2:
         return False
-        
+
     # Test deallocation
     await pm.release_port('agent1')
     port3 = await pm.allocate_port('agent3')
-    
+
     return port3 == port1  # Should reuse released port
 
 result = asyncio.run(test())
@@ -235,7 +235,7 @@ exit(0 if result else 1)
 # Test configuration loading
 test_configuration() {
     log_test "Testing configuration loading"
-    
+
     python -c "
 from ciris_manager.config.settings import CIRISManagerConfig
 import os
@@ -253,29 +253,29 @@ else:
 # Performance test
 test_performance() {
     log_test "Testing performance"
-    
+
     # Start manager service for performance test
     python -m ciris_manager.cli --config test-config.yml > perf.log 2>&1 &
     MANAGER_PID=$!
     sleep 5
-    
+
     # Measure response time
     start_time=$(date +%s%N)
     for i in {1..100}; do
         curl -s http://localhost:8888/manager/v1/system/health > /dev/null
     done
     end_time=$(date +%s%N)
-    
+
     # Calculate average response time
     elapsed=$((($end_time - $start_time) / 1000000))
     avg_time=$(($elapsed / 100))
-    
+
     if [ $avg_time -lt 50 ]; then
         log_pass "Average response time: ${avg_time}ms"
     else
         log_fail "Response time too high: ${avg_time}ms"
     fi
-    
+
     # Stop manager service
     kill $MANAGER_PID 2>/dev/null || true
 }
@@ -283,19 +283,19 @@ test_performance() {
 # Integration test
 test_integration() {
     log_test "Running integration test"
-    
+
     # Start full manager
     python -m ciris_manager.cli --config test-config.yml > manager.log 2>&1 &
     MANAGER_PID=$!
     sleep 10
-    
+
     # Check if manager started
     if ps -p $MANAGER_PID > /dev/null; then
         log_pass "Manager started successfully"
     else
         log_fail "Manager failed to start (see manager.log)"
     fi
-    
+
     # Test agent creation (mock)
     export MOCK_LLM=true
     python -c "
@@ -306,7 +306,7 @@ from ciris_manager.config.settings import CIRISManagerConfig
 async def test():
     config = CIRISManagerConfig.from_file('test-config.yml')
     manager = CIRISManager(config)
-    
+
     # Test template verification
     templates = await manager.template_verifier.list_templates()
     return len(templates) > 0
@@ -314,7 +314,7 @@ async def test():
 result = asyncio.run(test())
 exit(0 if result else 1)
 " && log_pass "Template system working" || log_fail "Template system failed"
-    
+
     # Stop manager
     kill $MANAGER_PID 2>/dev/null || true
 }
@@ -325,10 +325,10 @@ generate_report() {
     echo -e "Total Tests: $((PASSED + FAILED))"
     echo -e "${GREEN}Passed: $PASSED${NC}"
     echo -e "${RED}Failed: $FAILED${NC}"
-    
+
     if [ $FAILED -eq 0 ]; then
         echo -e "\n${GREEN}✓ All tests passed! Ready for production deployment.${NC}"
-        
+
         # Generate handoff report
         cat > localhost-test-report.txt << EOF
 CIRISManager Localhost Test Report
@@ -372,16 +372,16 @@ EOF
 # Cleanup function
 cleanup() {
     echo -e "\n${YELLOW}Cleaning up...${NC}"
-    
+
     # Stop any running processes
     kill $MANAGER_PID 2>/dev/null || true
-    
+
     # Remove test containers
     docker rm -f test-ciris-agent 2>/dev/null || true
-    
+
     # Deactivate virtual environment
     deactivate 2>/dev/null || true
-    
+
     echo "Cleanup complete"
 }
 
@@ -392,7 +392,7 @@ trap cleanup EXIT
 main() {
     echo -e "${YELLOW}CIRISManager Localhost Testing Suite${NC}"
     echo "====================================="
-    
+
     check_prerequisites
     setup_test_env
     run_unit_tests

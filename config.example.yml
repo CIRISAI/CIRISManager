@@ -4,7 +4,7 @@
 # Manager settings
 manager:
   host: 127.0.0.1                      # API bind address
-  port: 8888                           # API port  
+  port: 8888                           # API port
   agents_directory: /opt/ciris/agents  # Where agents are created
   templates_directory: ./agent_templates  # Agent templates location
   manifest_path: ./pre-approved-templates.json  # Pre-approved templates

@@ -110,11 +110,11 @@ from locust import HttpUser, task, between
 
 class ManagerUser(HttpUser):
     wait_time = between(1, 3)
-    
+
     @task
     def list_agents(self):
         self.client.get("/manager/v1/agents")
-    
+
     @task
     def check_health(self):
         self.client.get("/manager/v1/system/health")
@@ -267,10 +267,10 @@ sudo systemctl start ciris-manager
    ```bash
    # Check logs
    journalctl -xe -u ciris-manager
-   
+
    # Verify Docker access
    docker ps
-   
+
    # Check permissions
    ls -la /var/run/docker.sock
    ```
@@ -279,7 +279,7 @@ sudo systemctl start ciris-manager
    ```bash
    # Verify OAuth config
    cat /etc/ciris-manager/oauth_config.json
-   
+
    # Test OAuth endpoint
    curl https://accounts.google.com/.well-known/openid-configuration
    ```
@@ -288,10 +288,10 @@ sudo systemctl start ciris-manager
    ```bash
    # Check available ports
    netstat -tuln | grep 81
-   
+
    # Verify templates
    ls -la /opt/ciris-agents/templates/
-   
+
    # Check disk space
    df -h /opt/ciris-agents
    ```
@@ -355,10 +355,10 @@ def monitor_api_health():
         start = time.time()
         response = httpx.get("http://localhost:8888/manager/v1/system/health")
         latency = time.time() - start
-        
+
         if latency > 1.0:
             alert("API response slow", latency)
-        
+
         time.sleep(60)
 ```
 

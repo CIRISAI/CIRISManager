@@ -44,11 +44,11 @@ mkdir -p config
 if [ ! -f "config/dev.yml" ]; then
     # Generate development config
     python -m ciris_manager.cli --generate-config --config config/dev.yml
-    
+
     # Adjust for local development
     sed -i 's|port: 9999|port: 8888|' config/dev.yml
     sed -i 's|/home/ciris/CIRISAgent/deployment/docker-compose.yml|./docker-compose.yml|' config/dev.yml
-    
+
     log "Development configuration created at config/dev.yml"
 else
     log "Development configuration already exists"
