@@ -35,26 +35,27 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
 
-  # Type checking (optional - can be slow)
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.11.2
-  #   hooks:
-  #     - id: mypy
-  #       additional_dependencies: [types-PyYAML, types-requests]
-  #       args: [--ignore-missing-imports]
+  # Type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-PyYAML, types-requests, types-aiofiles]
+        args: [--ignore-missing-imports]
+        files: ^ciris_manager/
 
   # Security checks
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.10
     hooks:
       - id: bandit
-        args: [-r, ciris_manager/, --skip, B101]
+        args: [--skip, B101]
         exclude: tests/
 
   # Markdown formatting
-  - repo: https://github.com/prettier/pre-commit
-    rev: v4.0.0-alpha.8
-    hooks:
-      - id: prettier
-        types_or: [markdown, yaml, json]
-        exclude: ^frontend/
+  # - repo: https://github.com/prettier/pre-commit
+  #   rev: v4.0.0-alpha.8
+  #   hooks:
+  #     - id: prettier
+  #       types_or: [markdown, yaml, json]
+  #       exclude: ^frontend/

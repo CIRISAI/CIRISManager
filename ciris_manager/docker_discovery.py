@@ -94,6 +94,7 @@ class DockerAgentDiscovery:
                 api_port=int(api_port) if api_port else None,
                 status=container.status,
                 image=config.get("Image"),
+                oauth_status=None,  # OAuth status tracked separately in metadata
             )
 
         except Exception as e:
