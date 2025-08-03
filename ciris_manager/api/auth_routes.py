@@ -27,10 +27,8 @@ logger = logging.getLogger(__name__)
 _auth_service: Optional[AuthService] = None
 
 
-def get_auth_service() -> AuthService:
+def get_auth_service() -> Optional[AuthService]:
     """Get auth service dependency."""
-    if _auth_service is None:
-        raise RuntimeError("Auth service not initialized")
     return _auth_service
 
 
