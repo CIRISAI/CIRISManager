@@ -7,8 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .tab-active { 
-            border-bottom: 2px solid #3b82f6; 
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
             color: #3b82f6;
         }
         .loader {
@@ -252,7 +252,7 @@
             <div class="p-6">
                 <h2 class="text-2xl font-bold mb-2">OAuth Setup Required</h2>
                 <p class="text-gray-600 mb-6">This agent needs OAuth configuration. Follow these steps to enable authentication:</p>
-                
+
                 <!-- Agent Info -->
                 <div class="bg-gray-50 p-4 rounded-lg mb-6">
                     <div class="flex justify-between items-center">
@@ -282,10 +282,10 @@
                             <div>
                                 <label class="text-sm text-gray-600">Callback URL:</label>
                                 <div class="flex gap-2 mt-1">
-                                    <input type="text" readonly id="google-callback-url" 
+                                    <input type="text" readonly id="google-callback-url"
                                            class="flex-1 p-2 bg-gray-50 border rounded font-mono text-sm"
                                            value="https://agents.ciris.ai/v1/auth/oauth/agent-name/google/callback">
-                                    <button onclick="copyToClipboard('google-callback-url')" 
+                                    <button onclick="copyToClipboard('google-callback-url')"
                                             class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2">
                                         <i class="fas fa-copy"></i>
                                         Copy
@@ -295,6 +295,19 @@
                             <div class="bg-blue-50 p-3 rounded text-sm">
                                 <i class="fas fa-info-circle text-blue-600 mr-2"></i>
                                 Add this URL to your Google Cloud Console OAuth 2.0 Client under "Authorized redirect URIs"
+                            </div>
+                            <div class="mt-3">
+                                <label class="text-sm text-gray-600 font-semibold">Configuration:</label>
+                                <div class="bg-amber-50 p-3 rounded text-sm mt-2">
+                                    <i class="fas fa-file-code text-amber-600 mr-2"></i>
+                                    Add credentials to <code class="font-mono text-xs">/home/ciris/shared/oauth/oauth.json</code>:
+                                    <pre class="mt-2 p-2 bg-white rounded text-xs overflow-x-auto">{
+  "google": {
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_SECRET"
+  }
+}</pre>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -312,14 +325,31 @@
                             <div>
                                 <label class="text-sm text-gray-600">Callback URL:</label>
                                 <div class="flex gap-2 mt-1">
-                                    <input type="text" readonly id="github-callback-url" 
+                                    <input type="text" readonly id="github-callback-url"
                                            class="flex-1 p-2 bg-gray-50 border rounded font-mono text-sm"
                                            value="https://agents.ciris.ai/v1/auth/oauth/agent-name/github/callback">
-                                    <button onclick="copyToClipboard('github-callback-url')" 
+                                    <button onclick="copyToClipboard('github-callback-url')"
                                             class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2">
                                         <i class="fas fa-copy"></i>
                                         Copy
                                     </button>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 p-3 rounded text-sm">
+                                <i class="fas fa-info-circle text-gray-600 mr-2"></i>
+                                Add this URL to your GitHub OAuth App settings under "Authorization callback URL"
+                            </div>
+                            <div class="mt-3">
+                                <label class="text-sm text-gray-600 font-semibold">Configuration:</label>
+                                <div class="bg-amber-50 p-3 rounded text-sm mt-2">
+                                    <i class="fas fa-file-code text-amber-600 mr-2"></i>
+                                    Add credentials to <code class="font-mono text-xs">/home/ciris/shared/oauth/oauth.json</code>:
+                                    <pre class="mt-2 p-2 bg-white rounded text-xs overflow-x-auto">{
+  "github": {
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_SECRET"
+  }
+}</pre>
                                 </div>
                             </div>
                         </div>
@@ -338,18 +368,58 @@
                             <div>
                                 <label class="text-sm text-gray-600">Callback URL:</label>
                                 <div class="flex gap-2 mt-1">
-                                    <input type="text" readonly id="discord-callback-url" 
+                                    <input type="text" readonly id="discord-callback-url"
                                            class="flex-1 p-2 bg-gray-50 border rounded font-mono text-sm"
                                            value="https://agents.ciris.ai/v1/auth/oauth/agent-name/discord/callback">
-                                    <button onclick="copyToClipboard('discord-callback-url')" 
+                                    <button onclick="copyToClipboard('discord-callback-url')"
                                             class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2">
                                         <i class="fas fa-copy"></i>
                                         Copy
                                     </button>
                                 </div>
                             </div>
+                            <div class="bg-purple-50 p-3 rounded text-sm">
+                                <i class="fas fa-info-circle text-purple-600 mr-2"></i>
+                                Add this URL to your Discord Application OAuth2 settings under "Redirects"
+                            </div>
+                            <div class="mt-3">
+                                <label class="text-sm text-gray-600 font-semibold">Configuration:</label>
+                                <div class="bg-amber-50 p-3 rounded text-sm mt-2">
+                                    <i class="fas fa-file-code text-amber-600 mr-2"></i>
+                                    Add credentials to <code class="font-mono text-xs">/home/ciris/shared/oauth/oauth.json</code>:
+                                    <pre class="mt-2 p-2 bg-white rounded text-xs overflow-x-auto">{
+  "discord": {
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_SECRET"
+  }
+}</pre>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Agent Environment Variables -->
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4 mt-6">
+                    <h4 class="font-semibold mb-2 flex items-center gap-2">
+                        <i class="fas fa-cogs text-green-600"></i>
+                        Agent Environment Variables
+                    </h4>
+                    <p class="text-sm text-gray-700 mb-3">Each agent needs these environment variables:</p>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between p-2 bg-white rounded">
+                            <code class="text-sm font-mono">OAUTH_CALLBACK_BASE_URL</code>
+                            <span class="text-xs text-gray-500">https://agents.ciris.ai</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 bg-white rounded">
+                            <code class="text-sm font-mono">CIRIS_AGENT_ID</code>
+                            <span class="text-xs text-gray-500" id="agent-id-example">agent_name</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-600 mt-3">
+                        <i class="fas fa-info-circle"></i>
+                        OAuth credentials are shared across all agents via the mounted config file
+                    </p>
                 </div>
 
                 <!-- Quick Actions -->
@@ -359,10 +429,6 @@
                         Quick Actions
                     </h4>
                     <div class="flex gap-3">
-                        <button onclick="notifyEric()" class="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 flex items-center gap-2">
-                            <i class="fas fa-paper-plane"></i>
-                            Notify Eric
-                        </button>
                         <button onclick="verifyOAuth()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2">
                             <i class="fas fa-check-circle"></i>
                             Verify Setup
