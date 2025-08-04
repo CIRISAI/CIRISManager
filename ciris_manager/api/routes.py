@@ -132,7 +132,7 @@ def create_routes(manager: Any) -> APIRouter:
         return {"id": "github-actions", "email": "cd@ciris.ai", "name": "GitHub Actions CD"}
 
     # Manager UI Routes - Protected by OAuth
-    @router.get("/")
+    @router.get("/", response_model=None)
     async def manager_home(
         request: Request, authorization: Optional[str] = Header(None)
     ) -> Union[FileResponse, RedirectResponse]:
@@ -155,7 +155,7 @@ def create_routes(manager: Any) -> APIRouter:
 
         return FileResponse(static_path)
 
-    @router.get("/manager.js")
+    @router.get("/manager.js", response_model=None)
     async def manager_js(
         request: Request, authorization: Optional[str] = Header(None)
     ) -> Union[FileResponse, RedirectResponse]:
