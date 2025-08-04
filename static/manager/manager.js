@@ -1,9 +1,11 @@
 // CIRIS Manager Client - Based on Tyler's original work
 // Using vanilla JavaScript and AJAX instead of React
 
+const API_BASE = '/manager/v1';
 let agents = [];
 let templates = null;
 let managerStatus = null;
+let refreshInterval = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -12,9 +14,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         await fetchData();
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
+
+        // Start auto-refresh every 5 seconds
+        refreshInterval = setInterval(fetchData, 5000);
     } catch (error) {
         if (error.message.includes('401')) {
-            window.location.href = '/manager/oauth/login';
+            window.location.href = '/manager/v1/oauth/login';
         } else {
             showError(error.message);
         }
@@ -604,9 +609,9 @@ async function copyToClipboard(elementId) {
 }
 
 // Notify Eric about OAuth setup request
-async function notifyEric() {
+async function notifyEric(event) {
     const agentId = document.getElementById('oauth-agent-id').textContent;
-    const button = event.target.closest('button');
+    const button = event.currentTarget;
     const originalHTML = button.innerHTML;
 
     try {
@@ -651,9 +656,9 @@ async function notifyEric() {
 }
 
 // Verify OAuth setup
-async function verifyOAuth() {
+async function verifyOAuth(event) {
     const agentId = document.getElementById('oauth-agent-id').textContent;
-    const button = event.target.closest('button');
+    const button = event.currentTarget;
     const originalHTML = button.innerHTML;
 
     try {
