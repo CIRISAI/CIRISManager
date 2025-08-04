@@ -4,10 +4,10 @@ API routes for CIRISManager v2 with pre-approved template support.
 Provides endpoints for agent creation, discovery, and management.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Header, Response
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Depends, Header, Response, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 import logging
 import os
 from pathlib import Path
@@ -133,8 +133,17 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Manager UI Routes - Protected by OAuth
     @router.get("/")
-    async def manager_home(user: dict = auth_dependency) -> FileResponse:
+    async def manager_home(
+        request: Request, authorization: Optional[str] = Header(None)
+    ) -> Union[FileResponse, RedirectResponse]:
         """Serve manager dashboard for @ciris.ai users."""
+        # Check authentication
+        try:
+            user = get_current_user(request, authorization)
+        except HTTPException:
+            # Not authenticated - redirect to OAuth login
+            return RedirectResponse(url="/manager/v1/oauth/login", status_code=303)
+
         # In production mode, check for @ciris.ai email
         if auth_mode == "production" and not user.get("email", "").endswith("@ciris.ai"):
             raise HTTPException(status_code=403, detail="Access restricted to @ciris.ai users")
@@ -147,8 +156,17 @@ def create_routes(manager: Any) -> APIRouter:
         return FileResponse(static_path)
 
     @router.get("/manager.js")
-    async def manager_js(user: dict = auth_dependency) -> FileResponse:
+    async def manager_js(
+        request: Request, authorization: Optional[str] = Header(None)
+    ) -> Union[FileResponse, RedirectResponse]:
         """Serve manager JavaScript."""
+        # Check authentication
+        try:
+            user = get_current_user(request, authorization)
+        except HTTPException:
+            # Not authenticated - redirect to OAuth login
+            return RedirectResponse(url="/manager/v1/oauth/login", status_code=303)
+
         if auth_mode == "production" and not user.get("email", "").endswith("@ciris.ai"):
             raise HTTPException(status_code=403, detail="Access restricted to @ciris.ai users")
 
@@ -207,11 +225,11 @@ def create_routes(manager: Any) -> APIRouter:
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('token');
-        
+
         if (token) {
             // Store token in localStorage
             localStorage.setItem('managerToken', token);
-            
+
             // Redirect to manager dashboard
             window.location.href = '/manager/';
         } else {

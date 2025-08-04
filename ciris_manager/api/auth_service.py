@@ -23,7 +23,7 @@ class TokenResponse:
 
     def __init__(self, access_token: str, user: OAuthUser):
         self.access_token = access_token
-        self.token_type = "Bearer"
+        self.token_type = "Bearer"  # nosec B105 - Not a password, OAuth standard
         self.expires_in = 86400  # 24 hours
         self.user = user.model_dump()
 
@@ -271,7 +271,7 @@ class AuthService:
         expire = datetime.now(timezone.utc) + timedelta(hours=self.jwt_expiration_hours)
         to_encode.update({"exp": expire})
 
-        return jwt.encode(to_encode, self.jwt_secret, algorithm=self.jwt_algorithm)
+        return str(jwt.encode(to_encode, self.jwt_secret, algorithm=self.jwt_algorithm))
 
     def verify_jwt_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Verify JWT token."""
@@ -314,7 +314,7 @@ class MockOAuthProvider:
     async def exchange_code_for_token(self, code: str, redirect_uri: str) -> OAuthToken:
         """Return mock token."""
         return OAuthToken(
-            access_token="mock-oauth-token",
+            access_token="mock-oauth-token",  # nosec B106 - Mock token for testing
             token_type="Bearer",
             expires_in=3600,
         )
