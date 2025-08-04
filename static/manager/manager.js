@@ -196,8 +196,8 @@ function hideCreateDialog() {
     document.getElementById('wa-signature-field').classList.add('hidden');
 }
 
-// Check if template needs approval
-function checkTemplateApproval() {
+// Check if template needs approval and load template defaults
+async function checkTemplateApproval() {
     const template = document.getElementById('template-select').value;
     const waField = document.getElementById('wa-signature-field');
 
@@ -208,7 +208,61 @@ function checkTemplateApproval() {
         } else {
             waField.classList.remove('hidden');
         }
+
+        // Load template default environment variables
+        await loadTemplateDefaults(template);
     }
+}
+
+// Load template default environment variables
+async function loadTemplateDefaults(templateName) {
+    // Clear existing env vars
+    const container = document.getElementById('env-vars-container');
+    container.innerHTML = '';
+
+    // Define default environment variables for each template
+    const templateDefaults = {
+        'scout': {
+            'OPENAI_API_KEY': '',
+            'CIRIS_AGENT_NAME': 'scout',
+            'CIRIS_API_PORT': '8080'
+        },
+        'sage': {
+            'OPENAI_API_KEY': '',
+            'CIRIS_AGENT_NAME': 'sage',
+            'CIRIS_API_PORT': '8080'
+        },
+        'echo': {
+            'CIRIS_AGENT_NAME': 'echo',
+            'CIRIS_API_PORT': '8080'
+        },
+        'test': {
+            'CIRIS_AGENT_NAME': 'test',
+            'CIRIS_API_PORT': '8080',
+            'CIRIS_MOCK_LLM': 'true'
+        }
+    };
+
+    // Get defaults for this template
+    const defaults = templateDefaults[templateName] || {
+        'OPENAI_API_KEY': '',
+        'CIRIS_AGENT_NAME': templateName,
+        'CIRIS_API_PORT': '8080'
+    };
+
+    // Add env var rows with defaults
+    Object.entries(defaults).forEach(([key, value]) => {
+        const newRow = document.createElement('div');
+        newRow.className = 'flex gap-2';
+        newRow.innerHTML = `
+            <input type="text" placeholder="Key" value="${key}" class="flex-1 p-2 border rounded-lg env-key">
+            <input type="text" placeholder="Value" value="${value}" class="flex-1 p-2 border rounded-lg env-value">
+            <button type="button" onclick="this.parentElement.remove()" class="px-3 py-2 bg-red-100 rounded-lg hover:bg-red-200">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        container.appendChild(newRow);
+    });
 }
 
 // Add environment variable row
@@ -454,13 +508,15 @@ async function logout() {
         });
 
         if (response.ok) {
-            // Redirect to manager root
-            window.location.href = '/manager/';
+            // Redirect to main login page
+            window.location.href = '/';
         } else {
             console.error('Logout failed:', response.status);
+            showError('Failed to logout. Please try again.');
         }
     } catch (error) {
         console.error('Logout error:', error);
+        showError('Failed to logout. Please try again.');
     }
 }
 
