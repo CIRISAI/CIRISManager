@@ -95,6 +95,7 @@ class DockerAgentDiscovery:
                 status=container.status,
                 image=config.get("Image"),
                 oauth_status=None,  # OAuth status tracked separately in metadata
+                service_token=None,  # Service tokens are in agent registry, not containers
             )
 
         except Exception as e:
