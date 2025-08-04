@@ -361,25 +361,53 @@ class DeploymentOrchestrator:
 
             # Call agent's graceful shutdown endpoint
             async with httpx.AsyncClient() as client:
+                # Use shutdown endpoint instead of non-existent update endpoint
+                shutdown_payload = {
+                    "reason": f"CD update to {notification.version} (deployment {deployment_id})",
+                    "force": False,
+                    "confirm": True
+                }
+                
+                # Use agent's service token for authentication
+                # Get token from agent registry
+                service_token = None
+                if self.manager:
+                    registry_agent = self.manager.agent_registry.get_agent(agent.agent_id)
+                    if registry_agent and registry_agent.service_token:
+                        service_token = registry_agent.service_token
+                
+                if service_token:
+                    # Use service token authentication
+                    headers = {
+                        "Authorization": f"Bearer service:{service_token}"
+                    }
+                else:
+                    # Fallback to default admin credentials for legacy agents
+                    logger.warning(f"No service token for agent {agent.agent_id}, using default credentials")
+                    headers = {
+                        "Authorization": "Bearer admin:ciris_admin_password"
+                    }
+                
                 response = await client.post(
-                    f"http://localhost:{agent.api_port}/v1/system/update",
-                    json=update_payload,
+                    f"http://localhost:{agent.api_port}/v1/system/shutdown",
+                    json=shutdown_payload,
+                    headers=headers,
                     timeout=30.0,
                 )
 
                 if response.status_code == 200:
-                    data = response.json()
-                    decision = data.get("decision", "accept")
-
-                    # If agent accepted the update, update its metadata with new image digests
-                    if decision == "accept" and self.manager:
+                    # Successful shutdown means agent accepts update
+                    logger.info(f"Agent {agent.agent_id} accepted shutdown for update")
+                    
+                    # Update agent metadata with new image digests
+                    if self.manager:
                         await self._update_agent_metadata(agent.agent_id, notification)
 
                     return AgentUpdateResponse(
                         agent_id=agent.agent_id,
-                        decision=decision,
-                        reason=data.get("reason"),
-                        ready_at=data.get("ready_at"),
+                        decision="accept",
+                        reason="Graceful shutdown initiated",
+                        ready_at=None,
                     )
                 else:
                     return AgentUpdateResponse(

@@ -180,11 +180,20 @@ class CIRISManager:
 
         # Allocate port
         allocated_port = self.port_manager.allocate_port(agent_id)
+        
+        # Generate service token for secure manager-to-agent communication
+        service_token = self._generate_service_token()
+        logger.info(f"Generated service token for agent {agent_id}")
 
         # Create agent directory using agent_id (no spaces!)
         agent_dir = self.agents_dir / agent_id
         agent_dir.mkdir(parents=True, exist_ok=True)
 
+        # Add service token to environment for agent
+        if environment is None:
+            environment = {}
+        environment["CIRIS_SERVICE_TOKEN"] = service_token
+        
         # Generate docker-compose.yml
         compose_config = self.compose_generator.generate_compose(
             agent_id=agent_id,
@@ -207,6 +216,7 @@ class CIRISManager:
             port=allocated_port,
             template=template,
             compose_file=str(compose_path),
+            service_token=service_token,
         )
 
         # Update nginx routing (no conditional needed - handled by manager type)
@@ -516,6 +526,19 @@ class CIRISManager:
             6-character lowercase string safe for URLs
         """
         return "".join(secrets.choice(self.SAFE_CHARS) for _ in range(6))
+    
+    def _generate_service_token(self) -> str:
+        """
+        Generate a secure service account token for agent authentication.
+        
+        Uses cryptographically secure random generation to create a 32-byte token.
+        The token is URL-safe base64 encoded for easy transmission.
+        
+        Returns:
+            URL-safe base64 encoded token (43 characters)
+        """
+        # Generate 32 bytes of random data (256 bits of entropy)
+        return secrets.token_urlsafe(32)
 
     async def _run_initial_cleanup(self) -> None:
         """Run initial Docker image cleanup on startup."""

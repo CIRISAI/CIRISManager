@@ -20,6 +20,9 @@ class AgentInfo(BaseModel):
     oauth_status: Optional[str] = Field(
         None, description="OAuth configuration status: pending, configured, verified"
     )
+    service_token: Optional[str] = Field(
+        None, description="Service account token for manager-to-agent authentication"
+    )
 
     # Computed properties for common access patterns
     @property

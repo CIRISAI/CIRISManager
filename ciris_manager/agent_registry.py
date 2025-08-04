@@ -123,7 +123,8 @@ class AgentRegistry:
             logger.error(f"Failed to save metadata: {e}")
 
     def register_agent(
-        self, agent_id: str, name: str, port: int, template: str, compose_file: str
+        self, agent_id: str, name: str, port: int, template: str, compose_file: str,
+        service_token: Optional[str] = None
     ) -> AgentInfo:
         """
         Register a new agent.
@@ -145,6 +146,7 @@ class AgentRegistry:
                 port=port,
                 template=template,
                 compose_file=compose_file,
+                service_token=service_token,
             )
 
             self.agents[agent_id] = agent
