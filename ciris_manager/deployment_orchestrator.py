@@ -416,8 +416,6 @@ class DeploymentOrchestrator:
         logger.info(f"Starting update for agent {agent.agent_id} in deployment {deployment_id}")
 
         try:
-            # Get deployment status for peer results
-            status = self.deployments.get(deployment_id)
             # peer_results tracking removed - using shutdown endpoint instead of update endpoint
 
             # Build enhanced notification (for future use when agents support update endpoint)
