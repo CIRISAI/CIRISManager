@@ -332,11 +332,31 @@ class CIRISManager:
         """Start the FastAPI server for CIRISManager API."""
         try:
             from fastapi import FastAPI
+            from fastapi.responses import JSONResponse
             import uvicorn
+            from typing import Union
             from .api.routes import create_routes
             from .api.auth import create_auth_routes, load_oauth_config
 
             app = FastAPI(title="CIRISManager API", version="1.0.0")
+
+            # Add exception handler for 401 errors to redirect browsers to login
+            from fastapi import Request, HTTPException
+            from fastapi.responses import RedirectResponse
+
+            @app.exception_handler(HTTPException)
+            async def auth_exception_handler(
+                request: Request, exc: HTTPException
+            ) -> Union[RedirectResponse, JSONResponse]:
+                # If it's a 401 error and the request accepts HTML, redirect to login
+                if exc.status_code == 401:
+                    accept_header = request.headers.get("accept", "")
+                    if "text/html" in accept_header:
+                        # Browser request - redirect to login
+                        return RedirectResponse(url="/", status_code=302)
+                # Otherwise return normal JSON error
+
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
             # Create routes with manager instance
             router = create_routes(self)
@@ -355,7 +375,6 @@ class CIRISManager:
 
             # Add OAuth callback redirect for Google Console compatibility
             from fastapi import Request
-            from fastapi.responses import RedirectResponse
 
             @app.get("/manager/oauth/callback")
             async def oauth_callback_compat(request: Request) -> RedirectResponse:
