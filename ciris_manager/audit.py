@@ -135,15 +135,20 @@ def setup_audit_logging(log_dir: Optional[Path] = None) -> None:
     if log_dir is None:
         log_dir = Path("/var/log/ciris-manager")
 
-    log_dir.mkdir(parents=True, exist_ok=True)
-    audit_file = log_dir / "security-audit.log"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        audit_file = log_dir / "security-audit.log"
 
-    # Configure audit logger
-    handler = logging.FileHandler(audit_file)
-    handler.setFormatter(logging.Formatter("%(message)s"))  # JSON format
+        # Configure audit logger
+        handler = logging.FileHandler(audit_file)
+        handler.setFormatter(logging.Formatter("%(message)s"))  # JSON format
 
-    audit_logger.addHandler(handler)
-    audit_logger.setLevel(logging.INFO)
-    audit_logger.propagate = False  # Don't send to root logger
+        audit_logger.addHandler(handler)
+        audit_logger.setLevel(logging.INFO)
+        audit_logger.propagate = False  # Don't send to root logger
 
-    logger.info(f"Security audit logging configured: {audit_file}")
+        logger.info(f"Security audit logging configured: {audit_file}")
+    except PermissionError:
+        logger.warning(f"Cannot create audit log directory {log_dir} - audit logging disabled")
+    except Exception as e:
+        logger.error(f"Failed to setup audit logging: {e}")
