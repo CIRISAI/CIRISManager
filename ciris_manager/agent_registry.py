@@ -27,6 +27,7 @@ class AgentInfo:
         created_at: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         oauth_status: Optional[str] = None,
+        service_token: Optional[str] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -36,6 +37,7 @@ class AgentInfo:
         self.created_at = created_at or datetime.now(timezone.utc).isoformat()
         self.metadata = metadata or {}
         self.oauth_status = oauth_status
+        self.service_token = service_token
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -47,6 +49,7 @@ class AgentInfo:
             "created_at": self.created_at,
             "metadata": self.metadata,
             "oauth_status": self.oauth_status,
+            "service_token": self.service_token,
         }
 
     @classmethod
@@ -61,6 +64,7 @@ class AgentInfo:
             created_at=data.get("created_at"),
             metadata=data.get("metadata", {}),
             oauth_status=data.get("oauth_status"),
+            service_token=data.get("service_token"),
         )
 
 
@@ -123,8 +127,13 @@ class AgentRegistry:
             logger.error(f"Failed to save metadata: {e}")
 
     def register_agent(
-        self, agent_id: str, name: str, port: int, template: str, compose_file: str,
-        service_token: Optional[str] = None
+        self,
+        agent_id: str,
+        name: str,
+        port: int,
+        template: str,
+        compose_file: str,
+        service_token: Optional[str] = None,
     ) -> AgentInfo:
         """
         Register a new agent.
@@ -148,6 +157,8 @@ class AgentRegistry:
                 compose_file=compose_file,
                 service_token=service_token,
             )
+
+            agent.service_token = service_token
 
             self.agents[agent_id] = agent
             self._save_metadata()

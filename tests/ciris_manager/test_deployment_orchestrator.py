@@ -174,7 +174,7 @@ class TestDeploymentOrchestrator:
 
     @pytest.mark.asyncio
     async def test_agent_update_defer(self, orchestrator):
-        """Test agent deferring update."""
+        """Test agent rejecting update via non-200 response."""
         agent = AgentInfo(
             agent_id="busy-agent",
             agent_name="Busy",
@@ -191,12 +191,9 @@ class TestDeploymentOrchestrator:
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                "decision": "defer",
-                "reason": "Processing important task",
-                "ready_at": "2024-01-01T12:00:00Z",
-            }
+            # Non-200 response means agent rejects shutdown
+            mock_response.status_code = 503
+            mock_response.text = "Service busy, cannot shutdown now"
             mock_client.post.return_value = mock_response
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
@@ -205,9 +202,9 @@ class TestDeploymentOrchestrator:
             )
 
             assert response.agent_id == "busy-agent"
-            assert response.decision == "defer"
-            assert response.reason == "Processing important task"
-            assert response.ready_at == "2024-01-01T12:00:00Z"
+            assert response.decision == "reject"
+            assert response.reason == "HTTP 503"
+            assert response.ready_at is None
 
     @pytest.mark.asyncio
     async def test_agent_unreachable(self, orchestrator):

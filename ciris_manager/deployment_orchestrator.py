@@ -149,6 +149,10 @@ class DeploymentOrchestrator:
                     f"Agent {agent.agent_name} needs update: "
                     f"agent_changed={agent_changed}, gui_changed={gui_changed}"
                 )
+                if agent_changed:
+                    logger.debug(f"  Agent image: {current_agent_digest} -> {new_agent_digest}")
+                if gui_changed:
+                    logger.debug(f"  GUI image: {current_gui_digest} -> {new_gui_digest}")
                 agents_needing_update.append(agent)
             else:
                 logger.info(f"Agent {agent.agent_name} is up to date")
@@ -179,6 +183,23 @@ class DeploymentOrchestrator:
             notification: Update notification
             agents: List of agents to update
         """
+        from ciris_manager.audit import audit_deployment_action
+
+        logger.info(
+            f"Starting deployment {deployment_id} with strategy '{notification.strategy}' "
+            f"for {len(agents)} agents. Version: {notification.version}"
+        )
+        audit_deployment_action(
+            deployment_id=deployment_id,
+            action="deployment_started",
+            details={
+                "strategy": notification.strategy,
+                "agent_count": len(agents),
+                "version": notification.version,
+                "message": notification.message,
+            },
+        )
+
         try:
             status = self.deployments[deployment_id]
 
@@ -191,7 +212,13 @@ class DeploymentOrchestrator:
                 status.status = "failed"
 
         except Exception as e:
-            logger.error(f"Deployment {deployment_id} failed: {e}")
+            logger.error(f"Deployment {deployment_id} failed: {e}", exc_info=True)
+            audit_deployment_action(
+                deployment_id=deployment_id,
+                action="deployment_failed",
+                success=False,
+                details={"error": str(e), "error_type": type(e).__name__},
+            )
             deployment_status = self.deployments.get(deployment_id)
             if deployment_status:
                 deployment_status.status = "failed"
@@ -206,6 +233,30 @@ class DeploymentOrchestrator:
             if deployment_status and deployment_status.status == "in_progress":
                 deployment_status.status = "completed"
                 deployment_status.completed_at = datetime.now(timezone.utc).isoformat()
+
+                # Log deployment completion with summary
+                logger.info(
+                    f"Deployment {deployment_id} completed. "
+                    f"Updated: {deployment_status.agents_updated}, "
+                    f"Deferred: {deployment_status.agents_deferred}, "
+                    f"Failed: {deployment_status.agents_failed}"
+                )
+                audit_deployment_action(
+                    deployment_id=deployment_id,
+                    action="deployment_completed",
+                    success=True,
+                    details={
+                        "agents_updated": deployment_status.agents_updated,
+                        "agents_deferred": deployment_status.agents_deferred,
+                        "agents_failed": deployment_status.agents_failed,
+                        "duration_seconds": (
+                            datetime.now(timezone.utc)
+                            - datetime.fromisoformat(
+                                deployment_status.started_at.replace("Z", "+00:00")
+                            )
+                        ).total_seconds(),
+                    },
+                )
 
     async def _run_canary_deployment(
         self,
@@ -239,8 +290,18 @@ class DeploymentOrchestrator:
         general = running_agents[explorer_count + early_adopter_count :]
 
         # Phase 1: Explorers
+        from ciris_manager.audit import audit_deployment_action
+
         status.canary_phase = "explorers"
         status.message = f"Updating {len(explorers)} explorer agents"
+        logger.info(
+            f"Deployment {deployment_id}: Starting explorer phase with {len(explorers)} agents"
+        )
+        audit_deployment_action(
+            deployment_id=deployment_id,
+            action="canary_phase_started",
+            details={"phase": "explorers", "agent_count": len(explorers)},
+        )
         await self._update_agent_group(deployment_id, notification, explorers)
 
         # Wait and check health
@@ -249,6 +310,14 @@ class DeploymentOrchestrator:
         # Phase 2: Early Adopters
         status.canary_phase = "early_adopters"
         status.message = f"Updating {len(early_adopters)} early adopter agents"
+        logger.info(
+            f"Deployment {deployment_id}: Starting early adopter phase with {len(early_adopters)} agents"
+        )
+        audit_deployment_action(
+            deployment_id=deployment_id,
+            action="canary_phase_started",
+            details={"phase": "early_adopters", "agent_count": len(early_adopters)},
+        )
         await self._update_agent_group(deployment_id, notification, early_adopters)
 
         # Wait and check health
@@ -257,6 +326,14 @@ class DeploymentOrchestrator:
         # Phase 3: General Population
         status.canary_phase = "general"
         status.message = f"Updating {len(general)} general agents"
+        logger.info(
+            f"Deployment {deployment_id}: Starting general phase with {len(general)} agents"
+        )
+        audit_deployment_action(
+            deployment_id=deployment_id,
+            action="canary_phase_started",
+            details={"phase": "general", "agent_count": len(general)},
+        )
         await self._update_agent_group(deployment_id, notification, general)
 
     async def _run_immediate_deployment(
@@ -334,30 +411,26 @@ class DeploymentOrchestrator:
         Returns:
             Agent update response
         """
+        from ciris_manager.audit import audit_deployment_action, audit_service_token_use
+
+        logger.info(f"Starting update for agent {agent.agent_id} in deployment {deployment_id}")
+
         try:
             # Get deployment status for peer results
             status = self.deployments.get(deployment_id)
-            peer_results = ""
-            if status:
-                total_attempted = (
-                    status.agents_updated + status.agents_deferred + status.agents_failed
-                )
-                if total_attempted > 0:
-                    peer_results = (
-                        f"{status.agents_updated}/{total_attempted} peers updated successfully"
-                    )
+            # peer_results tracking removed - using shutdown endpoint instead of update endpoint
 
-            # Build enhanced notification
-            update_payload = {
-                "new_image": notification.agent_image,
-                "message": notification.message,
-                "deployment_id": deployment_id,
-                "version": notification.version,
-                "changelog": notification.changelog or notification.message,
-                "risk_level": notification.risk_level,
-                "peer_results": peer_results,
-                "commit_sha": notification.commit_sha,
-            }
+            # Build enhanced notification (for future use when agents support update endpoint)
+            # update_payload = {
+            #     "new_image": notification.agent_image,
+            #     "message": notification.message,
+            #     "deployment_id": deployment_id,
+            #     "version": notification.version,
+            #     "changelog": notification.changelog or notification.message,
+            #     "risk_level": notification.risk_level,
+            #     "peer_results": peer_results,
+            #     "commit_sha": notification.commit_sha,
+            # }
 
             # Call agent's graceful shutdown endpoint
             async with httpx.AsyncClient() as client:
@@ -365,29 +438,55 @@ class DeploymentOrchestrator:
                 shutdown_payload = {
                     "reason": f"CD update to {notification.version} (deployment {deployment_id})",
                     "force": False,
-                    "confirm": True
+                    "confirm": True,
                 }
-                
+
                 # Use agent's service token for authentication
-                # Get token from agent registry
+                # Get encrypted token from agent registry
                 service_token = None
                 if self.manager:
                     registry_agent = self.manager.agent_registry.get_agent(agent.agent_id)
                     if registry_agent and registry_agent.service_token:
-                        service_token = registry_agent.service_token
-                
+                        # Decrypt token for use
+                        from ciris_manager.crypto import get_token_encryption
+
+                        encryption = get_token_encryption()
+                        try:
+                            service_token = encryption.decrypt_token(registry_agent.service_token)
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to decrypt service token for {agent.agent_id}: {e}"
+                            )
+
                 if service_token:
                     # Use service token authentication
-                    headers = {
-                        "Authorization": f"Bearer service:{service_token}"
-                    }
+                    headers = {"Authorization": f"Bearer service:{service_token}"}
+                    logger.debug(f"Using service token authentication for {agent.agent_id}")
+                    # Audit token use
+                    audit_service_token_use(
+                        agent_id=agent.agent_id,
+                        deployment_id=deployment_id,
+                        success=True,
+                        token=service_token,
+                    )
                 else:
                     # Fallback to default admin credentials for legacy agents
-                    logger.warning(f"No service token for agent {agent.agent_id}, using default credentials")
-                    headers = {
-                        "Authorization": "Bearer admin:ciris_admin_password"
-                    }
-                
+                    logger.warning(
+                        f"No service token for agent {agent.agent_id}, using default credentials"
+                    )
+                    headers = {"Authorization": "Bearer admin:ciris_admin_password"}
+
+                # Log the shutdown request
+                logger.info(
+                    f"Requesting shutdown for agent {agent.agent_id} at http://localhost:{agent.api_port}/v1/system/shutdown"
+                )
+                audit_deployment_action(
+                    deployment_id=deployment_id,
+                    action="shutdown_requested",
+                    agent_id=agent.agent_id,
+                    details={"reason": shutdown_payload["reason"]},
+                )
+
                 response = await client.post(
                     f"http://localhost:{agent.api_port}/v1/system/shutdown",
                     json=shutdown_payload,
@@ -397,11 +496,18 @@ class DeploymentOrchestrator:
 
                 if response.status_code == 200:
                     # Successful shutdown means agent accepts update
-                    logger.info(f"Agent {agent.agent_id} accepted shutdown for update")
-                    
+                    logger.info(f"Agent {agent.agent_id} accepted shutdown for update (HTTP 200)")
+                    audit_deployment_action(
+                        deployment_id=deployment_id,
+                        action="update_accepted",
+                        agent_id=agent.agent_id,
+                        success=True,
+                    )
+
                     # Update agent metadata with new image digests
                     if self.manager:
                         await self._update_agent_metadata(agent.agent_id, notification)
+                        logger.debug(f"Updated metadata for agent {agent.agent_id}")
 
                     return AgentUpdateResponse(
                         agent_id=agent.agent_id,
@@ -410,6 +516,21 @@ class DeploymentOrchestrator:
                         ready_at=None,
                     )
                 else:
+                    # Log non-200 response with details
+                    logger.error(
+                        f"Agent {agent.agent_id} rejected update with HTTP {response.status_code}. "
+                        f"Response body: {response.text[:500]}"
+                    )
+                    audit_deployment_action(
+                        deployment_id=deployment_id,
+                        action="update_rejected",
+                        agent_id=agent.agent_id,
+                        success=False,
+                        details={
+                            "http_status": response.status_code,
+                            "response_body": response.text[:500],
+                        },
+                    )
                     return AgentUpdateResponse(
                         agent_id=agent.agent_id,
                         decision="reject",
@@ -417,8 +538,18 @@ class DeploymentOrchestrator:
                         ready_at=None,
                     )
 
-        except httpx.ConnectError:
+        except httpx.ConnectError as e:
             # Agent not reachable, might already be shutting down
+            logger.warning(
+                f"Agent {agent.agent_id} not reachable: {e}. Treating as successful shutdown."
+            )
+            audit_deployment_action(
+                deployment_id=deployment_id,
+                action="connection_error",
+                agent_id=agent.agent_id,
+                success=True,  # We treat this as success since agent may be shutting down
+                details={"error": str(e)},
+            )
             return AgentUpdateResponse(
                 agent_id=agent.agent_id,
                 decision="accept",
@@ -426,7 +557,14 @@ class DeploymentOrchestrator:
                 ready_at=None,
             )
         except Exception as e:
-            logger.error(f"Failed to update agent {agent.agent_id}: {e}")
+            logger.error(f"Failed to update agent {agent.agent_id}: {e}", exc_info=True)
+            audit_deployment_action(
+                deployment_id=deployment_id,
+                action="update_error",
+                agent_id=agent.agent_id,
+                success=False,
+                details={"error": str(e), "error_type": type(e).__name__},
+            )
             return AgentUpdateResponse(
                 agent_id=agent.agent_id,
                 decision="reject",
