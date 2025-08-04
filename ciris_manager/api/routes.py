@@ -137,10 +137,26 @@ def create_routes(manager: Any) -> APIRouter:
         request: Request, authorization: Optional[str] = Header(None)
     ) -> Union[FileResponse, RedirectResponse]:
         """Serve manager dashboard for @ciris.ai users."""
-        # Check authentication
+        # Check authentication manually
         try:
-            user = get_current_user(request, authorization)
-        except HTTPException:
+            from .auth_routes import get_auth_service
+
+            auth_service = get_auth_service()
+            if not auth_service:
+                return RedirectResponse(url="/manager/v1/oauth/login", status_code=303)
+
+            # Try authorization header first
+            user = auth_service.get_current_user(authorization)
+            # If no auth header, try cookie
+            if not user:
+                token = request.cookies.get("manager_token")
+                if token:
+                    user = auth_service.get_current_user(f"Bearer {token}")
+
+            if not user:
+                return RedirectResponse(url="/manager/v1/oauth/login", status_code=303)
+
+        except Exception:
             # Not authenticated - redirect to OAuth login
             return RedirectResponse(url="/manager/v1/oauth/login", status_code=303)
 
@@ -160,10 +176,26 @@ def create_routes(manager: Any) -> APIRouter:
         request: Request, authorization: Optional[str] = Header(None)
     ) -> Union[FileResponse, RedirectResponse]:
         """Serve manager JavaScript."""
-        # Check authentication
+        # Check authentication manually
         try:
-            user = get_current_user(request, authorization)
-        except HTTPException:
+            from .auth_routes import get_auth_service
+
+            auth_service = get_auth_service()
+            if not auth_service:
+                return RedirectResponse(url="/manager/v1/oauth/login", status_code=303)
+
+            # Try authorization header first
+            user = auth_service.get_current_user(authorization)
+            # If no auth header, try cookie
+            if not user:
+                token = request.cookies.get("manager_token")
+                if token:
+                    user = auth_service.get_current_user(f"Bearer {token}")
+
+            if not user:
+                return RedirectResponse(url="/manager/v1/oauth/login", status_code=303)
+
+        except Exception:
             # Not authenticated - redirect to OAuth login
             return RedirectResponse(url="/manager/v1/oauth/login", status_code=303)
 
