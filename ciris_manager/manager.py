@@ -355,7 +355,6 @@ class CIRISManager:
                         # Browser request - redirect to login
                         return RedirectResponse(url="/", status_code=302)
                 # Otherwise return normal JSON error
-                from fastapi.responses import JSONResponse
 
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
