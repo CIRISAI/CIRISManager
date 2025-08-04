@@ -345,7 +345,9 @@ class CIRISManager:
             from fastapi.responses import RedirectResponse
 
             @app.exception_handler(HTTPException)
-            async def auth_exception_handler(request: Request, exc: HTTPException) -> Union[RedirectResponse, JSONResponse]:
+            async def auth_exception_handler(
+                request: Request, exc: HTTPException
+            ) -> Union[RedirectResponse, JSONResponse]:
                 # If it's a 401 error and the request accepts HTML, redirect to login
                 if exc.status_code == 401:
                     accept_header = request.headers.get("accept", "")
