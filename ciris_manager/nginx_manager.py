@@ -137,9 +137,22 @@ class NginxManager:
                 shutil.copy2(self.config_path, self.backup_path)
                 logger.info("Backed up current nginx config")
 
-            # 4. Atomic replace
-            os.rename(self.new_config_path, self.config_path)
-            logger.info("Installed new nginx config")
+            # 4. Write in-place to preserve inode for Docker bind mounts
+            # CRITICAL: Do NOT use os.rename() as it creates a new inode
+            # which breaks Docker bind mounts. Write directly to the file.
+            try:
+                with open(self.config_path, "w") as f:
+                    with open(self.new_config_path, "r") as new_f:
+                        f.write(new_f.read())
+                logger.info(
+                    "Updated nginx config in-place (preserving inode for Docker bind mount)"
+                )
+
+                # Clean up temp file
+                self.new_config_path.unlink()
+            except Exception as e:
+                logger.error(f"Failed to write nginx config in-place: {e}")
+                return False
 
             # 5. Validate and reload nginx
             logger.info("Validating nginx configuration...")
@@ -451,9 +464,12 @@ http {
         """Rollback to previous configuration."""
         if self.backup_path.exists():
             try:
-                shutil.copy2(self.backup_path, self.config_path)
+                # Write in-place to preserve inode for Docker bind mounts
+                with open(self.config_path, "w") as f:
+                    with open(self.backup_path, "r") as backup_f:
+                        f.write(backup_f.read())
                 self._reload_nginx()
-                logger.info("Rolled back to previous nginx config")
+                logger.info("Rolled back to previous nginx config (in-place)")
             except Exception as e:
                 logger.error(f"Rollback failed: {e}")
 
