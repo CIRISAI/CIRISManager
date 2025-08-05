@@ -330,9 +330,20 @@ def create_device_auth_routes() -> APIRouter:
                     const userCode = codeInput.value;
                     
                     try {{
+                        // Check if we have a token in the URL (just returned from OAuth)
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const tokenFromUrl = urlParams.get('token');
+                        
+                        let authHeaders = {{}};
+                        if (tokenFromUrl) {{
+                            // Use token from URL if available
+                            authHeaders['Authorization'] = `Bearer ${{tokenFromUrl}}`;
+                        }}
+                        
                         // First, check if user is authenticated
                         const authCheck = await fetch('/manager/v1/oauth/user', {{
-                            credentials: 'include'
+                            credentials: 'include',
+                            headers: authHeaders
                         }});
                         
                         if (!authCheck.ok) {{
@@ -344,11 +355,16 @@ def create_device_auth_routes() -> APIRouter:
                         }}
                         
                         // User is authenticated, verify the device code
+                        const verifyHeaders = {{
+                            'Content-Type': 'application/json',
+                        }};
+                        if (tokenFromUrl) {{
+                            verifyHeaders['Authorization'] = `Bearer ${{tokenFromUrl}}`;
+                        }}
+                        
                         const response = await fetch('/manager/v1/device/verify', {{
                             method: 'POST',
-                            headers: {{
-                                'Content-Type': 'application/json',
-                            }},
+                            headers: verifyHeaders,
                             credentials: 'include',
                             body: JSON.stringify({{ user_code: userCode }})
                         }});
