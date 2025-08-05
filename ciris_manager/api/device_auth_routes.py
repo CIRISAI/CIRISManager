@@ -381,7 +381,13 @@ def create_device_auth_routes() -> APIRouter:
                 if (urlParams.has('token') && codeInput.value) {{
                     // User just authenticated via OAuth, auto-submit the form
                     console.log('Auto-submitting after OAuth authentication');
-                    form.dispatchEvent(new Event('submit'));
+                    // Use requestSubmit for better compatibility
+                    if (form.requestSubmit) {{
+                        form.requestSubmit();
+                    }} else {{
+                        // Fallback for older browsers
+                        submitBtn.click();
+                    }}
                 }}
             </script>
         </body>
