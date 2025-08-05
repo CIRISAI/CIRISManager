@@ -78,6 +78,11 @@ def create_device_auth_routes() -> APIRouter:
         # Generate codes
         device_code = secrets.token_urlsafe(32)
         user_code = generate_user_code()
+        
+        logger.info(
+            f"Device code requested - user_code: {user_code}, "
+            f"device_code: {device_code[:10]}..., client_id: {device_request.client_id}"
+        )
 
         # Store device code info
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=600)
@@ -117,8 +122,14 @@ def create_device_auth_routes() -> APIRouter:
         if not auth_service:
             raise HTTPException(status_code=500, detail="Auth service not configured")
 
+        logger.debug(
+            f"Token request for device_code: {token_request.device_code[:10]}..., "
+            f"client_id: {token_request.client_id}"
+        )
+        
         device_info = _device_codes.get(token_request.device_code)
         if not device_info:
+            logger.warning(f"Invalid device code: {token_request.device_code[:10]}...")
             return JSONResponse(
                 status_code=400,
                 content={"error": "invalid_grant", "error_description": "Invalid device code"},
@@ -133,6 +144,11 @@ def create_device_auth_routes() -> APIRouter:
             )
 
         # Check status
+        logger.debug(
+            f"Device code status: {device_info['status']}, "
+            f"user: {device_info['user']['email'] if device_info['user'] else 'None'}"
+        )
+        
         if device_info["status"] == "pending":
             return JSONResponse(
                 status_code=400,
@@ -142,6 +158,7 @@ def create_device_auth_routes() -> APIRouter:
                 },
             )
         elif device_info["status"] == "denied":
+            logger.info(f"Device code denied: {token_request.device_code[:10]}...")
             return JSONResponse(
                 status_code=400,
                 content={"error": "access_denied", "error_description": "Authorization denied"},
@@ -159,6 +176,11 @@ def create_device_auth_routes() -> APIRouter:
                 }
             )
 
+            logger.info(
+                f"Token issued for device_code: {token_request.device_code[:10]}..., "
+                f"user: {device_info['user']['email']}"
+            )
+            
             # Clean up used codes
             del _device_codes[token_request.device_code]
             if device_info["user_code"] in _user_codes:
@@ -314,8 +336,10 @@ def create_device_auth_routes() -> APIRouter:
                         }});
                         
                         if (!authCheck.ok) {{
-                            // Redirect to login with return URL
-                            window.location.href = `/manager/v1/oauth/login?redirect_uri=${{encodeURIComponent(window.location.href)}}`;
+                            // Redirect to login with return URL, preserving only the code
+                            const currentUrl = new URL(window.location.href);
+                            const cleanUrl = `${{currentUrl.origin}}${{currentUrl.pathname}}?code=${{userCode}}`;
+                            window.location.href = `/manager/v1/oauth/login?redirect_uri=${{encodeURIComponent(cleanUrl)}}`;
                             return;
                         }}
                         
@@ -351,6 +375,14 @@ def create_device_auth_routes() -> APIRouter:
                 
                 // Focus on input
                 codeInput.focus();
+                
+                // Auto-submit if we have a code and just returned from OAuth
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.has('token') && codeInput.value) {{
+                    // User just authenticated via OAuth, auto-submit the form
+                    console.log('Auto-submitting after OAuth authentication');
+                    form.dispatchEvent(new Event('submit'));
+                }}
             </script>
         </body>
         </html>
@@ -365,7 +397,11 @@ def create_device_auth_routes() -> APIRouter:
         auth_service: AuthService = Depends(get_auth_service),
     ) -> Dict[str, Any]:
         """Verify device code and authorize."""
+        user_code = body.get("user_code", "")
+        logger.info(f"Device verification attempt for user_code: {user_code}")
+        
         if not auth_service:
+            logger.error("Auth service not configured")
             raise HTTPException(status_code=500, detail="Auth service not configured")
 
         # Get current user from session
@@ -375,10 +411,14 @@ def create_device_auth_routes() -> APIRouter:
             token = request.cookies.get("manager_token")
             if token:
                 auth_header = f"Bearer {token}"
+                logger.debug("Using token from cookie")
 
         user = auth_service.get_current_user(auth_header)
         if not user:
+            logger.warning(f"Unauthenticated verification attempt for user_code: {user_code}")
             raise HTTPException(status_code=401, detail="Not authenticated")
+        
+        logger.info(f"User {user.get('email', 'unknown')} attempting to verify code: {user_code}")
 
         # Verify user is from @ciris.ai domain in production
         if auth_service.oauth_provider.__class__.__name__ != "MockOAuthProvider":
@@ -386,13 +426,15 @@ def create_device_auth_routes() -> APIRouter:
                 raise HTTPException(status_code=403, detail="Access restricted to @ciris.ai users")
 
         # Find device code by user code
-        user_code = body.get("user_code", "")
         device_code = _user_codes.get(user_code.upper())
         if not device_code:
+            logger.warning(f"Invalid user_code submitted: {user_code}")
+            logger.debug(f"Available user codes: {list(_user_codes.keys())}")
             raise HTTPException(status_code=400, detail="Invalid code")
 
         device_info = _device_codes.get(device_code)
         if not device_info:
+            logger.error(f"Device code found but no device info: {device_code[:10]}...")
             raise HTTPException(status_code=400, detail="Invalid code")
 
         # Check expiration
@@ -403,6 +445,11 @@ def create_device_auth_routes() -> APIRouter:
         # Authorize the device
         device_info["status"] = "authorized"
         device_info["user"] = user
+        
+        logger.info(
+            f"Device authorized successfully - user_code: {user_code}, "
+            f"device_code: {device_code[:10]}..., user: {user.get('email', 'unknown')}"
+        )
 
         return {"status": "authorized", "message": "Device authorized successfully"}
 
