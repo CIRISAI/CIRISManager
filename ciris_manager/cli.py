@@ -75,35 +75,35 @@ Examples:
   
   # Get authentication token
   ciris-manager auth token
-        """
+        """,
     )
-    
+
     # Create subparsers for different commands
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
+
     # Auth subcommand
     auth_parser = subparsers.add_parser("auth", help="Authentication management")
     auth_parser.add_argument(
         "--base-url",
         default="https://agents.ciris.ai",
-        help="Base URL for CIRIS Manager (default: https://agents.ciris.ai)"
+        help="Base URL for CIRIS Manager (default: https://agents.ciris.ai)",
     )
-    
+
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Auth commands")
-    
+
     # Auth login
     login_parser = auth_subparsers.add_parser("login", help="Login with Google OAuth")
     login_parser.add_argument("email", help="Your @ciris.ai email address")
-    
+
     # Auth logout
     auth_subparsers.add_parser("logout", help="Remove saved authentication")
-    
+
     # Auth status
     auth_subparsers.add_parser("status", help="Show authentication status")
-    
+
     # Auth token
     auth_subparsers.add_parser("token", help="Print current token (for use in scripts)")
-    
+
     # Original manager arguments (when no subcommand is used)
     parser.add_argument(
         "--config",
@@ -124,7 +124,7 @@ Examples:
             auth_parser.print_help()
             sys.exit(1)
         sys.exit(handle_auth_command(args))
-    
+
     # Original manager behavior (when no subcommand)
     if args.generate_config:
         generate_default_config(args.config)

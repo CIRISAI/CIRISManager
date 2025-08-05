@@ -78,7 +78,7 @@ def create_device_auth_routes() -> APIRouter:
         # Generate codes
         device_code = secrets.token_urlsafe(32)
         user_code = generate_user_code()
-        
+
         logger.info(
             f"Device code requested - user_code: {user_code}, "
             f"device_code: {device_code[:10]}..., client_id: {device_request.client_id}"
@@ -126,7 +126,7 @@ def create_device_auth_routes() -> APIRouter:
             f"Token request for device_code: {token_request.device_code[:10]}..., "
             f"client_id: {token_request.client_id}"
         )
-        
+
         device_info = _device_codes.get(token_request.device_code)
         if not device_info:
             logger.warning(f"Invalid device code: {token_request.device_code[:10]}...")
@@ -148,7 +148,7 @@ def create_device_auth_routes() -> APIRouter:
             f"Device code status: {device_info['status']}, "
             f"user: {device_info['user']['email'] if device_info['user'] else 'None'}"
         )
-        
+
         if device_info["status"] == "pending":
             return JSONResponse(
                 status_code=400,
@@ -180,7 +180,7 @@ def create_device_auth_routes() -> APIRouter:
                 f"Token issued for device_code: {token_request.device_code[:10]}..., "
                 f"user: {device_info['user']['email']}"
             )
-            
+
             # Clean up used codes
             del _device_codes[token_request.device_code]
             if device_info["user_code"] in _user_codes:
@@ -399,7 +399,7 @@ def create_device_auth_routes() -> APIRouter:
         """Verify device code and authorize."""
         user_code = body.get("user_code", "")
         logger.info(f"Device verification attempt for user_code: {user_code}")
-        
+
         if not auth_service:
             logger.error("Auth service not configured")
             raise HTTPException(status_code=500, detail="Auth service not configured")
@@ -417,7 +417,7 @@ def create_device_auth_routes() -> APIRouter:
         if not user:
             logger.warning(f"Unauthenticated verification attempt for user_code: {user_code}")
             raise HTTPException(status_code=401, detail="Not authenticated")
-        
+
         logger.info(f"User {user.get('email', 'unknown')} attempting to verify code: {user_code}")
 
         # Verify user is from @ciris.ai domain in production
@@ -445,7 +445,7 @@ def create_device_auth_routes() -> APIRouter:
         # Authorize the device
         device_info["status"] = "authorized"
         device_info["user"] = user
-        
+
         logger.info(
             f"Device authorized successfully - user_code: {user_code}, "
             f"device_code: {device_code[:10]}..., user: {user.get('email', 'unknown')}"
