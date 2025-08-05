@@ -643,8 +643,8 @@ async def main() -> None:
     log_dir = "/var/log/ciris-manager"
     if not os.access("/var/log", os.W_OK):
         # Can't write to /var/log, use local directory
-        log_dir = Path.home() / ".local" / "log" / "ciris-manager"
-        log_dir = str(log_dir)
+        local_log_path = Path.home() / ".local" / "log" / "ciris-manager"
+        log_dir = str(local_log_path)
 
     try:
         setup_logging(
