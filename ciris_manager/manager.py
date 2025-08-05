@@ -208,7 +208,7 @@ class CIRISManager:
             template=template,
             agent_dir=agent_dir,
             environment=environment,
-            use_mock_llm=False,  # Use real LLMs
+            use_mock_llm=True,  # Use mock LLMs for safety during QA
         )
 
         # Write compose file

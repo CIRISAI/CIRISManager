@@ -12,6 +12,8 @@ from pathlib import Path
 from ciris_manager.manager import CIRISManager
 from ciris_manager.config.settings import CIRISManagerConfig
 from ciris_manager.auth_cli import handle_auth_command
+from ciris_manager.cli_client import add_cli_commands, handle_agent_commands, handle_system_commands
+from ciris_manager.sdk import CIRISManagerClient
 
 
 def generate_default_config(config_path: str) -> None:
@@ -103,6 +105,9 @@ Examples:
 
     # Auth token
     auth_subparsers.add_parser("token", help="Print current token (for use in scripts)")
+    
+    # Add SDK-based CLI commands
+    add_cli_commands(subparsers)
 
     # Original manager arguments (when no subcommand is used)
     parser.add_argument(
@@ -124,6 +129,22 @@ Examples:
             auth_parser.print_help()
             sys.exit(1)
         sys.exit(handle_auth_command(args))
+    
+    # Handle agent subcommand
+    elif args.command == "agent":
+        if not args.agent_command:
+            parser.parse_args([args.command, '--help'])
+            sys.exit(1)
+        client = CIRISManagerClient(base_url=args.base_url)
+        sys.exit(handle_agent_commands(client, args))
+    
+    # Handle system subcommand
+    elif args.command == "system":
+        if not args.system_command:
+            parser.parse_args([args.command, '--help'])
+            sys.exit(1)
+        client = CIRISManagerClient(base_url=args.base_url)
+        sys.exit(handle_system_commands(client, args))
 
     # Original manager behavior (when no subcommand)
     if args.generate_config:
