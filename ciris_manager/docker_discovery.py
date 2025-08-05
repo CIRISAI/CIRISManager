@@ -46,13 +46,19 @@ class DockerAgentDiscovery:
 
                 # Is this a CIRIS agent? Must have CIRIS_AGENT_ID
                 if "CIRIS_AGENT_ID" in env_dict:
-                    logger.debug(f"Found CIRIS agent container: {container.name} (ID: {env_dict.get('CIRIS_AGENT_ID')})")
+                    logger.debug(
+                        f"Found CIRIS agent container: {container.name} (ID: {env_dict.get('CIRIS_AGENT_ID')})"
+                    )
                     agent_info = self._extract_agent_info(container, env_dict)
                     if agent_info:
-                        logger.debug(f"Extracted agent info: {agent_info.agent_id} on port {agent_info.api_port}")
+                        logger.debug(
+                            f"Extracted agent info: {agent_info.agent_id} on port {agent_info.api_port}"
+                        )
                         agents.append(agent_info)
                     else:
-                        logger.warning(f"Could not extract agent info from container {container.name}")
+                        logger.warning(
+                            f"Could not extract agent info from container {container.name}"
+                        )
 
         except Exception as e:
             logger.error(f"Error discovering agents: {e}")

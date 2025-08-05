@@ -78,26 +78,30 @@ class NginxManager:
             True if successful, False otherwise
         """
         start_time = time.time()
-        
+
         # Log the operation start with detailed agent info
         agent_info = [{"id": a.agent_id, "name": a.agent_name, "port": a.api_port} for a in agents]
         logger.info(f"Starting nginx config update for {len(agents)} agents")
         logger.debug(f"Agents to configure: {json.dumps(agent_info)}")
-        
+
         try:
             # 1. Generate new config
             logger.debug("Generating new nginx configuration...")
             new_config = self.generate_config(agents)
             config_lines = len(new_config.splitlines())
-            
+
             # Log agent routes that will be created
             for agent in agents:
                 if agent.has_port:
-                    logger.debug(f"Will create routes for {agent.agent_id}: /api/{agent.agent_id}/* -> port {agent.api_port}")
+                    logger.debug(
+                        f"Will create routes for {agent.agent_id}: /api/{agent.agent_id}/* -> port {agent.api_port}"
+                    )
 
             # 2. Write to temporary file
             try:
-                logger.debug(f"Writing {len(new_config)} bytes ({config_lines} lines) to: {self.new_config_path}")
+                logger.debug(
+                    f"Writing {len(new_config)} bytes ({config_lines} lines) to: {self.new_config_path}"
+                )
                 self.new_config_path.write_text(new_config)
                 logger.info(f"Generated new nginx config with {len(agents)} agents")
             except PermissionError as e:
@@ -141,12 +145,12 @@ class NginxManager:
             logger.info("Validating nginx configuration...")
             if self._validate_config():
                 logger.info("Nginx configuration validated successfully")
-                
+
                 logger.info("Reloading nginx...")
                 if self._reload_nginx():
                     duration_ms = int((time.time() - start_time) * 1000)
                     logger.info(f"✅ Nginx config updated successfully in {duration_ms}ms")
-                    
+
                     # Log success with structured data
                     log_nginx_operation(
                         operation="update_config",
@@ -155,8 +159,8 @@ class NginxManager:
                             "agent_count": len(agents),
                             "config_size": len(new_config),
                             "duration_ms": duration_ms,
-                            "agents": agent_info
-                        }
+                            "agents": agent_info,
+                        },
                     )
                     return True
                 else:
@@ -165,27 +169,21 @@ class NginxManager:
                     log_nginx_operation(
                         operation="update_config",
                         success=False,
-                        error="Nginx reload failed after config update"
+                        error="Nginx reload failed after config update",
                     )
                     return False
             else:
                 logger.error("❌ Nginx validation failed, rolling back")
                 self._rollback()
                 log_nginx_operation(
-                    operation="update_config", 
-                    success=False,
-                    error="Nginx config validation failed"
+                    operation="update_config", success=False, error="Nginx config validation failed"
                 )
                 return False
 
         except Exception as e:
             logger.error(f"❌ Failed to update nginx config: {e}", exc_info=True)
             self._rollback()
-            log_nginx_operation(
-                operation="update_config",
-                success=False,
-                error=str(e)
-            )
+            log_nginx_operation(operation="update_config", success=False, error=str(e))
             return False
 
     def generate_config(self, agents: List[AgentInfo]) -> str:

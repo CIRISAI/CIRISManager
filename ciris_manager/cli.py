@@ -105,7 +105,7 @@ Examples:
 
     # Auth token
     auth_subparsers.add_parser("token", help="Print current token (for use in scripts)")
-    
+
     # Add SDK-based CLI commands
     add_cli_commands(subparsers)
 
@@ -129,19 +129,19 @@ Examples:
             auth_parser.print_help()
             sys.exit(1)
         sys.exit(handle_auth_command(args))
-    
+
     # Handle agent subcommand
     elif args.command == "agent":
         if not args.agent_command:
-            parser.parse_args([args.command, '--help'])
+            parser.parse_args([args.command, "--help"])
             sys.exit(1)
         client = CIRISManagerClient(base_url=args.base_url)
         sys.exit(handle_agent_commands(client, args))
-    
+
     # Handle system subcommand
     elif args.command == "system":
         if not args.system_command:
-            parser.parse_args([args.command, '--help'])
+            parser.parse_args([args.command, "--help"])
             sys.exit(1)
         client = CIRISManagerClient(base_url=args.base_url)
         sys.exit(handle_system_commands(client, args))

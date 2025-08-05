@@ -162,7 +162,9 @@ class CIRISManager:
         """
         start_time = time.time()
         agent_logger.info(f"Starting agent creation - name: {name}, template: {template}")
-        log_agent_operation("create_start", agent_id="pending", details={"name": name, "template": template})
+        log_agent_operation(
+            "create_start", agent_id="pending", details={"name": name, "template": template}
+        )
         # Validate inputs
         template_path = Path(self.config.manager.templates_directory) / f"{template}.yaml"
         if not template_path.exists():
@@ -249,7 +251,7 @@ class CIRISManager:
 
         duration_ms = int((time.time() - start_time) * 1000)
         agent_logger.info(f"✅ Agent {agent_id} created successfully in {duration_ms}ms")
-        
+
         log_agent_operation(
             operation="create_complete",
             agent_id=agent_id,
@@ -257,8 +259,8 @@ class CIRISManager:
                 "name": name,
                 "template": template,
                 "port": allocated_port,
-                "duration_ms": duration_ms
-            }
+                "duration_ms": duration_ms,
+            },
         )
 
         return {
@@ -623,15 +625,15 @@ async def main() -> None:
     """Main entry point for CIRISManager."""
     # Setup file-based logging
     from ciris_manager.logging_config import setup_logging
-    
+
     # Set up logging before anything else
     setup_logging(
         log_dir="/var/log/ciris-manager",
         console_level="INFO",
         file_level="DEBUG",
-        use_json=False  # Use human-readable format for now
+        use_json=False,  # Use human-readable format for now
     )
-    
+
     logger = logging.getLogger(__name__)
     logger.info("=== CIRISManager Starting ===")
 

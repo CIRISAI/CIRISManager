@@ -11,17 +11,22 @@ from datetime import datetime
 
 class CIRISManagerError(Exception):
     """Base exception for CIRISManager SDK."""
+
     pass
 
 
 class AuthenticationError(CIRISManagerError):
     """Authentication related errors."""
+
     pass
 
 
 class APIError(CIRISManagerError):
     """API request errors."""
-    def __init__(self, message: str, status_code: Optional[int] = None, response: Optional[Dict] = None):
+
+    def __init__(
+        self, message: str, status_code: Optional[int] = None, response: Optional[Dict] = None
+    ):
         super().__init__(message)
         self.status_code = status_code
         self.response = response
@@ -29,21 +34,21 @@ class APIError(CIRISManagerError):
 
 class CIRISManagerClient:
     """Client for interacting with CIRISManager API."""
-    
+
     def __init__(self, base_url: str = "https://agents.ciris.ai", token: Optional[str] = None):
         """
         Initialize the CIRISManager client.
-        
+
         Args:
             base_url: Base URL for the CIRISManager API
             token: Authentication token (if not provided, will try to load from config)
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.token = token or self._load_token()
         self.session = requests.Session()
         if self.token:
-            self.session.headers['Authorization'] = f'Bearer {self.token}'
-    
+            self.session.headers["Authorization"] = f"Bearer {self.token}"
+
     def _load_token(self) -> Optional[str]:
         """Load token from config file."""
         config_file = Path.home() / ".config" / "ciris-manager" / "token.json"
@@ -58,52 +63,58 @@ class CIRISManagerClient:
             except Exception:
                 pass
         return None
-    
+
     def _request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Make an authenticated request to the API."""
         if not self.token:
             raise AuthenticationError("No authentication token available. Please login first.")
-        
+
         url = f"{self.base_url}{endpoint}"
         response = self.session.request(method, url, **kwargs)
-        
+
         if response.status_code == 401:
             raise AuthenticationError("Authentication failed. Token may be expired.")
         elif response.status_code >= 400:
             try:
                 error_data = response.json()
-                message = error_data.get('detail', f'API error: {response.status_code}')
+                message = error_data.get("detail", f"API error: {response.status_code}")
             except Exception:
-                message = f'API error: {response.status_code}'
-            raise APIError(message, response.status_code, response.json() if response.text else None)
-        
+                message = f"API error: {response.status_code}"
+            raise APIError(
+                message, response.status_code, response.json() if response.text else None
+            )
+
         return response
-    
+
     # Agent Management
-    
+
     def list_agents(self) -> List[Dict[str, Any]]:
         """List all agents."""
-        response = self._request('GET', '/manager/v1/agents')
+        response = self._request("GET", "/manager/v1/agents")
         data = response.json()
-        return data.get('agents', data) if isinstance(data, dict) else data
-    
+        return data.get("agents", data) if isinstance(data, dict) else data
+
     def get_agent(self, agent_id: str) -> Dict[str, Any]:
         """Get details for a specific agent."""
-        response = self._request('GET', f'/manager/v1/agents/{agent_id}')
+        response = self._request("GET", f"/manager/v1/agents/{agent_id}")
         return response.json()
-    
-    def create_agent(self, name: str, template: str = "basic", 
-                    environment: Optional[Dict[str, str]] = None,
-                    mounts: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
+
+    def create_agent(
+        self,
+        name: str,
+        template: str = "basic",
+        environment: Optional[Dict[str, str]] = None,
+        mounts: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         """
         Create a new agent.
-        
+
         Args:
             name: Name for the agent
             template: Template to use (default: "basic")
             environment: Environment variables for the agent
             mounts: Volume mounts for the agent
-        
+
         Returns:
             Created agent details
         """
@@ -114,95 +125,97 @@ class CIRISManagerClient:
         }
         if mounts:
             payload["mounts"] = mounts
-        
-        response = self._request('POST', '/manager/v1/agents', json=payload)
+
+        response = self._request("POST", "/manager/v1/agents", json=payload)
         return response.json()
-    
+
     def delete_agent(self, agent_id: str) -> Dict[str, Any]:
         """Delete an agent."""
-        response = self._request('DELETE', f'/manager/v1/agents/{agent_id}')
+        response = self._request("DELETE", f"/manager/v1/agents/{agent_id}")
         return response.json()
-    
+
     def start_agent(self, agent_id: str) -> Dict[str, Any]:
         """Start an agent."""
-        response = self._request('POST', f'/manager/v1/agents/{agent_id}/start')
+        response = self._request("POST", f"/manager/v1/agents/{agent_id}/start")
         return response.json()
-    
+
     def stop_agent(self, agent_id: str) -> Dict[str, Any]:
         """Stop an agent."""
-        response = self._request('POST', f'/manager/v1/agents/{agent_id}/stop')
+        response = self._request("POST", f"/manager/v1/agents/{agent_id}/stop")
         return response.json()
-    
+
     def restart_agent(self, agent_id: str) -> Dict[str, Any]:
         """Restart an agent."""
-        response = self._request('POST', f'/manager/v1/agents/{agent_id}/restart')
+        response = self._request("POST", f"/manager/v1/agents/{agent_id}/restart")
         return response.json()
-    
+
     def get_agent_logs(self, agent_id: str, lines: int = 100) -> str:
         """Get agent logs."""
-        response = self._request('GET', f'/manager/v1/agents/{agent_id}/logs', 
-                                params={'lines': lines})
+        response = self._request(
+            "GET", f"/manager/v1/agents/{agent_id}/logs", params={"lines": lines}
+        )
         return response.text
-    
+
     # Template Management
-    
+
     def list_templates(self) -> List[str]:
         """List available templates."""
-        response = self._request('GET', '/manager/v1/templates')
+        response = self._request("GET", "/manager/v1/templates")
         data = response.json()
-        return data.get('templates', data) if isinstance(data, dict) else data
-    
+        return data.get("templates", data) if isinstance(data, dict) else data
+
     # System Information
-    
+
     def get_status(self) -> Dict[str, Any]:
         """Get manager status."""
-        response = self._request('GET', '/manager/v1/status')
+        response = self._request("GET", "/manager/v1/status")
         return response.json()
-    
+
     def get_health(self) -> Dict[str, Any]:
         """Get health check."""
-        response = self._request('GET', '/manager/v1/health')
+        response = self._request("GET", "/manager/v1/health")
         return response.json()
-    
+
     def get_metrics(self) -> Dict[str, Any]:
         """Get system metrics."""
-        response = self._request('GET', '/manager/v1/metrics')
+        response = self._request("GET", "/manager/v1/metrics")
         return response.json()
-    
+
     # Update Management
-    
+
     def get_update_status(self) -> Dict[str, Any]:
         """Get update/deployment status."""
-        response = self._request('GET', '/manager/v1/updates/status')
+        response = self._request("GET", "/manager/v1/updates/status")
         return response.json()
-    
-    def notify_update(self, agent_image: str, gui_image: Optional[str] = None,
-                      strategy: str = "canary", message: str = "") -> Dict[str, Any]:
+
+    def notify_update(
+        self,
+        agent_image: str,
+        gui_image: Optional[str] = None,
+        strategy: str = "canary",
+        message: str = "",
+    ) -> Dict[str, Any]:
         """
         Notify agents of available update.
-        
+
         Args:
             agent_image: Docker image for agents
             gui_image: Docker image for GUI (optional)
             strategy: Deployment strategy ("canary" or "immediate")
             message: Update message
-        
+
         Returns:
             Update notification response
         """
-        payload = {
-            "agent_image": agent_image,
-            "strategy": strategy,
-            "message": message
-        }
+        payload = {"agent_image": agent_image, "strategy": strategy, "message": message}
         if gui_image:
             payload["gui_image"] = gui_image
-        
-        response = self._request('POST', '/manager/v1/updates/notify', json=payload)
+
+        response = self._request("POST", "/manager/v1/updates/notify", json=payload)
         return response.json()
-    
+
     # Utility Methods
-    
+
     def ping(self) -> bool:
         """Check if the API is reachable."""
         try:
