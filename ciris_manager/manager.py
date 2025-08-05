@@ -233,21 +233,30 @@ class CIRISManager:
             service_token=encrypted_token,  # Store encrypted version
         )
 
-        # Update nginx routing
+        # Start the agent FIRST so Docker discovery can find it
+        agent_logger.info(f"Starting container for agent {agent_id}")
+        try:
+            await self._start_agent(agent_id, compose_path)
+            agent_logger.info(f"✅ Container started for agent {agent_id}")
+        except Exception as e:
+            agent_logger.error(f"❌ Failed to start container for {agent_id}: {e}")
+            # Clean up on failure
+            self.agent_registry.unregister_agent(agent_id)
+            self.port_manager.release_port(agent_id)
+            raise RuntimeError(f"Failed to start agent container: {e}")
+
+        # Wait a moment for container to be fully up
+        await asyncio.sleep(2)
+        
+        # NOW update nginx routing after container is running
         agent_logger.info(f"Updating nginx configuration for agent {agent_id}")
         try:
             await self._add_nginx_route(agent_id, allocated_port)
             agent_logger.info(f"✅ Nginx routes added for agent {agent_id}")
         except Exception as e:
             agent_logger.error(f"❌ Failed to add nginx routes for {agent_id}: {e}")
-            # Clean up on failure
-            self.agent_registry.unregister_agent(agent_id)
-            self.port_manager.release_port(agent_id)
-            raise RuntimeError(f"Failed to configure nginx routing: {e}")
-
-        # Start the agent
-        agent_logger.info(f"Starting container for agent {agent_id}")
-        await self._start_agent(agent_id, compose_path)
+            # Container started but nginx failed - log but don't fail the creation
+            agent_logger.warning(f"Agent {agent_id} created but nginx routing failed - agent may not be accessible via gateway")
 
         duration_ms = int((time.time() - start_time) * 1000)
         agent_logger.info(f"✅ Agent {agent_id} created successfully in {duration_ms}ms")

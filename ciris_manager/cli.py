@@ -35,28 +35,9 @@ def generate_default_config(config_path: str) -> None:
 
 async def run_manager(config_path: str) -> None:
     """Run the CIRISManager."""
-    try:
-        config = CIRISManagerConfig.from_file(config_path)
-        manager = CIRISManager(config)
-
-        print("Starting CIRISManager...")
-        print(f"Compose file: {config.docker.compose_file}")
-        print(f"Container check interval: {config.container_management.interval}s")
-        print(f"Watchdog interval: {config.watchdog.check_interval}s")
-
-        await manager.start()
-
-        # Keep running until interrupted
-        try:
-            while True:
-                await asyncio.sleep(1)
-        except KeyboardInterrupt:
-            print("\nShutting down CIRISManager...")
-            await manager.stop()
-
-    except Exception as e:
-        print(f"Error running CIRISManager: {e}")
-        sys.exit(1)
+    # Import and run the properly configured main function
+    from ciris_manager.manager import main
+    await main()
 
 
 def main() -> None:
