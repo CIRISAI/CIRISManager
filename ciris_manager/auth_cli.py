@@ -8,7 +8,8 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, cast
+import argparse
 
 try:
     import requests
@@ -36,7 +37,7 @@ class AuthManager:
                 url, json={"client_id": "ciris-cli", "scope": "manager:full"}, timeout=10
             )
             response.raise_for_status()
-            return response.json()
+            return cast(Dict[str, Any], response.json())
         except requests.exceptions.RequestException as e:
             print(f"❌ Failed to request device code: {e}")
             sys.exit(1)
@@ -62,7 +63,7 @@ class AuthManager:
 
                 if response.status_code == 200:
                     data = response.json()
-                    return data.get("access_token")
+                    return cast(Optional[str], data.get("access_token"))
                 elif response.status_code == 428:
                     # Authorization pending
                     print(".", end="", flush=True)
@@ -127,7 +128,7 @@ class AuthManager:
                 self.token_file.unlink()
                 return None
 
-            return data
+            return cast(Dict[str, Any], data)
         except Exception:
             return None
 
@@ -138,7 +139,7 @@ class AuthManager:
         if token_data and token_data.get("email") == email:
             if self.test_token(token_data["token"]):
                 print(f"✅ Using saved token for {email}")
-                return token_data["token"]
+                return cast(str, token_data["token"])
 
         print(f"🔐 Authenticating {email} with CIRIS Manager...")
 
@@ -173,7 +174,7 @@ class AuthManager:
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=5,
             )
-            return response.status_code == 200
+            return bool(response.status_code == 200)
         except Exception:
             return False
 
@@ -189,7 +190,7 @@ class AuthManager:
         """Get current valid token."""
         token_data = self.load_token()
         if token_data and self.test_token(token_data["token"]):
-            return token_data["token"]
+            return cast(Optional[str], token_data["token"])
         return None
 
     def show_status(self) -> None:
@@ -219,7 +220,7 @@ class AuthManager:
             print("⚠️  Token status: Invalid (may have been revoked)")
 
 
-def handle_auth_command(args) -> int:
+def handle_auth_command(args: argparse.Namespace) -> int:
     """Handle auth subcommand."""
     auth = AuthManager(base_url=args.base_url)
 
