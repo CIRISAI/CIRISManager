@@ -358,6 +358,7 @@ class CIRISManager:
             from typing import Union
             from .api.routes import create_routes
             from .api.auth import create_auth_routes, load_oauth_config
+            from .api.device_auth_routes import create_device_auth_routes
 
             app = FastAPI(title="CIRISManager API", version="1.0.0")
 
@@ -387,6 +388,10 @@ class CIRISManager:
             if self.config.auth.mode == "production":
                 auth_router = create_auth_routes()
                 app.include_router(auth_router, prefix="/manager/v1")
+
+                # Add device auth routes
+                device_auth_router = create_device_auth_routes()
+                app.include_router(device_auth_router, prefix="/manager/v1")
 
                 # Load OAuth configuration
                 if not load_oauth_config():
