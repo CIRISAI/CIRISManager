@@ -625,14 +625,29 @@ async def main() -> None:
     """Main entry point for CIRISManager."""
     # Setup file-based logging
     from ciris_manager.logging_config import setup_logging
+    import os
 
     # Set up logging before anything else
-    setup_logging(
-        log_dir="/var/log/ciris-manager",
-        console_level="INFO",
-        file_level="DEBUG",
-        use_json=False,  # Use human-readable format for now
-    )
+    # Use /var/log if available, otherwise fallback to local directory
+    log_dir = "/var/log/ciris-manager"
+    if not os.access("/var/log", os.W_OK):
+        # Can't write to /var/log, use local directory
+        log_dir = Path.home() / ".local" / "log" / "ciris-manager"
+        log_dir = str(log_dir)
+    
+    try:
+        setup_logging(
+            log_dir=log_dir,
+            console_level="INFO",
+            file_level="DEBUG",
+            use_json=False,  # Use human-readable format for now
+        )
+    except PermissionError:
+        # Fall back to basic logging if file logging fails
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
 
     logger = logging.getLogger(__name__)
     logger.info("=== CIRISManager Starting ===")
