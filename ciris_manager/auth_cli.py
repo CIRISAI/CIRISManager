@@ -128,7 +128,7 @@ class AuthManager:
                 return None
             
             return data
-        except:
+        except Exception:
             return None
     
     def login(self, email: str) -> Optional[str]:
@@ -177,7 +177,7 @@ class AuthManager:
                 timeout=5
             )
             return response.status_code == 200
-        except:
+        except Exception:
             return False
     
     def logout(self) -> None:
@@ -238,7 +238,7 @@ def handle_auth_command(args) -> int:
         
         token = auth.login(args.email)
         if token:
-            print(f"\n🎉 You can now use authenticated API calls!")
+            print("\n🎉 You can now use authenticated API calls!")
             print(f"Example: curl -H \"Authorization: Bearer $(ciris-manager auth token)\" {auth.base_url}/manager/v1/agents")
             return 0
         else:
