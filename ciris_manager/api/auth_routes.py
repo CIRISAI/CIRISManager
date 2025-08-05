@@ -137,7 +137,11 @@ def create_auth_routes() -> APIRouter:
 
             # Redirect with token in URL (like original implementation)
             # This matches how the frontend expects to receive the token
-            redirect_url = f"{result['redirect_uri']}?token={result['access_token']}"
+            # Check if redirect_uri already has query parameters
+            if "?" in result['redirect_uri']:
+                redirect_url = f"{result['redirect_uri']}&token={result['access_token']}"
+            else:
+                redirect_url = f"{result['redirect_uri']}?token={result['access_token']}"
 
             # Also set JWT cookie for future API calls
             response = RedirectResponse(url=redirect_url)
