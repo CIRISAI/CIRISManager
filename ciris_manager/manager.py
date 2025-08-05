@@ -163,7 +163,7 @@ class CIRISManager:
         start_time = time.time()
         agent_logger.info(f"Starting agent creation - name: {name}, template: {template}")
         log_agent_operation(
-            "create_start", agent_id="pending", details={"name": name, "template": template}
+            "create_start", agent_id="pending", details={"agent_name": name, "template": template}
         )
         # Validate inputs
         template_path = Path(self.config.manager.templates_directory) / f"{template}.yaml"
@@ -267,7 +267,7 @@ class CIRISManager:
             operation="create_complete",
             agent_id=agent_id,
             details={
-                "name": name,
+                "agent_name": name,
                 "template": template,
                 "port": allocated_port,
                 "duration_ms": duration_ms,

@@ -140,10 +140,18 @@ class TestDockerDiscovery:
 
         discovery.client.containers.list = Mock(return_value=[container1, container2, container3])
 
-        # Mock _extract_agent_info to return simple dict for valid agents
+        # Mock _extract_agent_info to return AgentInfo for valid agents
+        from ciris_manager.models import AgentInfo
+        
         def mock_extract(container, env_dict):
             if "CIRIS_AGENT_ID" in env_dict:
-                return {"agent_id": env_dict["CIRIS_AGENT_ID"], "container_name": container.name}
+                return AgentInfo(
+                    agent_id=env_dict["CIRIS_AGENT_ID"],
+                    agent_name=env_dict["CIRIS_AGENT_ID"],
+                    container_name=container.name,
+                    api_port=8080,
+                    status="running"
+                )
             return None
 
         discovery._extract_agent_info = mock_extract
@@ -153,5 +161,5 @@ class TestDockerDiscovery:
 
         # Should only find the two CIRIS agents
         assert len(agents) == 2
-        assert agents[0]["agent_id"] == "datum"
-        assert agents[1]["agent_id"] == "scout-a3b7c9"
+        assert agents[0].agent_id == "datum"
+        assert agents[1].agent_id == "scout-a3b7c9"

@@ -206,7 +206,9 @@ class LogContext:
         def record_factory(*args, **kwargs):
             record = old_factory(*args, **kwargs)
             for key, value in self.context.items():
-                setattr(record, key, value)
+                # Avoid overwriting built-in LogRecord attributes
+                if not hasattr(record, key):
+                    setattr(record, key, value)
             return record
 
         logging.setLogRecordFactory(record_factory)
