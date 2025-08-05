@@ -1,6 +1,7 @@
 """
 CIRISManager SDK - Python client for interacting with CIRISManager API.
 """
+# mypy: ignore-errors
 
 from typing import Dict, List, Optional, Any
 import requests

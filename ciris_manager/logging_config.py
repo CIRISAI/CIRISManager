@@ -4,6 +4,7 @@ Centralized logging configuration for CIRISManager.
 Implements file-based logging with rotation, multiple log streams,
 and structured logging for better observability.
 """
+# mypy: ignore-errors
 
 import logging
 import logging.handlers

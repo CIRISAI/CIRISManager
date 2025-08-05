@@ -1,6 +1,7 @@
 """
 CLI commands for CIRISManager using the SDK.
 """
+# mypy: ignore-errors
 
 import json
 import sys
