@@ -32,26 +32,14 @@ class TestCLI:
         assert "watchdog" in config
 
     @patch("ciris_manager.cli.asyncio.run")
-    @patch("ciris_manager.cli.CIRISManagerConfig.from_file")
-    @patch("ciris_manager.cli.CIRISManager")
-    def test_main_run(self, mock_manager_class, mock_config_from_file, mock_asyncio_run):
+    def test_main_run(self, mock_asyncio_run):
         """Test main run mode."""
-        # Mock config
-        mock_config = Mock()
-        mock_config_from_file.return_value = mock_config
-
-        # Mock manager
-        mock_manager = Mock()
-        mock_manager.run = Mock()
-        mock_manager_class.return_value = mock_manager
-
-        # Mock argument parsing
-        with patch("sys.argv", ["ciris-manager"]):
+        # Mock argument parsing to trigger run_manager
+        with patch("sys.argv", ["ciris-manager", "--config", "/etc/ciris-manager/config.yml"]):
             with patch("ciris_manager.cli.Path") as mock_path:
                 mock_path_obj = Mock()
                 mock_path_obj.exists.return_value = True
                 mock_path.return_value = mock_path_obj
-                mock_path_obj.expanduser.return_value = mock_path_obj
 
                 main()
 
