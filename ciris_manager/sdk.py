@@ -73,7 +73,7 @@ class CIRISManagerClient:
             try:
                 error_data = response.json()
                 message = error_data.get('detail', f'API error: {response.status_code}')
-            except:
+            except Exception:
                 message = f'API error: {response.status_code}'
             raise APIError(message, response.status_code, response.json() if response.text else None)
         
