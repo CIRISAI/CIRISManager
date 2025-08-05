@@ -9,7 +9,7 @@ import logging
 
 from ciris_manager.models import AgentInfo
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ciris_manager.docker_discovery")
 
 
 class DockerAgentDiscovery:
@@ -18,6 +18,7 @@ class DockerAgentDiscovery:
     def __init__(self) -> None:
         try:
             self.client = docker.from_env()
+            logger.debug("Connected to Docker daemon successfully")
         except Exception as e:
             logger.error(f"Failed to connect to Docker: {e}")
             self.client = None  # type: ignore[assignment]
@@ -25,12 +26,14 @@ class DockerAgentDiscovery:
     def discover_agents(self) -> List[AgentInfo]:
         """Discover all CIRIS agent containers."""
         if not self.client:
+            logger.warning("No Docker client available, returning empty agent list")
             return []
 
         agents = []
         try:
             # Find all containers with CIRIS agent characteristics
             containers = self.client.containers.list(all=True)
+            logger.debug(f"Found {len(containers)} total containers")
 
             for container in containers:
                 # Check if this is a CIRIS agent by looking at environment variables
@@ -43,9 +46,13 @@ class DockerAgentDiscovery:
 
                 # Is this a CIRIS agent? Must have CIRIS_AGENT_ID
                 if "CIRIS_AGENT_ID" in env_dict:
+                    logger.debug(f"Found CIRIS agent container: {container.name} (ID: {env_dict.get('CIRIS_AGENT_ID')})")
                     agent_info = self._extract_agent_info(container, env_dict)
                     if agent_info:
+                        logger.debug(f"Extracted agent info: {agent_info.agent_id} on port {agent_info.api_port}")
                         agents.append(agent_info)
+                    else:
+                        logger.warning(f"Could not extract agent info from container {container.name}")
 
         except Exception as e:
             logger.error(f"Error discovering agents: {e}")

@@ -11,6 +11,7 @@ import signal
 import secrets
 from pathlib import Path
 from typing import Optional, Dict, Any
+import time
 
 from ciris_manager.core.watchdog import CrashLoopWatchdog
 from ciris_manager.config.settings import CIRISManagerConfig
@@ -20,8 +21,10 @@ from ciris_manager.agent_registry import AgentRegistry
 from ciris_manager.compose_generator import ComposeGenerator
 from ciris_manager.nginx_manager import NginxManager
 from ciris_manager.docker_image_cleanup import DockerImageCleanup
+from ciris_manager.logging_config import log_agent_operation
 
 logger = logging.getLogger(__name__)
+agent_logger = logging.getLogger("ciris_manager.agent_lifecycle")
 
 
 class CIRISManager:
@@ -157,6 +160,9 @@ class CIRISManager:
             ValueError: Invalid template or name
             PermissionError: WA signature required but not provided
         """
+        start_time = time.time()
+        agent_logger.info(f"Starting agent creation - name: {name}, template: {template}")
+        log_agent_operation("create_start", agent_id="pending", details={"name": name, "template": template})
         # Validate inputs
         template_path = Path(self.config.manager.templates_directory) / f"{template}.yaml"
         if not template_path.exists():
@@ -225,11 +231,35 @@ class CIRISManager:
             service_token=encrypted_token,  # Store encrypted version
         )
 
-        # Update nginx routing (no conditional needed - handled by manager type)
-        await self._add_nginx_route(name.lower(), allocated_port)
+        # Update nginx routing
+        agent_logger.info(f"Updating nginx configuration for agent {agent_id}")
+        try:
+            await self._add_nginx_route(agent_id, allocated_port)
+            agent_logger.info(f"✅ Nginx routes added for agent {agent_id}")
+        except Exception as e:
+            agent_logger.error(f"❌ Failed to add nginx routes for {agent_id}: {e}")
+            # Clean up on failure
+            self.agent_registry.unregister_agent(agent_id)
+            self.port_manager.release_port(agent_id)
+            raise RuntimeError(f"Failed to configure nginx routing: {e}")
 
         # Start the agent
+        agent_logger.info(f"Starting container for agent {agent_id}")
         await self._start_agent(agent_id, compose_path)
+
+        duration_ms = int((time.time() - start_time) * 1000)
+        agent_logger.info(f"✅ Agent {agent_id} created successfully in {duration_ms}ms")
+        
+        log_agent_operation(
+            operation="create_complete",
+            agent_id=agent_id,
+            details={
+                "name": name,
+                "template": template,
+                "port": allocated_port,
+                "duration_ms": duration_ms
+            }
+        )
 
         return {
             "agent_id": agent_id,
@@ -263,8 +293,9 @@ class CIRISManager:
             logger.error(f"Error updating nginx config: {e}")
             return False
 
-    async def _add_nginx_route(self, agent_name: str, port: int) -> None:
+    async def _add_nginx_route(self, agent_id: str, port: int) -> None:
         """Update nginx configuration after adding a new agent."""
+        logger.debug(f"_add_nginx_route called for agent {agent_id} on port {port}")
         # With the new template-based approach, we regenerate the entire config
         success = await self.update_nginx_config()
         if not success:
@@ -590,14 +621,23 @@ class CIRISManager:
 
 async def main() -> None:
     """Main entry point for CIRISManager."""
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    # Setup file-based logging
+    from ciris_manager.logging_config import setup_logging
+    
+    # Set up logging before anything else
+    setup_logging(
+        log_dir="/var/log/ciris-manager",
+        console_level="INFO",
+        file_level="DEBUG",
+        use_json=False  # Use human-readable format for now
     )
+    
+    logger = logging.getLogger(__name__)
+    logger.info("=== CIRISManager Starting ===")
 
     # Load configuration
     config_path = "/etc/ciris-manager/config.yml"
+    logger.info(f"Loading configuration from {config_path}")
     config = CIRISManagerConfig.from_file(config_path)
 
     # Create and run manager

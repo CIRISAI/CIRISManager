@@ -4,7 +4,7 @@ CLI commands for CIRISManager using the SDK.
 
 import json
 import sys
-from typing import Optional, Any
+from typing import Any
 import argparse
 from tabulate import tabulate
 
