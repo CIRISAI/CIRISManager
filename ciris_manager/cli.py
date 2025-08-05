@@ -9,8 +9,6 @@ import sys
 import yaml
 from pathlib import Path
 
-from ciris_manager.manager import CIRISManager
-from ciris_manager.config.settings import CIRISManagerConfig
 from ciris_manager.auth_cli import handle_auth_command
 from ciris_manager.cli_client import add_cli_commands, handle_agent_commands, handle_system_commands
 from ciris_manager.sdk import CIRISManagerClient
@@ -37,6 +35,7 @@ async def run_manager(config_path: str) -> None:
     """Run the CIRISManager."""
     # Import and run the properly configured main function
     from ciris_manager.manager import main
+
     await main()
 
 

@@ -247,7 +247,7 @@ class CIRISManager:
 
         # Wait a moment for container to be fully up
         await asyncio.sleep(2)
-        
+
         # NOW update nginx routing after container is running
         agent_logger.info(f"Updating nginx configuration for agent {agent_id}")
         try:
@@ -256,7 +256,9 @@ class CIRISManager:
         except Exception as e:
             agent_logger.error(f"❌ Failed to add nginx routes for {agent_id}: {e}")
             # Container started but nginx failed - log but don't fail the creation
-            agent_logger.warning(f"Agent {agent_id} created but nginx routing failed - agent may not be accessible via gateway")
+            agent_logger.warning(
+                f"Agent {agent_id} created but nginx routing failed - agent may not be accessible via gateway"
+            )
 
         duration_ms = int((time.time() - start_time) * 1000)
         agent_logger.info(f"✅ Agent {agent_id} created successfully in {duration_ms}ms")
@@ -643,7 +645,7 @@ async def main() -> None:
         # Can't write to /var/log, use local directory
         log_dir = Path.home() / ".local" / "log" / "ciris-manager"
         log_dir = str(log_dir)
-    
+
     try:
         setup_logging(
             log_dir=log_dir,
