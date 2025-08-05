@@ -368,7 +368,7 @@ http {
     def _reload_nginx(self) -> bool:
         """Reload nginx configuration."""
         logger.info(f"Reloading nginx container: {self.container_name}")
-        
+
         # First try reload - it's faster and doesn't drop connections
         result = subprocess.run(
             ["docker", "exec", self.container_name, "nginx", "-s", "reload"], capture_output=True
@@ -380,13 +380,13 @@ http {
             logger.warning(f"Nginx reload failed with return code {result.returncode}")
             logger.warning(f"STDERR: {stderr}")
             logger.warning(f"STDOUT: {stdout}")
-            
+
             # If reload fails, try restart as fallback
             logger.info("Attempting nginx container restart as fallback")
             restart_result = subprocess.run(
                 ["docker", "restart", self.container_name], capture_output=True
             )
-            
+
             if restart_result.returncode != 0:
                 logger.error(f"Nginx restart also failed: {restart_result.stderr.decode()}")
                 return False
