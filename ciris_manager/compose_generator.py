@@ -128,6 +128,7 @@ class ComposeGenerator:
                         "ai.ciris.agents.id": agent_id,
                         "ai.ciris.agents.created": datetime.now(timezone.utc).isoformat(),
                         "ai.ciris.agents.template": template,
+                        "ai.ciris.agents.deployment_group": "general",
                     },
                 }
             },

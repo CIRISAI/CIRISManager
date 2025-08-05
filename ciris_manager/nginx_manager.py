@@ -8,6 +8,7 @@ all routes for GUI, manager API, and dynamic agent routes.
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import List, Optional
 import logging
@@ -367,7 +368,8 @@ http {
     def _reload_nginx(self) -> bool:
         """Reload nginx configuration."""
         logger.info(f"Reloading nginx container: {self.container_name}")
-        # Just reload - config is already in place via volume mount
+        
+        # First try reload - it's faster and doesn't drop connections
         result = subprocess.run(
             ["docker", "exec", self.container_name, "nginx", "-s", "reload"], capture_output=True
         )
@@ -375,10 +377,24 @@ http {
         if result.returncode != 0:
             stderr = result.stderr.decode()
             stdout = result.stdout.decode()
-            logger.error(f"Nginx reload failed with return code {result.returncode}")
-            logger.error(f"STDERR: {stderr}")
-            logger.error(f"STDOUT: {stdout}")
-            return False
+            logger.warning(f"Nginx reload failed with return code {result.returncode}")
+            logger.warning(f"STDERR: {stderr}")
+            logger.warning(f"STDOUT: {stdout}")
+            
+            # If reload fails, try restart as fallback
+            logger.info("Attempting nginx container restart as fallback")
+            restart_result = subprocess.run(
+                ["docker", "restart", self.container_name], capture_output=True
+            )
+            
+            if restart_result.returncode != 0:
+                logger.error(f"Nginx restart also failed: {restart_result.stderr.decode()}")
+                return False
+            else:
+                logger.info("Nginx container restarted successfully")
+                # Give nginx a moment to start up
+                time.sleep(2)
+                return True
 
         # Log any warnings from nginx (like the http2 deprecation)
         if result.stderr:
