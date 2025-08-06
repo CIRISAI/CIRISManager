@@ -159,7 +159,14 @@ def create_routes(manager: Any) -> APIRouter:
         if not static_path.exists():
             raise HTTPException(status_code=404, detail="Manager UI not found")
 
-        return FileResponse(static_path)
+        return FileResponse(
+            static_path,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 
     @router.get("/manager.js", response_model=None)
     async def manager_js(
@@ -196,7 +203,15 @@ def create_routes(manager: Any) -> APIRouter:
         if not static_path.exists():
             raise HTTPException(status_code=404, detail="Manager JS not found")
 
-        return FileResponse(static_path, media_type="application/javascript")
+        return FileResponse(
+            static_path, 
+            media_type="application/javascript",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 
     @router.get("/callback")
     async def manager_callback(token: Optional[str] = None) -> Response:
