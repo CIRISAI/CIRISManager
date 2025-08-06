@@ -100,7 +100,7 @@ class DockerAgentDiscovery:
                     break
 
             # Build agent info - simple and typed
-            return AgentInfo(
+            agent_info = AgentInfo(
                 agent_id=agent_id,
                 agent_name=agent_name,
                 container_name=container.name,
@@ -109,11 +109,52 @@ class DockerAgentDiscovery:
                 image=config.get("Image"),
                 oauth_status=None,  # OAuth status tracked separately in metadata
                 service_token=None,  # Service tokens are in agent registry, not containers
+                version=None,  # Will be populated by query_agent_version
+                codename=None,
+                code_hash=None,
             )
+
+            # Query version info if agent is running
+            if agent_info.is_running and agent_info.has_port:
+                version_info = self._query_agent_version(agent_id, agent_info.api_port)
+                if version_info:
+                    agent_info.version = version_info.get("version")
+                    agent_info.codename = version_info.get("codename")
+                    agent_info.code_hash = version_info.get("code_hash")
+                    logger.debug(
+                        f"Agent {agent_id} version: {agent_info.version} ({agent_info.codename})"
+                    )
+
+            return agent_info
 
         except Exception as e:
             logger.error(f"Error extracting info from container {container.name}: {e}")
             return None
+
+    def _query_agent_version(self, agent_id: str, port: int) -> Optional[Dict[str, str]]:
+        """Query agent's /v1/agent/status endpoint for version information."""
+        try:
+            # Use synchronous httpx client for simplicity in sync context
+            import httpx
+
+            url = f"http://localhost:{port}/v1/agent/status"
+            with httpx.Client(timeout=2.0) as client:
+                response = client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "version": data.get("version"),
+                        "codename": data.get("codename"),
+                        "code_hash": data.get("code_hash"),
+                    }
+                else:
+                    logger.debug(
+                        f"Agent {agent_id} status endpoint returned {response.status_code}"
+                    )
+        except Exception as e:
+            logger.debug(f"Could not query version for agent {agent_id}: {e}")
+
+        return None
 
     def get_agent_logs(self, container_name: str, lines: int = 100) -> str:
         """Get logs from an agent container."""

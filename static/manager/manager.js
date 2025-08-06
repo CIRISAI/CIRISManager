@@ -80,11 +80,18 @@ function renderAgents() {
                         <span class="px-2 py-1 bg-gray-100 text-gray-700 text-sm rounded">
                             ${escapeHtml(agent.template)}
                         </span>
+                        ${agent.version ? `
+                            <span class="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded" title="${escapeHtml(agent.codename || '')}">
+                                v${escapeHtml(agent.version)}
+                            </span>
+                        ` : ''}
                     </div>
                     <div class="text-sm text-gray-600 space-y-1">
                         <div>ID: ${escapeHtml(agent.agent_id)}</div>
                         <div>Container: ${escapeHtml(agent.container_name)}</div>
                         <div>Port: ${agent.api_port || agent.port}</div>
+                        ${agent.codename ? `<div>Codename: ${escapeHtml(agent.codename)}</div>` : ''}
+                        ${agent.code_hash ? `<div class="font-mono text-xs">Hash: ${escapeHtml(agent.code_hash).substring(0, 8)}...</div>` : ''}
                         <div class="flex items-center gap-1">
                             <span class="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
                             ${agent.status || 'running'}
@@ -131,6 +138,63 @@ function renderStatus() {
             </div>
         </div>
     `;
+    
+    // Fetch and display version summary
+    fetchVersionSummary();
+}
+
+// Fetch version summary for agents
+async function fetchVersionSummary() {
+    try {
+        const response = await fetch('/manager/v1/agents/versions', { credentials: 'include' });
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        
+        // Add version summary to status tab
+        const statusContent = document.getElementById('status-content');
+        let versionSummaryDiv = document.getElementById('version-summary');
+        
+        if (!versionSummaryDiv) {
+            versionSummaryDiv = document.createElement('div');
+            versionSummaryDiv.id = 'version-summary';
+            versionSummaryDiv.className = 'mt-6';
+            statusContent.appendChild(versionSummaryDiv);
+        }
+        
+        versionSummaryDiv.innerHTML = `
+            <h3 class="text-lg font-semibold mb-2">Agent Versions</h3>
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <div class="mb-3">
+                    <strong>Total Agents:</strong> ${data.total_agents}
+                </div>
+                <div>
+                    <strong>Version Distribution:</strong>
+                    <ul class="list-disc list-inside mt-2">
+                        ${Object.entries(data.version_summary || {}).map(([version, count]) =>
+                            `<li>${version}: ${count} agent${count !== 1 ? 's' : ''}</li>`
+                        ).join('')}
+                    </ul>
+                </div>
+                ${data.agents && data.agents.length > 0 ? `
+                    <div class="mt-4">
+                        <strong>Agent Details:</strong>
+                        <div class="mt-2 space-y-1">
+                            ${data.agents.map(agent => `
+                                <div class="text-sm">
+                                    <span class="font-medium">${escapeHtml(agent.agent_name)}:</span>
+                                    <span class="text-gray-600">v${escapeHtml(agent.version)}</span>
+                                    ${agent.codename !== 'unknown' ? `<span class="text-gray-500">(${escapeHtml(agent.codename)})</span>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    } catch (error) {
+        console.error('Failed to fetch version summary:', error);
+    }
 }
 
 // Switch tabs

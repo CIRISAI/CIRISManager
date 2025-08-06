@@ -23,6 +23,14 @@ class AgentInfo(BaseModel):
     service_token: Optional[str] = Field(
         None, description="Service account token for manager-to-agent authentication"
     )
+    # Version information from agent status API
+    version: Optional[str] = Field(None, description="Agent semantic version (e.g., 1.0.4-beta)")
+    codename: Optional[str] = Field(
+        None, description="Agent release codename (e.g., Graceful Guardian)"
+    )
+    code_hash: Optional[str] = Field(
+        None, description="Agent code hash for exact version identification"
+    )
 
     # Computed properties for common access patterns
     @property
