@@ -617,7 +617,7 @@ def create_routes(manager: Any) -> APIRouter:
 
         # Build version response
         agent_versions = []
-        version_summary = {}
+        version_summary: Dict[str, int] = {}
 
         for agent in agents:
             agent_version = {

@@ -115,7 +115,7 @@ class DockerAgentDiscovery:
             )
 
             # Query version info if agent is running
-            if agent_info.is_running and agent_info.has_port:
+            if agent_info.is_running and agent_info.has_port and agent_info.api_port:
                 version_info = self._query_agent_version(agent_id, agent_info.api_port)
                 if version_info:
                     agent_info.version = version_info.get("version")
