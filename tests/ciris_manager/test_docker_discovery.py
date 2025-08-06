@@ -142,7 +142,7 @@ class TestDockerDiscovery:
 
         # Mock _extract_agent_info to return AgentInfo for valid agents
         from ciris_manager.models import AgentInfo
-        
+
         def mock_extract(container, env_dict):
             if "CIRIS_AGENT_ID" in env_dict:
                 return AgentInfo(
@@ -150,7 +150,7 @@ class TestDockerDiscovery:
                     agent_name=env_dict["CIRIS_AGENT_ID"],
                     container_name=container.name,
                     api_port=8080,
-                    status="running"
+                    status="running",
                 )
             return None
 
