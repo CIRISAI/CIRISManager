@@ -207,7 +207,12 @@ class TestAPIRoutes:
 
         # Verify create_agent was called correctly
         mock_manager.create_agent.assert_called_once_with(
-            template="scout", name="Scout", environment={"CUSTOM": "value"}, wa_signature=None
+            template="scout", 
+            name="Scout", 
+            environment={"CUSTOM": "value"}, 
+            wa_signature=None,
+            use_mock_llm=None,
+            enable_discord=None
         )
 
     def test_create_agent_with_wa_signature(self, client, mock_manager):
@@ -228,7 +233,12 @@ class TestAPIRoutes:
 
         assert response.status_code == 200
         mock_manager.create_agent.assert_called_once_with(
-            template="custom", name="Custom", environment=None, wa_signature="test_signature"
+            template="custom", 
+            name="Custom", 
+            environment={},  # API defaults to empty dict, not None
+            wa_signature="test_signature",
+            use_mock_llm=None,
+            enable_discord=None
         )
 
     def test_create_agent_invalid_template(self, client, mock_manager):

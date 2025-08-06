@@ -12,24 +12,13 @@ import logging
 import os
 from pathlib import Path
 from .auth import get_current_user_dependency as get_current_user
-from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus
+from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
 
 logger = logging.getLogger(__name__)
 
 
-class CreateAgentRequest(BaseModel):
-    """Request model for agent creation."""
-
-    template: str = Field(..., description="Template name (e.g., 'scout', 'sage')")
-    name: str = Field(..., description="Agent name")
-    environment: Optional[Dict[str, str]] = Field(
-        default=None, description="Additional environment variables"
-    )
-    wa_signature: Optional[str] = Field(
-        default=None, description="WA signature for non-approved templates"
-    )
-
+# CreateAgentRequest is now imported from models.py
 
 class AgentResponse(BaseModel):
     """Response model for agent information."""
@@ -330,6 +319,8 @@ def create_routes(manager: Any) -> APIRouter:
                 name=request.name,
                 environment=request.environment,
                 wa_signature=request.wa_signature,
+                use_mock_llm=request.use_mock_llm,
+                enable_discord=request.enable_discord,
             )
 
             return AgentResponse(

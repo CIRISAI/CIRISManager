@@ -94,6 +94,9 @@ class CreateAgentRequest(BaseModel):
     template: str = Field(..., description="Template name (e.g., 'echo', 'teacher')")
     name: str = Field(..., description="Agent name")
     environment: dict = Field(default_factory=dict, description="Environment variables")
+    wa_signature: Optional[str] = Field(None, description="WA signature for non-approved templates")
+    use_mock_llm: Optional[bool] = Field(None, description="Use mock LLM instead of real API")
+    enable_discord: Optional[bool] = Field(None, description="Enable Discord adapter for agent")
 
 
 class UpdateNotification(BaseModel):

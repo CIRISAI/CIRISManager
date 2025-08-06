@@ -64,7 +64,7 @@ class TestComposeGenerator:
         assert env["CIRIS_TEMPLATE"] == "scout"
         assert env["CIRIS_API_HOST"] == "0.0.0.0"
         assert env["CIRIS_API_PORT"] == "8080"
-        assert env["CIRIS_USE_MOCK_LLM"] == "true"
+        assert env["CIRIS_MOCK_LLM"] == "true"
 
         # Check volumes
         volumes = service["volumes"]
@@ -100,14 +100,14 @@ class TestComposeGenerator:
             agent_dir=temp_agent_dir,
             environment={
                 "CUSTOM_VAR": "custom_value",
-                "CIRIS_USE_MOCK_LLM": "false",  # Override default
+                "CIRIS_MOCK_LLM": "false",  # Override default
                 "DEBUG": "true",
             },
         )
 
         env = compose["services"]["agent-scout"]["environment"]
         assert env["CUSTOM_VAR"] == "custom_value"
-        assert env["CIRIS_USE_MOCK_LLM"] == "false"  # Overridden
+        assert env["CIRIS_MOCK_LLM"] == "false"  # Overridden
         assert env["DEBUG"] == "true"
         # CIRIS_AGENT_NAME removed - display name derived from agent_id  # Base env still present
 
@@ -123,7 +123,24 @@ class TestComposeGenerator:
         )
 
         env = compose["services"]["agent-scout"]["environment"]
-        assert "CIRIS_USE_MOCK_LLM" not in env
+        assert "CIRIS_MOCK_LLM" not in env
+
+    def test_generate_compose_with_discord(self, generator, temp_agent_dir):
+        """Test compose generation with Discord adapter enabled."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            environment={"DISCORD_BOT_TOKEN": "test-token"},
+            enable_discord=True,
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        assert "CIRIS_ADAPTER" in env
+        assert "discord" in env["CIRIS_ADAPTER"]
+        assert "api" in env["CIRIS_ADAPTER"]
 
     def test_generate_compose_custom_oauth_volume(self, generator, temp_agent_dir):
         """Test compose generation with custom OAuth volume."""

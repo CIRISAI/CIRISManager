@@ -143,6 +143,8 @@ class CIRISManager:
         name: str,
         environment: Optional[Dict[str, str]] = None,
         wa_signature: Optional[str] = None,
+        use_mock_llm: Optional[bool] = None,
+        enable_discord: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
         Create a new agent.
@@ -152,6 +154,8 @@ class CIRISManager:
             name: Agent name
             environment: Additional environment variables
             wa_signature: WA signature for non-approved templates
+            use_mock_llm: Whether to use mock LLM (None = use default)
+            enable_discord: Whether to enable Discord adapter (None = auto-detect)
 
         Returns:
             Agent creation result
@@ -209,6 +213,11 @@ class CIRISManager:
         environment["CIRIS_SERVICE_TOKEN"] = service_token
 
         # Generate docker-compose.yml
+        # Default to mock LLM if not specified
+        actual_use_mock_llm = use_mock_llm if use_mock_llm is not None else True
+        # Default to auto-detect Discord if not specified  
+        actual_enable_discord = enable_discord if enable_discord is not None else False
+        
         compose_config = self.compose_generator.generate_compose(
             agent_id=agent_id,
             agent_name=name,
@@ -216,7 +225,8 @@ class CIRISManager:
             template=template,
             agent_dir=agent_dir,
             environment=environment,
-            use_mock_llm=True,  # Use mock LLMs for safety during QA
+            use_mock_llm=actual_use_mock_llm,
+            enable_discord=actual_enable_discord,
         )
 
         # Write compose file

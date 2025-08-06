@@ -36,6 +36,7 @@ class ComposeGenerator:
         agent_dir: Path,
         environment: Optional[Dict[str, str]] = None,
         use_mock_llm: bool = True,
+        enable_discord: bool = False,
         oauth_volume: str = "/home/ciris/shared/oauth",
     ) -> Dict[str, Any]:
         """
@@ -49,6 +50,7 @@ class ComposeGenerator:
             agent_dir: Agent's directory path
             environment: Additional environment variables
             use_mock_llm: Whether to use mock LLM
+            enable_discord: Whether to enable Discord adapter
             oauth_volume: Path to shared OAuth configuration
 
         Returns:
@@ -63,33 +65,36 @@ class ComposeGenerator:
         }
 
         if use_mock_llm:
-            base_env["CIRIS_USE_MOCK_LLM"] = "true"
+            base_env["CIRIS_MOCK_LLM"] = "true"
 
         # Merge with additional environment
         if environment:
             base_env.update(environment)
 
-        # Intelligently determine communication channels based on configuration
+        # Determine communication channels based on configuration
         channels = []
 
         # API is always enabled for management and monitoring
         channels.append("api")
         logger.info("Communication channel enabled: API (Web GUI access)")
 
-        # Check for Discord configuration
-        discord_indicators = [
-            "DISCORD_BOT_TOKEN",
-            "DISCORD_TOKEN",
-            "DISCORD_HOME_CHANNEL_ID",
-            "DISCORD_CHANNEL_IDS",
-        ]
+        # Check if Discord should be enabled
+        if enable_discord:
+            # Verify Discord token is provided
+            discord_token_keys = [
+                "DISCORD_BOT_TOKEN",
+                "DISCORD_TOKEN",
+            ]
+            has_discord_token = any(key in base_env and base_env.get(key) for key in discord_token_keys)
+            
+            if has_discord_token:
+                channels.append("discord")
+                logger.info("Communication channel enabled: Discord")
+            else:
+                logger.warning("Discord adapter requested but no DISCORD_BOT_TOKEN provided in environment")
 
-        if any(key in base_env and base_env.get(key) for key in discord_indicators):
-            channels.append("discord")
-            logger.info("Communication channel enabled: Discord (bot token detected)")
-
-        # Future: Add detection for other platforms
-        # if "SLACK_BOT_TOKEN" in base_env:
+        # Future: Add support for other platforms
+        # if enable_slack and "SLACK_BOT_TOKEN" in base_env:
         #     channels.append("slack")
         #     logger.info("Communication channel enabled: Slack")
 
