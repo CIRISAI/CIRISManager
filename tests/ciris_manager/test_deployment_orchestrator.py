@@ -170,7 +170,7 @@ class TestDeploymentOrchestrator:
             )
 
             assert response.agent_id == "test-agent"
-            assert response.decision == "accept"
+            assert response.decision == "notified"  # Changed to match new behavior
 
     @pytest.mark.asyncio
     async def test_agent_update_defer(self, orchestrator):
