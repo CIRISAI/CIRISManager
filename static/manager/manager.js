@@ -81,8 +81,14 @@ function renderAgents() {
                             ${escapeHtml(agent.template)}
                         </span>
                         ${agent.version ? `
-                            <span class="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded" title="${escapeHtml(agent.codename || '')}">
+                            <span class="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded flex items-center gap-1" title="${escapeHtml(agent.codename || '')}">
+                                <i class="fas fa-tag text-xs"></i>
                                 v${escapeHtml(agent.version)}
+                            </span>
+                        ` : ''}
+                        ${agent.code_hash ? `
+                            <span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded font-mono" title="Commit: ${escapeHtml(agent.code_hash)}">
+                                ${escapeHtml(agent.code_hash.substring(0, 7))}
                             </span>
                         ` : ''}
                     </div>
@@ -102,8 +108,11 @@ function renderAgents() {
                     <button onclick="openAgentUI('${agent.agent_id}')" class="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded">
                         <i class="fas fa-book"></i> API Docs
                     </button>
-                    <button onclick="showOAuthSetup('${agent.agent_id}')" class="px-3 py-1 text-purple-600 hover:bg-purple-50 rounded">
+                    <button onclick="showAgentSettings('${agent.agent_id}')" class="px-3 py-1 text-purple-600 hover:bg-purple-50 rounded">
                         <i class="fas fa-cog"></i> Settings
+                    </button>
+                    <button onclick="showOAuthSetup('${agent.agent_id}')" class="px-3 py-1 text-indigo-600 hover:bg-indigo-50 rounded">
+                        <i class="fas fa-key"></i> OAuth
                     </button>
                     <button onclick="deleteAgent('${agent.agent_id}')" class="px-3 py-1 text-red-600 hover:bg-red-50 rounded">
                         <i class="fas fa-trash"></i> Delete
@@ -441,10 +450,23 @@ async function fetchVersionData() {
 
 // Render version data
 function renderVersionData(data) {
-    // Render latest versions
+    // Render latest versions with semantic version parsing
     const latestVersions = data.latest_versions || {};
-    document.getElementById('current-agent-image').textContent = latestVersions.agent_image || 'Unknown';
-    document.getElementById('current-gui-image').textContent = latestVersions.gui_image || 'Unknown';
+    const agentImageEl = document.getElementById('current-agent-image');
+    const guiImageEl = document.getElementById('current-gui-image');
+    
+    // Display parsed versions with semantic version and hash
+    if (latestVersions.agent_image) {
+        agentImageEl.innerHTML = formatVersionDisplay(latestVersions.agent_image);
+    } else {
+        agentImageEl.textContent = 'Unknown';
+    }
+    
+    if (latestVersions.gui_image) {
+        guiImageEl.innerHTML = formatVersionDisplay(latestVersions.gui_image);
+    } else {
+        guiImageEl.textContent = 'Unknown';
+    }
 
     // Extract digests from version data (if available)
     document.getElementById('current-agent-digest').textContent = 'N/A';
@@ -482,9 +504,12 @@ function renderVersionData(data) {
         deploymentStatus.innerHTML = '<p class="text-gray-600">No active deployment</p>';
     }
 
-    // Render agent version table
+    // Render agent version table and cards
     const tableBody = document.getElementById('agent-versions-table');
+    const cardsContainer = document.getElementById('agent-versions-cards');
+    
     if (data.agent_versions && data.agent_versions.length > 0) {
+        // Desktop table view
         tableBody.innerHTML = data.agent_versions.map(agent => {
             const isUpToDate = (
                 agent.current_agent_image === latestVersions.agent_image &&
@@ -504,10 +529,10 @@ function renderVersionData(data) {
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <span class="font-mono text-xs">${formatImageDigest(agent.current_agent_image)}</span>
+                        ${formatVersionDisplay(agent.current_agent_image)}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <span class="font-mono text-xs">${formatImageDigest(agent.current_gui_image)}</span>
+                        ${formatVersionDisplay(agent.current_gui_image)}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         ${agent.last_updated === 'never' ? 'Never' : formatDate(agent.last_updated)}
@@ -519,6 +544,48 @@ function renderVersionData(data) {
                 </tr>
             `;
         }).join('');
+        
+        // Mobile card view
+        if (cardsContainer) {
+            cardsContainer.innerHTML = data.agent_versions.map(agent => {
+                const isUpToDate = (
+                    agent.current_agent_image === latestVersions.agent_image &&
+                    agent.current_gui_image === latestVersions.gui_image
+                );
+                
+                return `
+                    <div class="bg-white border rounded-lg p-4 space-y-3">
+                        <div class="flex justify-between items-start">
+                            <h4 class="font-semibold text-gray-900">${escapeHtml(agent.agent_name)}</h4>
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full ${
+                                agent.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }">
+                                ${escapeHtml(agent.status)}
+                            </span>
+                        </div>
+                        <div class="space-y-2 text-sm">
+                            <div>
+                                <span class="text-gray-500">Agent:</span>
+                                <div class="ml-2">${formatVersionDisplay(agent.current_agent_image)}</div>
+                            </div>
+                            <div>
+                                <span class="text-gray-500">GUI:</span>
+                                <div class="ml-2">${formatVersionDisplay(agent.current_gui_image)}</div>
+                            </div>
+                            <div class="flex justify-between items-center pt-2 border-t">
+                                <span class="text-xs text-gray-500">
+                                    ${agent.last_updated === 'never' ? 'Never updated' : 'Updated ' + formatDate(agent.last_updated)}
+                                </span>
+                                ${isUpToDate ?
+                                    '<span class="text-green-600"><i class="fas fa-check-circle"></i></span>' :
+                                    '<span class="text-yellow-600"><i class="fas fa-exclamation-circle"></i></span>'
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
     } else {
         tableBody.innerHTML = `
             <tr>
@@ -527,6 +594,13 @@ function renderVersionData(data) {
                 </td>
             </tr>
         `;
+        if (cardsContainer) {
+            cardsContainer.innerHTML = `
+                <div class="text-center text-gray-500 py-8">
+                    No agent version data available
+                </div>
+            `;
+        }
     }
 
     // Render deployment history
@@ -561,6 +635,69 @@ function formatImageDigest(digest) {
         return digest.substring(0, 19) + '...';
     }
     return digest;
+}
+
+// Parse image tag to extract version info
+function parseImageTag(imageTag) {
+    if (!imageTag || imageTag === 'unknown') {
+        return { tag: 'unknown', version: null, hash: null };
+    }
+    
+    // Parse format: ghcr.io/cirisai/ciris-agent:v1.2.3-abc123
+    // or ghcr.io/cirisai/ciris-agent:latest
+    // or ghcr.io/cirisai/ciris-agent@sha256:...
+    
+    const parts = imageTag.split(':');
+    if (parts.length < 2) {
+        return { tag: imageTag, version: null, hash: null };
+    }
+    
+    const tag = parts[parts.length - 1];
+    
+    // Check for semantic version pattern (v1.2.3 or 1.2.3)
+    const semverMatch = tag.match(/^v?(\d+\.\d+\.\d+)(?:-([a-f0-9]+))?/);
+    if (semverMatch) {
+        return {
+            tag: tag,
+            version: 'v' + semverMatch[1],
+            hash: semverMatch[2] || null
+        };
+    }
+    
+    // Check for commit hash pattern
+    const hashMatch = tag.match(/^([a-f0-9]{7,40})/);
+    if (hashMatch) {
+        return {
+            tag: tag,
+            version: null,
+            hash: hashMatch[1].substring(0, 7)
+        };
+    }
+    
+    // Default: just return the tag
+    return { tag: tag, version: null, hash: null };
+}
+
+// Format version display with semantic version and hash
+function formatVersionDisplay(imageTag) {
+    const parsed = parseImageTag(imageTag);
+    
+    if (parsed.version && parsed.hash) {
+        // Both version and hash: "v1.2.3 (abc123)"
+        return `<span class="font-semibold">${escapeHtml(parsed.version)}</span> <span class="text-gray-500 text-xs">(${escapeHtml(parsed.hash)})</span>`;
+    } else if (parsed.version) {
+        // Just version: "v1.2.3"
+        return `<span class="font-semibold">${escapeHtml(parsed.version)}</span>`;
+    } else if (parsed.hash) {
+        // Just hash: "abc123"
+        return `<span class="font-mono text-xs">${escapeHtml(parsed.hash)}</span>`;
+    } else if (parsed.tag === 'latest') {
+        // Latest tag
+        return '<span class="text-blue-600 font-medium">latest</span>';
+    } else {
+        // Unknown format
+        return `<span class="text-gray-500 text-xs">${escapeHtml(parsed.tag)}</span>`;
+    }
 }
 
 // Format date
@@ -797,4 +934,94 @@ async function markOAuthComplete() {
 // Open OAuth documentation
 function openOAuthDocs() {
     window.open('https://docs.ciris.ai/oauth-setup', '_blank');
+}
+
+// Show agent settings modal
+async function showAgentSettings(agentId) {
+    const modal = document.getElementById('agent-settings-modal');
+    const agentIdSpan = document.getElementById('settings-agent-id');
+    const mockLlmCheckbox = document.getElementById('settings-mock-llm');
+    const discordCheckbox = document.getElementById('settings-discord');
+    
+    // Set agent ID in modal
+    agentIdSpan.textContent = agentId;
+    agentIdSpan.dataset.agentId = agentId;
+    
+    // Try to get current agent configuration
+    const agent = agents.find(a => a.agent_id === agentId);
+    if (agent) {
+        // Try to infer settings from agent metadata
+        // Check environment variables if available
+        mockLlmCheckbox.checked = agent.mock_llm === true || agent.use_mock_llm === true;
+        discordCheckbox.checked = agent.discord_enabled === true || agent.enable_discord === true;
+    }
+    
+    // Show modal
+    modal.classList.remove('hidden');
+}
+
+// Hide agent settings modal
+function hideAgentSettingsModal() {
+    const modal = document.getElementById('agent-settings-modal');
+    modal.classList.add('hidden');
+}
+
+// Save agent settings
+async function saveAgentSettings(event) {
+    event.preventDefault();
+    
+    const agentId = document.getElementById('settings-agent-id').dataset.agentId;
+    const mockLlm = document.getElementById('settings-mock-llm').checked;
+    const discordAdapter = document.getElementById('settings-discord').checked;
+    
+    try {
+        // Prepare configuration update
+        const configUpdate = {
+            environment: {}
+        };
+        
+        // Set or remove CIRIS_MOCK_LLM based on checkbox
+        if (mockLlm) {
+            configUpdate.environment.CIRIS_MOCK_LLM = 'true';
+        } else {
+            configUpdate.environment.CIRIS_MOCK_LLM = 'false';
+        }
+        
+        // Set or remove CIRIS_ENABLE_DISCORD based on checkbox
+        if (discordAdapter) {
+            configUpdate.environment.CIRIS_ENABLE_DISCORD = 'true';
+        } else {
+            configUpdate.environment.CIRIS_ENABLE_DISCORD = 'false';
+        }
+        
+        // Send PATCH request to update agent configuration
+        const response = await fetch(`/manager/v1/agents/${agentId}/config`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify(configUpdate)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to update agent configuration');
+        }
+        
+        const result = await response.json();
+        
+        // Hide modal
+        hideAgentSettingsModal();
+        
+        // Show success message
+        alert(`Agent ${agentId} configuration updated successfully. The container is being restarted.`);
+        
+        // Refresh agent list
+        await fetchData();
+        
+    } catch (error) {
+        console.error('Failed to save agent settings:', error);
+        alert('Failed to save agent settings: ' + error.message);
+    }
 }
