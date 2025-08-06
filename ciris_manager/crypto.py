@@ -87,7 +87,7 @@ class TokenEncryption:
         try:
             encrypted_bytes = base64.urlsafe_b64decode(encrypted_token.encode())
             decrypted = self.cipher.decrypt(encrypted_bytes)
-            return decrypted.decode()
+            return str(decrypted.decode())
         except Exception as e:
             logger.error(f"Failed to decrypt token: {e}")
             raise

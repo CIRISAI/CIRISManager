@@ -9,14 +9,14 @@ import os
 import yaml
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class ConfigValidator:
-    def __init__(self, config_path: str, env_path: str = None):
+    def __init__(self, config_path: str, env_path: Optional[str] = None):
         self.config_path = Path(config_path)
         self.env_path = Path(env_path) if env_path else None
         self.errors: List[str] = []

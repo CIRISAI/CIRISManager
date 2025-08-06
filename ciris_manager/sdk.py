@@ -106,6 +106,8 @@ class CIRISManagerClient:
         template: str = "basic",
         environment: Optional[Dict[str, str]] = None,
         mounts: Optional[List[Dict[str, str]]] = None,
+        use_mock_llm: bool = False,
+        enable_discord: bool = False,
     ) -> Dict[str, Any]:
         """
         Create a new agent.
@@ -123,6 +125,8 @@ class CIRISManagerClient:
             "name": name,
             "template": template,
             "environment": environment or {},
+            "use_mock_llm": use_mock_llm,
+            "enable_discord": enable_discord,
         }
         if mounts:
             payload["mounts"] = mounts

@@ -13,7 +13,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ciris_manager.nginx_manager import NginxManager
+from ciris_manager.nginx_manager import NginxManager  # noqa: E402
 
 
 def test_nginx_generation():

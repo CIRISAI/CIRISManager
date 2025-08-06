@@ -69,6 +69,8 @@ def handle_agent_commands(client: CIRISManagerClient, args: argparse.Namespace) 
                 template=args.template,
                 environment=env,
                 mounts=mounts if mounts else None,
+                use_mock_llm=args.mock_llm if hasattr(args, "mock_llm") else False,
+                enable_discord=args.enable_discord if hasattr(args, "enable_discord") else False,
             )
             print(f"✅ Agent created: {result.get('agent_id', 'unknown')}")
             if args.json:
@@ -202,6 +204,10 @@ def add_cli_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     create_parser.add_argument("--env", action="append", help="Environment variable (KEY=VALUE)")
     create_parser.add_argument("--mount", action="append", help="Volume mount (SOURCE:TARGET)")
+    create_parser.add_argument("--mock-llm", action="store_true", help="Use mock LLM for testing")
+    create_parser.add_argument(
+        "--enable-discord", action="store_true", help="Enable Discord adapter"
+    )
 
     # Delete agent
     delete_parser = agent_subparsers.add_parser("delete", help="Delete an agent")
