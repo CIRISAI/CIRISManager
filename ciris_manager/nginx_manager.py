@@ -381,6 +381,16 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }}
         
+        # {agent.agent_name} Documentation endpoints (FastAPI automatic)
+        location ~ ^/api/{agent.agent_id}/(docs|redoc|openapi\.json)$ {{
+            proxy_pass http://agent_{agent.agent_id}/$2$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }}
+        
         # {agent.agent_name} API routes
         location ~ ^/api/{agent.agent_id}/v1/(.*)$ {{
             proxy_pass http://agent_{agent.agent_id}/v1/$1$is_args$args;

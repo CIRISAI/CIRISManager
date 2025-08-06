@@ -420,10 +420,7 @@ async function deleteAgent(agentId) {
 
 // Open agent API documentation
 function openAgentUI(agentId) {
-    // TODO: Fix nginx routing to support /docs endpoint
-    // Current routing only supports /api/{agent_id}/v1/* but docs are at /docs not /v1/docs
-    alert('API documentation endpoint is currently being fixed. The agent API is available at /api/' + agentId + '/v1/');
-    // window.open(`/api/${agentId}/v1/docs`, '_blank');
+    window.open(`/api/${agentId}/docs`, '_blank');
 }
 
 // Fetch version adoption data
