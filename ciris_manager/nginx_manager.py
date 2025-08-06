@@ -302,19 +302,6 @@ http {
             add_header Content-Type text/plain;
         }
         
-        # Root and all GUI routes - Next.js handles routing internally
-        location / {
-            proxy_pass http://agent_gui;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection 'upgrade';
-            proxy_set_header Host $host;
-            proxy_cache_bypass $http_upgrade;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-        
         # Manager UI routes
         location /manager/ {
             proxy_pass http://manager/manager/v1/;
@@ -359,8 +346,7 @@ http {
         }
 """
 
-        # NO DEFAULT ROUTE - every API call must specify agent
-
+        # === AGENT API ROUTES - Must come before root location ===
         # Add agent-specific routes
         if agents:
             server += "\n        # === AGENT ROUTES ===\n"
@@ -408,7 +394,22 @@ http {
         }}
 """
 
-        server += """    }
+        # Root location - MUST come last as it's a catch-all
+        server += """
+        # Root and all GUI routes - Next.js handles routing internally
+        # This MUST be last as it catches all unmatched routes
+        location / {
+            proxy_pass http://agent_gui;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
 }
 """
         return server
