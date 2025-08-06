@@ -141,8 +141,8 @@ class RouteValidator:
         routes = [
             # Agent API routes
             (f"/api/{agent_id}/v1/agent/status", 401, f"[{agent_id}] API status endpoint", None, "GET"),
-            (f"/api/{agent_id}/v1/agent/info", 401, f"[{agent_id}] API info endpoint", None, "GET"),
-            (f"/api/{agent_id}/v1/health", 200, f"[{agent_id}] API health check", "healthy", "GET"),
+            (f"/api/{agent_id}/v1/agent/identity", 401, f"[{agent_id}] API identity endpoint", None, "GET"),
+            (f"/api/{agent_id}/v1/system/health", 200, f"[{agent_id}] API health check", "healthy", "GET"),
             
             # Documentation routes (should work after fix)
             (f"/api/{agent_id}/docs", 200, f"[{agent_id}] Swagger UI", "<title>", "GET"),
@@ -153,8 +153,8 @@ class RouteValidator:
             (f"/v1/auth/oauth/{agent_id}/google/callback", 422, f"[{agent_id}] Google OAuth callback", None, "GET"),
             (f"/v1/auth/oauth/{agent_id}/github/callback", 422, f"[{agent_id}] GitHub OAuth callback", None, "GET"),
             
-            # Agent GUI route (Note: This is client-side routing, served from root)
-            (f"/agent/{agent_id}", 200, f"[{agent_id}] Agent GUI (client-side route)", "<!DOCTYPE html>", "GET"),
+            # Note: Agent GUI uses client-side routing - /agent/{id} paths are handled by React router
+            # The nginx location ~ ^/agent/([^/]+) proxies to agent_gui which serves the React app
         ]
         
         passed = 0
@@ -198,13 +198,13 @@ class RouteValidator:
             ("/manager/v1/health", 200, "Manager API health", '"status"', "GET"),
             
             # Manager OAuth
-            ("/manager/v1/oauth/login", 200, "Manager OAuth login page", None, "GET"),
+            ("/manager/v1/oauth/login", 307, "Manager OAuth login redirect", None, "GET"),
             
             # Root GUI
             ("/", 200, "Root (Agent GUI)", "<!DOCTYPE html>", "GET"),
             
-            # Non-existent routes should return GUI 404 page
-            ("/this-route-does-not-exist", 200, "Non-existent route (GUI 404 page)", "<!DOCTYPE html>", "GET"),
+            # Non-existent routes return 404 (not GUI - this is intentional)
+            ("/this-route-does-not-exist", 404, "Non-existent route returns 404", None, "GET"),
         ]
         
         passed = 0
