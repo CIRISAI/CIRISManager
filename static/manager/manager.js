@@ -93,7 +93,7 @@ function renderAgents() {
                 </div>
                 <div>
                     <button onclick="openAgentUI('${agent.agent_id}')" class="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded">
-                        <i class="fas fa-external-link-alt"></i> Open
+                        <i class="fas fa-book"></i> API Docs
                     </button>
                     <button onclick="showOAuthSetup('${agent.agent_id}')" class="px-3 py-1 text-purple-600 hover:bg-purple-50 rounded">
                         <i class="fas fa-cog"></i> Settings
@@ -294,7 +294,9 @@ async function handleCreateAgent(event) {
         template: formData.get('template'),
         name: formData.get('name'),
         environment: {},
-        wa_signature: formData.get('wa_signature') || undefined
+        wa_signature: formData.get('wa_signature') || undefined,
+        use_mock_llm: formData.get('use_mock_llm') === 'on',
+        enable_discord: formData.get('enable_discord') === 'on'
     };
 
     // Collect environment variables
@@ -352,9 +354,9 @@ async function deleteAgent(agentId) {
     }
 }
 
-// Open agent UI
+// Open agent API documentation
 function openAgentUI(agentId) {
-    window.open(`/agent/${agentId}`, '_blank');
+    window.open(`/api/${agentId}/v1/docs`, '_blank');
 }
 
 // Fetch version adoption data

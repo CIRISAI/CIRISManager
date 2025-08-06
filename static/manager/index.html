@@ -217,6 +217,24 @@
                             <input type="text" name="wa_signature" class="w-full p-2 border rounded-lg" placeholder="Required for non-approved templates">
                         </div>
 
+                        <!-- Mock LLM Toggle -->
+                        <div>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="use_mock_llm" checked class="rounded">
+                                <span class="text-sm font-medium">Use Mock LLM</span>
+                                <span class="text-xs text-gray-500">(for testing/development)</span>
+                            </label>
+                        </div>
+
+                        <!-- Discord Adapter Toggle -->
+                        <div>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="enable_discord" class="rounded">
+                                <span class="text-sm font-medium">Enable Discord Adapter</span>
+                                <span class="text-xs text-gray-500">(requires DISCORD_BOT_TOKEN in env vars)</span>
+                            </label>
+                        </div>
+
                         <!-- Environment Variables -->
                         <div>
                             <label class="block text-sm font-medium mb-1">Environment Variables</label>
