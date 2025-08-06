@@ -215,9 +215,9 @@ class CIRISManager:
         # Generate docker-compose.yml
         # Default to mock LLM if not specified
         actual_use_mock_llm = use_mock_llm if use_mock_llm is not None else True
-        # Default to auto-detect Discord if not specified  
+        # Default to auto-detect Discord if not specified
         actual_enable_discord = enable_discord if enable_discord is not None else False
-        
+
         compose_config = self.compose_generator.generate_compose(
             agent_id=agent_id,
             agent_name=name,

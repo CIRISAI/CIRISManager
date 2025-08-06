@@ -85,13 +85,17 @@ class ComposeGenerator:
                 "DISCORD_BOT_TOKEN",
                 "DISCORD_TOKEN",
             ]
-            has_discord_token = any(key in base_env and base_env.get(key) for key in discord_token_keys)
-            
+            has_discord_token = any(
+                key in base_env and base_env.get(key) for key in discord_token_keys
+            )
+
             if has_discord_token:
                 channels.append("discord")
                 logger.info("Communication channel enabled: Discord")
             else:
-                logger.warning("Discord adapter requested but no DISCORD_BOT_TOKEN provided in environment")
+                logger.warning(
+                    "Discord adapter requested but no DISCORD_BOT_TOKEN provided in environment"
+                )
 
         # Future: Add support for other platforms
         # if enable_slack and "SLACK_BOT_TOKEN" in base_env:
