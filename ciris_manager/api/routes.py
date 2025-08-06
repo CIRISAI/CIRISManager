@@ -164,8 +164,8 @@ def create_routes(manager: Any) -> APIRouter:
             headers={
                 "Cache-Control": "no-cache, no-store, must-revalidate",
                 "Pragma": "no-cache",
-                "Expires": "0"
-            }
+                "Expires": "0",
+            },
         )
 
     @router.get("/manager.js", response_model=None)
@@ -204,13 +204,13 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=404, detail="Manager JS not found")
 
         return FileResponse(
-            static_path, 
+            static_path,
             media_type="application/javascript",
             headers={
                 "Cache-Control": "no-cache, no-store, must-revalidate",
                 "Pragma": "no-cache",
-                "Expires": "0"
-            }
+                "Expires": "0",
+            },
         )
 
     @router.get("/callback")
@@ -483,9 +483,9 @@ def create_routes(manager: Any) -> APIRouter:
                 # For now, just return the template name and description
                 # The actual config should be loaded when a specific template is selected
                 # Just return template metadata - GUI gets env vars from separate endpoint
-                all_templates[template_name] = (
-                    f"{template_name.replace('-', ' ').title()} agent template"
-                )
+                all_templates[
+                    template_name
+                ] = f"{template_name.replace('-', ' ').title()} agent template"
 
         # For development: if no manifest exists, treat some templates as pre-approved
         if not pre_approved and all_templates:
