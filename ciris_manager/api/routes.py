@@ -468,9 +468,9 @@ def create_routes(manager: Any) -> APIRouter:
                 # For now, just return the template name and description
                 # The actual config should be loaded when a specific template is selected
                 # Just return template metadata - GUI gets env vars from separate endpoint
-                all_templates[
-                    template_name
-                ] = f"{template_name.replace('-', ' ').title()} agent template"
+                all_templates[template_name] = (
+                    f"{template_name.replace('-', ' ').title()} agent template"
+                )
 
         # For development: if no manifest exists, treat some templates as pre-approved
         if not pre_approved and all_templates:
