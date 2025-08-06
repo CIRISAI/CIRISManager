@@ -389,6 +389,11 @@ class DeploymentOrchestrator:
             elif isinstance(result, AgentUpdateResponse):
                 if result.decision == "accept":
                     status.agents_updated += 1
+                elif result.decision == "notified":
+                    # Agent was notified of shutdown request but may not actually shutdown
+                    # Count as updated for now, but log the uncertainty
+                    status.agents_updated += 1
+                    logger.info(f"Agent {result.agent_id} was notified (not confirmed)")
                 elif result.decision == "defer":
                     status.agents_deferred += 1
                 else:
@@ -493,13 +498,15 @@ class DeploymentOrchestrator:
                 )
 
                 if response.status_code == 200:
-                    # Successful shutdown means agent accepts update
-                    logger.info(f"Agent {agent.agent_id} accepted shutdown for update (HTTP 200)")
+                    # HTTP 200 means shutdown was requested, not necessarily accepted
+                    # The agent may or may not actually shutdown based on its own logic
+                    logger.info(f"Agent {agent.agent_id} notified of shutdown request (HTTP 200)")
                     audit_deployment_action(
                         deployment_id=deployment_id,
-                        action="update_accepted",
+                        action="shutdown_notified",
                         agent_id=agent.agent_id,
                         success=True,
+                        details={"note": "Agent notified but may not shutdown immediately"},
                     )
 
                     # Update agent metadata with new image digests
@@ -509,8 +516,8 @@ class DeploymentOrchestrator:
 
                     return AgentUpdateResponse(
                         agent_id=agent.agent_id,
-                        decision="accept",
-                        reason="Graceful shutdown initiated",
+                        decision="notified",  # Changed from "accept" to "notified"
+                        reason="Shutdown requested but not guaranteed",
                         ready_at=None,
                     )
                 else:
@@ -539,19 +546,19 @@ class DeploymentOrchestrator:
         except httpx.ConnectError as e:
             # Agent not reachable, might already be shutting down
             logger.warning(
-                f"Agent {agent.agent_id} not reachable: {e}. Treating as successful shutdown."
+                f"Agent {agent.agent_id} not reachable: {e}. Assuming it may be shutting down."
             )
             audit_deployment_action(
                 deployment_id=deployment_id,
                 action="connection_error",
                 agent_id=agent.agent_id,
                 success=True,  # We treat this as success since agent may be shutting down
-                details={"error": str(e)},
+                details={"error": str(e), "note": "Agent unreachable, shutdown status unknown"},
             )
             return AgentUpdateResponse(
                 agent_id=agent.agent_id,
-                decision="accept",
-                reason="Agent not reachable (possibly shutting down)",
+                decision="notified",  # Changed to "notified" since we can't confirm
+                reason="Agent not reachable (possibly already shutting down)",
                 ready_at=None,
             )
         except Exception as e:
