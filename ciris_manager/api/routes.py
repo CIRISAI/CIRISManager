@@ -409,6 +409,67 @@ def create_routes(manager: Any) -> APIRouter:
                 detail=f"Failed to delete agent {agent_id}. Check logs for details.",
             )
 
+    @router.patch("/agents/{agent_id}/config")
+    async def update_agent_config(
+        agent_id: str, config_update: Dict[str, Any], user: dict = auth_dependency
+    ) -> Dict[str, str]:
+        """Update agent configuration by modifying docker-compose.yml."""
+        import yaml
+        import subprocess
+        from pathlib import Path
+
+        try:
+            # Path to agent's docker-compose file
+            compose_path = Path(f"/opt/ciris/agents/{agent_id}/docker-compose.yml")
+
+            if not compose_path.exists():
+                raise HTTPException(
+                    status_code=404, detail=f"Agent '{agent_id}' configuration not found"
+                )
+
+            # Read current docker-compose.yml
+            with open(compose_path, "r") as f:
+                compose_data = yaml.safe_load(f)
+
+            # Update environment variables
+            if "environment" in config_update:
+                if "services" in compose_data:
+                    for service in compose_data["services"].values():
+                        if "environment" in service:
+                            # Update the environment section
+                            for key, value in config_update["environment"].items():
+                                service["environment"][key] = value
+
+            # Backup current config
+            backup_path = compose_path.with_suffix(".yml.bak")
+            subprocess.run(f"cp {compose_path} {backup_path}", shell=True, check=True)
+
+            # Write updated docker-compose.yml
+            with open(compose_path, "w") as f:
+                yaml.dump(compose_data, f, default_flow_style=False, sort_keys=False)
+
+            # Recreate container with new config
+            subprocess.run(
+                f"cd /opt/ciris/agents/{agent_id} && docker-compose up -d",
+                shell=True,
+                check=True,
+                capture_output=True,
+            )
+
+            logger.info(f"Agent {agent_id} config updated by {user['email']}")
+            return {
+                "status": "updated",
+                "agent_id": agent_id,
+                "message": "Configuration updated and container recreated",
+            }
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to recreate container: {e}")
+            raise HTTPException(status_code=500, detail="Failed to apply configuration")
+        except Exception as e:
+            logger.error(f"Failed to update agent config: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     @router.get("/agents/{agent_id}/oauth/verify")
     async def verify_agent_oauth(agent_id: str, user: dict = auth_dependency) -> Dict[str, Any]:
         """

@@ -77,6 +77,19 @@ def handle_agent_commands(client: CIRISManagerClient, args: argparse.Namespace) 
                 print_json(result)
             return 0
 
+        elif args.agent_command == "update":
+            config = {}
+            if args.disable_mock_llm:
+                config["environment"] = {"CIRIS_MOCK_LLM": "false"}
+            if args.enable_production:
+                config["environment"] = {"CIRIS_MOCK_LLM": "false"}
+
+            result = client.update_agent_config(args.agent_id, config)
+            print(f"✅ Agent configuration updated: {args.agent_id}")
+            if args.json:
+                print_json(result)
+            return 0
+
         elif args.agent_command == "delete":
             if not args.yes:
                 response = input(
@@ -207,6 +220,14 @@ def add_cli_commands(subparsers: argparse._SubParsersAction) -> None:
     create_parser.add_argument("--mock-llm", action="store_true", help="Use mock LLM for testing")
     create_parser.add_argument(
         "--enable-discord", action="store_true", help="Enable Discord adapter"
+    )
+
+    # Update agent
+    update_parser = agent_subparsers.add_parser("update", help="Update agent configuration")
+    update_parser.add_argument("agent_id", help="Agent ID")
+    update_parser.add_argument("--disable-mock-llm", action="store_true", help="Disable mock LLM")
+    update_parser.add_argument(
+        "--enable-production", action="store_true", help="Enable production mode"
     )
 
     # Delete agent

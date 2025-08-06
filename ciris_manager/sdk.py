@@ -134,6 +134,11 @@ class CIRISManagerClient:
         response = self._request("POST", "/manager/v1/agents", json=payload)
         return response.json()
 
+    def update_agent_config(self, agent_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Update agent configuration."""
+        response = self._request("PATCH", f"/manager/v1/agents/{agent_id}/config", json=config)
+        return response.json()
+
     def delete_agent(self, agent_id: str) -> Dict[str, Any]:
         """Delete an agent."""
         response = self._request("DELETE", f"/manager/v1/agents/{agent_id}")
