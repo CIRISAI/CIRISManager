@@ -1,26 +1,53 @@
 # CIRISManager
 
-Production-grade lifecycle management for CIRIS agents with automatic nginx configuration and CD orchestration.
+Production-grade lifecycle management for CIRIS agents with automatic nginx routing, OAuth authentication, and canary deployments.
 
-## What It Does
+## Features
 
-CIRISManager runs as a systemd service that:
-- Discovers and monitors CIRIS agent containers
-- Generates nginx configurations automatically
-- Detects crash loops and prevents infinite restarts
-- Provides REST API for agent management
-- Handles OAuth authentication for secure access
-- Orchestrates continuous deployment with canary rollouts
-- Respects agent autonomy in update decisions
+- **Automatic Agent Discovery** - Detects and manages CIRIS agent containers via Docker
+- **Dynamic Nginx Routing** - Generates and maintains nginx configurations for multi-tenant agent access
+- **Crash Loop Detection** - Prevents infinite restarts with configurable thresholds
+- **OAuth Authentication** - Secure access with Google OAuth and JWT tokens
+- **Canary Deployments** - Orchestrates staged rollouts with agent consent
+- **RESTful API** - Complete management interface for agents and system operations
+- **File-based Logging** - Comprehensive logging with rotation to `/var/log/ciris-manager/`
 
-## Installation
+## Quick Start
+
+### Installation
 
 ```bash
-# Production deployment
-cd /opt
-git clone https://github.com/CIRISAI/CIRISManager.git ciris-manager
-cd ciris-manager
-./deployment/deploy-production.sh --domain agents.ciris.ai --email admin@ciris.ai
+# Clone repository
+git clone https://github.com/CIRISAI/CIRISManager.git
+cd CIRISManager
+
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Generate default configuration
+ciris-manager --generate-config --config /etc/ciris-manager/config.yml
+
+# Start the service
+ciris-manager --config /etc/ciris-manager/config.yml
+```
+
+### CLI Usage
+
+```bash
+# Authenticate
+ciris-manager auth login your-email@ciris.ai
+
+# List agents
+ciris-manager agent list
+
+# Create new agent
+ciris-manager agent create --name "my-agent" --template scout
+
+# Delete agent
+ciris-manager agent delete agent-id
+
+# Check system status
+ciris-manager system status
 ```
 
 ## Configuration
@@ -53,20 +80,22 @@ watchdog:
   crash_window: 300
 ```
 
-## Running
+## Systemd Service
 
-The service runs automatically via systemd:
+For production deployments, run as a systemd service:
 
 ```bash
 # Check status
-systemctl status ciris-manager-api
+systemctl status ciris-manager
 
 # View logs
-journalctl -u ciris-manager-api -f
+journalctl -u ciris-manager -f
 
-# Restart after config changes
-systemctl restart ciris-manager-api
+# Restart service
+systemctl restart ciris-manager
 ```
+
+Log files are written to `/var/log/ciris-manager/` with automatic rotation.
 
 ## API Endpoints
 
@@ -92,24 +121,30 @@ Base URL: `https://agents.ciris.ai/manager/v1`
 - `POST /updates/notify` - Receive deployment notification (requires DEPLOY_TOKEN)
 - `GET /updates/status` - Check deployment status (requires DEPLOY_TOKEN)
 
-## Nginx Management
+## Architecture
 
-CIRISManager automatically generates complete nginx configurations when agents change:
+### Nginx Routing
 
-1. Discovers agents via Docker labels
-2. Generates complete nginx.conf with all routes
-3. Writes to `/home/ciris/nginx/nginx.conf`
-4. Reloads nginx container
+CIRISManager generates complete nginx configurations automatically:
 
-The generated config includes:
-- SSL/TLS configuration
-- Manager GUI (static files at `/`)
-- Agent GUI routing (`/agent/{agent_id}`)
-- Manager API (`/manager/v1/*`)
-- Agent APIs (`/api/{agent_id}/*`)
-- WebSocket support for all agents
+**Route Structure:**
+- `/` - Manager GUI (static files)
+- `/agent/{agent_id}` - Agent GUI (multi-tenant)
+- `/manager/v1/*` - Manager API
+- `/api/{agent_id}/*` - Agent APIs (no `/v1/` prefix needed)
 
-Note: No default routes - every API call must specify which agent
+**Key Implementation Details:**
+- Configuration written in-place to preserve Docker bind mount inode
+- No default routes - explicit agent specification required
+- WebSocket support for all agent connections
+- SSL/TLS termination at nginx level
+
+### Multi-Tenant Agent Access
+
+Agents are accessed through the gateway with automatic path translation:
+- Client calls: `/api/{agent_id}/agent/interact`
+- Nginx forwards to: `http://agent_{agent_id}/v1/agent/interact`
+- SDK handles prefix stripping automatically in managed mode
 
 ## Docker Integration
 
@@ -123,44 +158,55 @@ Requirements:
 - Containers in same network or host mode
 - Proper container naming conventions
 
-## OAuth Setup
+## Authentication
 
-Production deployments use Google OAuth:
+### OAuth Setup
 
-1. Set environment variables in `/etc/ciris-manager/environment`:
-   ```
-   GOOGLE_CLIENT_ID=your-client-id
-   GOOGLE_CLIENT_SECRET=your-secret
-   MANAGER_JWT_SECRET=random-secret
-   ```
+CIRISManager supports both OAuth web flow and device flow:
 
-2. Configure OAuth consent screen in Google Cloud Console
-
-3. Add redirect URI: `https://agents.ciris.ai/manager/oauth/callback`
-
-## Creating Agents
-
-Agents are created from templates:
-
+**Environment Variables** (`/etc/ciris-manager/environment`):
 ```bash
-# Via API
-curl -X POST https://agents.ciris.ai/manager/v1/agents \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "template": "echo",
-    "name": "echo-bot",
-    "environment": {
-      "DISCORD_TOKEN": "your-token"
-    }
-  }'
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-secret
+MANAGER_JWT_SECRET=random-secret
 ```
 
-Templates define:
-- Base container image
-- Required environment variables
-- Port allocations
-- Resource limits
+**Google Cloud Console Setup:**
+1. Enable OAuth 2.0
+2. Add redirect URI: `https://your-domain/manager/v1/oauth/callback`
+3. Enable device flow for CLI authentication
+
+**CLI Authentication:**
+```bash
+ciris-manager auth login your-email@ciris.ai
+# Follow device flow instructions
+```
+
+## Agent Management
+
+### Creating Agents
+
+```bash
+# Using CLI
+ciris-manager agent create --name "my-agent" --template scout
+
+# Using Python SDK
+from ciris_manager.sdk import CIRISManagerClient
+
+client = CIRISManagerClient(base_url="https://agents.ciris.ai")
+agent = client.create_agent(
+    name="my-agent",
+    template="scout",
+    environment={"CUSTOM_VAR": "value"}
+)
+```
+
+### Available Templates
+- `scout` - Basic agent with exploration capabilities
+- `echo` - Simple echo bot for testing
+- `datum` - Data processing agent
+
+Templates are defined in `/opt/ciris-manager/templates/`
 
 ## Monitoring
 
@@ -187,29 +233,59 @@ The watchdog service:
 
 ## Troubleshooting
 
-Check service logs:
+### Common Issues
+
+**Nginx routes not updating:**
+- Check if config is written in-place (preserves inode for bind mount)
+- Verify with: `docker exec ciris-nginx cat /etc/nginx/nginx.conf | grep agent`
+- Restart nginx container if needed: `docker restart ciris-nginx`
+
+**Agent API returns 404:**
+- Multi-tenant routes don't include `/v1/` prefix
+- Correct: `/api/agent-id/agent/interact`
+- Wrong: `/api/agent-id/v1/agent/interact`
+
+**OAuth authentication fails:**
+- Verify environment variables in `/etc/ciris-manager/environment`
+- Check redirect URI matches Google Console configuration
+- Ensure JWT secret is set
+
+### Useful Commands
+
 ```bash
-# Manager logs
-journalctl -u ciris-manager-api -f
+# Check service logs
+journalctl -u ciris-manager -f
 
-# Container logs
-docker logs ciris-nginx
-docker logs ciris-agent-datum
+# View file-based logs
+tail -f /var/log/ciris-manager/manager.log
+tail -f /var/log/ciris-manager/nginx-updates.log
 
-# Nginx config
-cat /opt/ciris-manager/nginx/agents.conf
+# Verify nginx configuration
+docker exec ciris-nginx nginx -t
+
+# Check agent health
+curl https://agents.ciris.ai/api/{agent-id}/system/health
 ```
-
-Common issues:
-- **OAuth not working**: Check environment variables in `/etc/ciris-manager/environment`
-- **Nginx not updating**: Ensure service has write access to `/opt/ciris-manager/nginx`
-- **Agents not discovered**: Verify Docker socket permissions
 
 ## Continuous Deployment
 
-CIRISManager orchestrates agent deployments with informed consent. Agents receive update context including changelog, risk level, and peer results before deciding.
+CIRISManager orchestrates canary deployments automatically:
 
-See [CD Orchestration](docs/CD_ORCHESTRATION.md) for API details.
+**Deployment Phases:**
+1. **Explorers** (10%) - Early adopters test new versions
+2. **Early Adopters** (20%) - Expanded testing group
+3. **General** (70%) - Majority rollout
+
+**GitHub Actions Integration:**
+```yaml
+- name: Notify CIRISManager
+  run: |
+    curl -X POST https://agents.ciris.ai/manager/v1/updates/notify \
+      -H "X-Deploy-Token: ${{ secrets.DEPLOY_TOKEN }}" \
+      -d '{"agent_image": "ghcr.io/cirisai/ciris-agent:latest"}'
+```
+
+Agents receive update notifications and can accept, defer, or reject updates based on their current state.
 
 ## Security
 

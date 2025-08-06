@@ -336,13 +336,14 @@ CIRISManager generates **complete nginx.conf files** for all routing:
    ```
    Host: /home/ciris/nginx/nginx.conf → Container: /etc/nginx/nginx.conf:ro
    ```
-   The nginx container sees config changes immediately via volume mount.
+   **CRITICAL**: Config must be written in-place to preserve inode. Using `os.rename()` 
+   or atomic replacement breaks Docker bind mounts - the container will not see updates.
 
 3. **Update Flow**
    ```
-   Agent change detected → Generate nginx.conf → Validate config → Reload nginx
-                                                      ↓
-                                                 (rollback if invalid)
+   Agent change detected → Generate nginx.conf → Write in-place → Validate → Reload nginx
+                                                                    ↓
+                                                               (rollback if invalid)
    ```
 
 4. **Route Structure**
@@ -351,6 +352,12 @@ CIRISManager generates **complete nginx.conf files** for all routing:
    - `/manager/v1/*` → Manager API (port 8888)
    - `/api/{agent_id}/*` → Individual agents (dynamic ports)
    - **NO DEFAULT ROUTE** - every API call must specify agent
+
+5. **Multi-Tenant API Routing**
+   - Client calls: `/api/{agent_id}/agent/interact` (no `/v1/` prefix)
+   - Nginx pattern: `/api/{agent_id}/(.*)` → `http://agent_{agent_id}/$1`
+   - Agent receives: `/v1/agent/interact`
+   - SDK automatically handles prefix stripping in managed mode
 
 ### Troubleshooting Nginx Issues
 

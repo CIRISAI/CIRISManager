@@ -6,7 +6,7 @@ Provides endpoints for agent creation, discovery, and management.
 
 from fastapi import APIRouter, HTTPException, Depends, Header, Response, Request
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, Dict, Any, List, Union
 import logging
 import os

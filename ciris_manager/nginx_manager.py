@@ -382,7 +382,7 @@ http {
         }}
         
         # {agent.agent_name} API routes
-        location ~ ^/api/{agent.agent_id}/(.*)$ {{
+        location ~ ^/api/{agent.agent_id}/v1/(.*)$ {{
             proxy_pass http://agent_{agent.agent_id}/v1/$1$is_args$args;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
