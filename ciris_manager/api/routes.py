@@ -713,7 +713,7 @@ def create_routes(manager: Any) -> APIRouter:
     async def get_default_env() -> Dict[str, str]:
         """Get default environment variables for agent creation."""
         from pathlib import Path
-        
+
         # Try to read from production .env file first
         env_file_path = Path("/home/ciris/.env")
         if env_file_path.exists():
@@ -722,8 +722,13 @@ def create_routes(manager: Any) -> APIRouter:
                     content = f.read()
                 # Filter out sensitive values and keep only keys we want to expose
                 lines = []
-                sensitive_keys = {"DISCORD_BOT_TOKEN", "OPENAI_API_KEY", "CIRIS_OPENAI_API_KEY_2", "CIRIS_OPENAI_VISION_KEY"}
-                
+                sensitive_keys = {
+                    "DISCORD_BOT_TOKEN",
+                    "OPENAI_API_KEY",
+                    "CIRIS_OPENAI_API_KEY_2",
+                    "CIRIS_OPENAI_VISION_KEY",
+                }
+
                 for line in content.split("\n"):
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
@@ -733,18 +738,18 @@ def create_routes(manager: Any) -> APIRouter:
                             lines.append(f"{key}=")
                         else:
                             lines.append(line)
-                
+
                 # Add any missing essential keys
                 existing_keys = {line.split("=")[0] for line in lines if "=" in line}
                 if "CIRIS_API_PORT" not in existing_keys:
                     lines.append("CIRIS_API_PORT=8080")
                 if "CIRIS_API_HOST" not in existing_keys:
                     lines.append("CIRIS_API_HOST=0.0.0.0")
-                    
+
                 return {"content": "\n".join(lines)}
             except Exception as e:
                 logger.warning(f"Failed to read default .env file: {e}")
-        
+
         # Fallback to hardcoded defaults if file doesn't exist
         env_vars = [
             # Core CIRIS requirements
