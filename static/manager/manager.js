@@ -323,11 +323,11 @@ async function checkTemplateApproval() {
     }
 }
 
-// Load environment variables from .env file
+// Load environment variables from .env or .txt file
 async function loadEnvFromFile() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.env';
+    input.accept = '.env,.txt,text/plain';
     
     input.onchange = async (e) => {
         const file = e.target.files[0];
@@ -348,7 +348,7 @@ async function loadEnvFromFile() {
             
             showSuccess('Environment variables loaded from file');
         } catch (error) {
-            showError('Failed to load .env file: ' + error.message);
+            showError('Failed to load environment file: ' + error.message);
         }
     };
     
@@ -1162,6 +1162,38 @@ function addSettingsEnvVarRow(key = '', value = '') {
 // Add new environment variable in settings
 function addSettingsEnvVar() {
     addSettingsEnvVarRow();
+}
+
+// Load environment variables from file into settings modal
+async function loadSettingsEnvFromFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.env,.txt,text/plain';
+    
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+            const text = await file.text();
+            const env = parseEnvFile(text);
+            
+            // Clear existing env vars in settings
+            const container = document.getElementById('env-vars-settings');
+            container.innerHTML = '';
+            
+            // Add each env var to settings
+            for (const [key, value] of Object.entries(env)) {
+                addSettingsEnvVarRow(key, value);
+            }
+            
+            showSuccess('Environment variables loaded from file');
+        } catch (error) {
+            showError('Failed to load environment file: ' + error.message);
+        }
+    };
+    
+    input.click();
 }
 
 // Save agent settings

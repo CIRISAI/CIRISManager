@@ -262,7 +262,7 @@
                             <div class="flex items-center justify-between mb-2">
                                 <label class="block text-sm font-medium">Environment Variables</label>
                                 <button type="button" onclick="loadEnvFromFile()" class="text-xs text-blue-600 hover:underline">
-                                    <i class="fas fa-file-import mr-1"></i>Load from .env
+                                    <i class="fas fa-file-import mr-1"></i>Load from file
                                 </button>
                             </div>
                             <div id="env-vars-container" class="space-y-2">
@@ -604,6 +604,12 @@
                                 <i class="fas fa-cog mr-2"></i>All Environment Variables
                             </summary>
                             <div class="p-4">
+                                <div class="flex justify-between items-center mb-3">
+                                    <span class="text-sm text-gray-600">Manage all environment variables</span>
+                                    <button type="button" onclick="loadSettingsEnvFromFile()" class="text-xs text-blue-600 hover:underline">
+                                        <i class="fas fa-file-import mr-1"></i>Load from file
+                                    </button>
+                                </div>
                                 <div id="env-vars-settings" class="space-y-2">
                                     <!-- Dynamic environment variables will be inserted here -->
                                 </div>
