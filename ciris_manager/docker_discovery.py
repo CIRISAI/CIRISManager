@@ -118,6 +118,11 @@ class DockerAgentDiscovery:
                 code_hash=None,
                 mock_llm=mock_llm,
                 discord_enabled=discord_enabled,
+                template="unknown",  # Template info from registry, not container
+                created_at=None,
+                health="healthy" if container.status == "running" else "unhealthy",
+                api_endpoint=f"http://localhost:{api_port}" if api_port else None,
+                update_available=False,
             )
 
             # Query version info if agent is running
