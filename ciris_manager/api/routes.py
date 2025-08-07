@@ -466,9 +466,32 @@ def create_routes(manager: Any) -> APIRouter:
             environment = {}
             if "services" in compose_data:
                 for service in compose_data["services"].values():
+                    # First, load from env_file if specified
+                    if "env_file" in service:
+                        env_files = service["env_file"]
+                        if not isinstance(env_files, list):
+                            env_files = [env_files]
+
+                        for env_file in env_files:
+                            env_file_path = compose_path.parent / env_file
+                            if env_file_path.exists():
+                                with open(env_file_path, "r") as ef:
+                                    for line in ef:
+                                        line = line.strip()
+                                        if line and not line.startswith("#") and "=" in line:
+                                            key, value = line.split("=", 1)
+                                            # Remove quotes if present
+                                            value = value.strip()
+                                            if (value.startswith('"') and value.endswith('"')) or (
+                                                value.startswith("'") and value.endswith("'")
+                                            ):
+                                                value = value[1:-1]
+                                            environment[key.strip()] = value
+
+                    # Then, override with explicit environment variables
                     if "environment" in service:
-                        environment = service["environment"]
-                        break
+                        environment.update(service["environment"])
+                    break
 
             return {
                 "agent_id": agent_id,
