@@ -323,6 +323,83 @@ async function checkTemplateApproval() {
     }
 }
 
+// Load environment variables from .env file
+async function loadEnvFromFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.env';
+    
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+            const text = await file.text();
+            const env = parseEnvFile(text);
+            
+            // Clear existing env vars
+            const container = document.getElementById('env-vars-container');
+            container.innerHTML = '';
+            
+            // Add each env var
+            for (const [key, value] of Object.entries(env)) {
+                addEnvVarRow(key, value);
+            }
+            
+            showSuccess('Environment variables loaded from file');
+        } catch (error) {
+            showError('Failed to load .env file: ' + error.message);
+        }
+    };
+    
+    input.click();
+}
+
+// Parse .env file content
+function parseEnvFile(content) {
+    const env = {};
+    const lines = content.split('\n');
+    
+    for (const line of lines) {
+        // Skip comments and empty lines
+        if (!line || line.trim().startsWith('#')) continue;
+        
+        const match = line.match(/^([^=]+)=(.*)$/);
+        if (match) {
+            const key = match[1].trim();
+            let value = match[2].trim();
+            
+            // Remove quotes if present
+            if ((value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.slice(1, -1);
+            }
+            
+            env[key] = value;
+        }
+    }
+    
+    return env;
+}
+
+// Add environment variable row in create dialog
+function addEnvVarRow(key = '', value = '') {
+    const container = document.getElementById('env-vars-container');
+    const row = document.createElement('div');
+    row.className = 'flex gap-2';
+    row.innerHTML = `
+        <input type="text" placeholder="Key" value="${escapeHtml(key)}" 
+               class="flex-1 p-2 border rounded-lg env-key">
+        <input type="text" placeholder="Value" value="${escapeHtml(value)}" 
+               class="flex-1 p-2 border rounded-lg env-value">
+        <button type="button" onclick="this.parentElement.remove()" 
+                class="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    container.appendChild(row);
+}
+
 // Load template default environment variables
 async function loadTemplateDefaults(templateName) {
     // Clear existing env vars
@@ -983,18 +1060,76 @@ async function showAgentSettings(agentId) {
     const agentIdSpan = document.getElementById('settings-agent-id');
     const mockLlmCheckbox = document.getElementById('settings-mock-llm');
     const discordCheckbox = document.getElementById('settings-discord');
+    const discordSection = document.getElementById('discord-config-section');
     
     // Set agent ID in modal
     agentIdSpan.textContent = agentId;
     agentIdSpan.dataset.agentId = agentId;
     
-    // Try to get current agent configuration
-    const agent = agents.find(a => a.agent_id === agentId);
-    if (agent) {
-        // Use the fields from Docker discovery
-        mockLlmCheckbox.checked = agent.mock_llm === true;
-        discordCheckbox.checked = agent.discord_enabled === true;
+    // Clear previous environment variables
+    const envVarsContainer = document.getElementById('env-vars-settings');
+    envVarsContainer.innerHTML = '';
+    
+    try {
+        // Get current agent configuration from docker-compose
+        const response = await fetch(`/manager/v1/agents/${agentId}/config`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('managerToken')}` }
+        });
+        
+        if (response.ok) {
+            const config = await response.json();
+            
+            // Set quick settings
+            mockLlmCheckbox.checked = config.environment?.CIRIS_MOCK_LLM !== 'false';
+            const adapters = config.environment?.CIRIS_ADAPTER || 'api';
+            discordCheckbox.checked = adapters.includes('discord');
+            
+            // Show/hide Discord section
+            if (discordCheckbox.checked) {
+                discordSection.classList.remove('hidden');
+            } else {
+                discordSection.classList.add('hidden');
+            }
+            
+            // Populate Discord settings
+            if (config.environment) {
+                document.getElementById('discord-bot-token').value = config.environment.DISCORD_BOT_TOKEN || '';
+                document.getElementById('discord-channel-ids').value = config.environment.DISCORD_CHANNEL_IDS || '';
+                document.getElementById('discord-deferral-channel').value = config.environment.DISCORD_DEFERRAL_CHANNEL_ID || '';
+                document.getElementById('wa-user-ids').value = config.environment.WA_USER_IDS || config.environment.WA_USER_ID || '';
+                document.getElementById('openai-api-key').value = config.environment.OPENAI_API_KEY || '';
+                document.getElementById('llm-provider').value = config.environment.LLM_PROVIDER || 'openai';
+                
+                // Populate all environment variables
+                for (const [key, value] of Object.entries(config.environment)) {
+                    // Skip ones we handle specially
+                    if (['CIRIS_MOCK_LLM', 'CIRIS_ADAPTER', 'DISCORD_BOT_TOKEN', 'DISCORD_CHANNEL_IDS', 
+                         'DISCORD_DEFERRAL_CHANNEL_ID', 'WA_USER_IDS', 'WA_USER_ID', 
+                         'OPENAI_API_KEY', 'LLM_PROVIDER'].includes(key)) {
+                        continue;
+                    }
+                    addSettingsEnvVarRow(key, value);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load agent config:', error);
+        // Fall back to basic info from agents list
+        const agent = agents.find(a => a.agent_id === agentId);
+        if (agent) {
+            mockLlmCheckbox.checked = agent.mock_llm === true;
+            discordCheckbox.checked = agent.discord_enabled === true;
+        }
     }
+    
+    // Add change listener to Discord checkbox
+    discordCheckbox.onchange = function() {
+        if (this.checked) {
+            discordSection.classList.remove('hidden');
+        } else {
+            discordSection.classList.add('hidden');
+        }
+    };
     
     // Show modal
     modal.classList.remove('hidden');
@@ -1004,6 +1139,29 @@ async function showAgentSettings(agentId) {
 function hideAgentSettingsModal() {
     const modal = document.getElementById('agent-settings-modal');
     modal.classList.add('hidden');
+}
+
+// Add environment variable row to settings modal
+function addSettingsEnvVarRow(key = '', value = '') {
+    const container = document.getElementById('env-vars-settings');
+    const row = document.createElement('div');
+    row.className = 'flex gap-2';
+    row.innerHTML = `
+        <input type="text" placeholder="Key" value="${escapeHtml(key)}" 
+               class="flex-1 p-2 border rounded text-sm env-settings-key">
+        <input type="text" placeholder="Value" value="${escapeHtml(value)}" 
+               class="flex-1 p-2 border rounded text-sm env-settings-value">
+        <button type="button" onclick="this.parentElement.remove()" 
+                class="px-2 py-1 text-red-600 hover:bg-red-50 rounded">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    container.appendChild(row);
+}
+
+// Add new environment variable in settings
+function addSettingsEnvVar() {
+    addSettingsEnvVarRow();
 }
 
 // Save agent settings
@@ -1020,19 +1178,46 @@ async function saveAgentSettings(event) {
             environment: {}
         };
         
-        // Set or remove CIRIS_MOCK_LLM based on checkbox
-        if (mockLlm) {
-            configUpdate.environment.CIRIS_MOCK_LLM = 'true';
-        } else {
-            configUpdate.environment.CIRIS_MOCK_LLM = 'false';
+        // Quick settings
+        configUpdate.environment.CIRIS_MOCK_LLM = mockLlm ? 'true' : 'false';
+        configUpdate.environment.CIRIS_ENABLE_DISCORD = discordAdapter ? 'true' : 'false';
+        
+        // Discord configuration (if enabled)
+        if (discordAdapter) {
+            const botToken = document.getElementById('discord-bot-token').value;
+            const channelIds = document.getElementById('discord-channel-ids').value;
+            const deferralChannel = document.getElementById('discord-deferral-channel').value;
+            const waUserIds = document.getElementById('wa-user-ids').value;
+            
+            if (botToken) configUpdate.environment.DISCORD_BOT_TOKEN = botToken;
+            if (channelIds) {
+                // Clean up channel IDs (handle newlines and commas)
+                const cleanedIds = channelIds.replace(/\n/g, ',').replace(/\s+/g, '');
+                configUpdate.environment.DISCORD_CHANNEL_IDS = cleanedIds;
+            }
+            if (deferralChannel) configUpdate.environment.DISCORD_DEFERRAL_CHANNEL_ID = deferralChannel;
+            if (waUserIds) {
+                // Clean up WA user IDs  
+                const cleanedWaIds = waUserIds.replace(/\n/g, ',').replace(/\s+/g, '');
+                configUpdate.environment.WA_USER_IDS = cleanedWaIds;
+            }
         }
         
-        // Set or remove CIRIS_ENABLE_DISCORD based on checkbox
-        if (discordAdapter) {
-            configUpdate.environment.CIRIS_ENABLE_DISCORD = 'true';
-        } else {
-            configUpdate.environment.CIRIS_ENABLE_DISCORD = 'false';
-        }
+        // API configuration
+        const openaiKey = document.getElementById('openai-api-key').value;
+        const llmProvider = document.getElementById('llm-provider').value;
+        if (openaiKey) configUpdate.environment.OPENAI_API_KEY = openaiKey;
+        if (llmProvider) configUpdate.environment.LLM_PROVIDER = llmProvider;
+        
+        // All other environment variables
+        const envKeys = document.querySelectorAll('.env-settings-key');
+        const envValues = document.querySelectorAll('.env-settings-value');
+        
+        envKeys.forEach((key, index) => {
+            if (key.value && envValues[index]) {
+                configUpdate.environment[key.value] = envValues[index].value;
+            }
+        });
         
         // Send PATCH request to update agent configuration
         const response = await fetch(`/manager/v1/agents/${agentId}/config`, {

@@ -259,16 +259,19 @@
 
                         <!-- Environment Variables -->
                         <div>
-                            <label class="block text-sm font-medium mb-1">Environment Variables</label>
-                            <div id="env-vars-container" class="space-y-2">
-                                <div class="flex gap-2">
-                                    <input type="text" placeholder="Key" class="flex-1 p-2 border rounded-lg env-key">
-                                    <input type="text" placeholder="Value" class="flex-1 p-2 border rounded-lg env-value">
-                                    <button type="button" onclick="addEnvVar()" class="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">
-                                        <i class="fas fa-plus"></i>
-                                    </button>
-                                </div>
+                            <div class="flex items-center justify-between mb-2">
+                                <label class="block text-sm font-medium">Environment Variables</label>
+                                <button type="button" onclick="loadEnvFromFile()" class="text-xs text-blue-600 hover:underline">
+                                    <i class="fas fa-file-import mr-1"></i>Load from .env
+                                </button>
                             </div>
+                            <div id="env-vars-container" class="space-y-2">
+                                <!-- Template defaults will be loaded here -->
+                            </div>
+                            <button type="button" onclick="addEnvVar()" class="mt-2 px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-sm">
+                                <i class="fas fa-plus mr-1"></i>Add Variable
+                            </button>
+                            <p class="text-xs text-gray-500 mt-2">Template defaults are pre-loaded. Add or modify as needed.</p>
                         </div>
                     </div>
 
@@ -497,34 +500,118 @@
 
     <!-- Agent Settings Modal -->
     <div id="agent-settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg max-w-md w-full">
+        <div class="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div class="p-6">
                 <h2 class="text-2xl font-bold mb-4">Agent Settings</h2>
                 <p class="text-gray-600 mb-6">Configure runtime settings for <span id="settings-agent-id" class="font-mono font-bold"></span></p>
 
                 <form id="agent-settings-form" onsubmit="saveAgentSettings(event)">
-                    <div class="space-y-4">
-                        <!-- Mock LLM Toggle -->
-                        <div class="border rounded-lg p-4">
-                            <label class="flex items-center justify-between cursor-pointer">
-                                <div>
-                                    <span class="font-medium">Mock LLM</span>
-                                    <p class="text-sm text-gray-500 mt-1">Use mock responses for testing (no API costs)</p>
+                    <div class="space-y-6">
+                        <!-- Quick Settings Section -->
+                        <div>
+                            <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                                <i class="fas fa-toggle-on text-blue-600"></i>
+                                Quick Settings
+                            </h3>
+                            <div class="space-y-3">
+                                <!-- Mock LLM Toggle -->
+                                <div class="border rounded-lg p-4">
+                                    <label class="flex items-center justify-between cursor-pointer">
+                                        <div>
+                                            <span class="font-medium">Mock LLM</span>
+                                            <p class="text-sm text-gray-500 mt-1">Use mock responses for testing (no API costs)</p>
+                                        </div>
+                                        <input type="checkbox" id="settings-mock-llm" name="mock_llm" class="rounded h-5 w-5">
+                                    </label>
                                 </div>
-                                <input type="checkbox" id="settings-mock-llm" name="mock_llm" class="rounded h-5 w-5">
-                            </label>
+
+                                <!-- Discord Adapter Toggle -->
+                                <div class="border rounded-lg p-4">
+                                    <label class="flex items-center justify-between cursor-pointer">
+                                        <div>
+                                            <span class="font-medium">Discord Adapter</span>
+                                            <p class="text-sm text-gray-500 mt-1">Enable Discord bot integration</p>
+                                        </div>
+                                        <input type="checkbox" id="settings-discord" name="discord_adapter" class="rounded h-5 w-5">
+                                    </label>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- Discord Adapter Toggle -->
-                        <div class="border rounded-lg p-4">
-                            <label class="flex items-center justify-between cursor-pointer">
+                        <!-- Discord Configuration Section -->
+                        <div id="discord-config-section" class="hidden">
+                            <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                                <i class="fab fa-discord text-purple-600"></i>
+                                Discord Configuration
+                            </h3>
+                            <div class="space-y-3">
                                 <div>
-                                    <span class="font-medium">Discord Adapter</span>
-                                    <p class="text-sm text-gray-500 mt-1">Enable Discord bot integration</p>
+                                    <label class="block text-sm font-medium mb-1">Bot Token</label>
+                                    <input type="password" id="discord-bot-token" name="DISCORD_BOT_TOKEN" 
+                                           class="w-full p-2 border rounded-lg font-mono text-sm"
+                                           placeholder="Your Discord bot token">
                                 </div>
-                                <input type="checkbox" id="settings-discord" name="discord_adapter" class="rounded h-5 w-5">
-                            </label>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Monitored Channel IDs</label>
+                                    <textarea id="discord-channel-ids" name="DISCORD_CHANNEL_IDS" 
+                                              class="w-full p-2 border rounded-lg font-mono text-sm" rows="3"
+                                              placeholder="Channel IDs (one per line or comma-separated)"></textarea>
+                                    <p class="text-xs text-gray-500 mt-1">Enter Discord channel IDs this agent should monitor</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Deferral Channel ID</label>
+                                    <input type="text" id="discord-deferral-channel" name="DISCORD_DEFERRAL_CHANNEL_ID" 
+                                           class="w-full p-2 border rounded-lg font-mono text-sm"
+                                           placeholder="Channel ID for deferrals to WA">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Wise Authority User IDs</label>
+                                    <textarea id="wa-user-ids" name="WA_USER_IDS" 
+                                              class="w-full p-2 border rounded-lg font-mono text-sm" rows="2"
+                                              placeholder="Discord user IDs of Wise Authorities (comma-separated)"></textarea>
+                                    <p class="text-xs text-gray-500 mt-1">Discord user IDs who can respond to deferrals</p>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- API Configuration Section -->
+                        <div>
+                            <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                                <i class="fas fa-key text-green-600"></i>
+                                API Configuration
+                            </h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">OpenAI API Key</label>
+                                    <input type="password" id="openai-api-key" name="OPENAI_API_KEY" 
+                                           class="w-full p-2 border rounded-lg font-mono text-sm"
+                                           placeholder="sk-...">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">LLM Provider</label>
+                                    <select id="llm-provider" name="LLM_PROVIDER" class="w-full p-2 border rounded-lg">
+                                        <option value="openai">OpenAI</option>
+                                        <option value="anthropic">Anthropic</option>
+                                        <option value="local">Local/Mock</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Advanced Settings Section -->
+                        <details class="border rounded-lg">
+                            <summary class="px-4 py-3 cursor-pointer hover:bg-gray-50 font-semibold">
+                                <i class="fas fa-cog mr-2"></i>All Environment Variables
+                            </summary>
+                            <div class="p-4">
+                                <div id="env-vars-settings" class="space-y-2">
+                                    <!-- Dynamic environment variables will be inserted here -->
+                                </div>
+                                <button type="button" onclick="addSettingsEnvVar()" class="mt-3 px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-sm">
+                                    <i class="fas fa-plus mr-1"></i>Add Variable
+                                </button>
+                            </div>
+                        </details>
 
                         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                             <p class="text-sm text-yellow-800">

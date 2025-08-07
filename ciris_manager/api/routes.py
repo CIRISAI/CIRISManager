@@ -443,6 +443,47 @@ def create_routes(manager: Any) -> APIRouter:
                 detail=f"Failed to delete agent {agent_id}. Check logs for details.",
             )
 
+    @router.get("/agents/{agent_id}/config")
+    async def get_agent_config(agent_id: str, user: dict = auth_dependency) -> Dict[str, Any]:
+        """Get agent configuration from docker-compose.yml."""
+        import yaml
+        from pathlib import Path
+
+        try:
+            # Path to agent's docker-compose file
+            compose_path = Path(f"/opt/ciris/agents/{agent_id}/docker-compose.yml")
+
+            if not compose_path.exists():
+                raise HTTPException(
+                    status_code=404, detail=f"Agent '{agent_id}' configuration not found"
+                )
+
+            # Read docker-compose.yml
+            with open(compose_path, "r") as f:
+                compose_data = yaml.safe_load(f)
+
+            # Extract environment variables
+            environment = {}
+            if "services" in compose_data:
+                for service in compose_data["services"].values():
+                    if "environment" in service:
+                        environment = service["environment"]
+                        break
+
+            return {
+                "agent_id": agent_id,
+                "environment": environment,
+                "compose_file": str(compose_path),
+            }
+
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404, detail=f"Configuration not found for agent '{agent_id}'"
+            )
+        except Exception as e:
+            logger.error(f"Failed to get agent config: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     @router.patch("/agents/{agent_id}/config")
     async def update_agent_config(
         agent_id: str, config_update: Dict[str, Any], user: dict = auth_dependency
