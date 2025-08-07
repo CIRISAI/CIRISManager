@@ -1,32 +1,32 @@
 {
   "version": "1.0",
-  "created_at": "2025-07-24T18:40:40.961268Z",
+  "created_at": "2025-08-07T15:47:44.337897Z",
   "templates": {
     "default": {
-      "checksum": "sha256:887810c3ad5ed92f6cd2416fa7e509867051550d0c29dad3534bce66160e1665",
+      "checksum": "sha256:cb7adf02f99e357c66e49f3d39a901fd9828b2d9e8803d291578fc04de4e4ecc",
       "description": "Datum - baseline agent template"
     },
     "sage": {
-      "checksum": "sha256:0d4cd8246a686ba14373f19ce8c2e07bb2ea1281314e25e2249ab25b0bea5489",
+      "checksum": "sha256:37335305ab535eb778c1882f603c828e903a3f758be0e79c93c3cfa99f0bf823",
       "description": "Sage - wise questioning agent"
     },
     "scout": {
-      "checksum": "sha256:b637983cea13976203ed831b88b70ae419d0209ea058ec49937fa74f8b1b6c3a",
+      "checksum": "sha256:2b8f95e13e63cd38320eded5315427488ca12268f350ae688a8e5588ffec17e4",
       "description": "Scout - direct action demonstrator"
     },
     "echo-core": {
-      "checksum": "sha256:711e3dfc273e0accfc6cb3092c651d3f518f04464824f491d06cb1802584e792",
+      "checksum": "sha256:308a8164d9ac01bebc2edfcb00a26e0025be1fc89dab0ae0e87c5021ad01ba72",
       "description": "Echo-Core - general community moderation"
     },
     "echo-speculative": {
-      "checksum": "sha256:6d3cadbd0b843b009bf7eed94cf0ac0028f7832ddee521ef8fa1909fccbd4cdc",
+      "checksum": "sha256:65f405786577ab939ac6ad17b72f45e9b03afa4dff182ffd20e1cf8792478529",
       "description": "Echo-Speculative - speculative discussion moderation"
     },
     "echo": {
-      "checksum": "sha256:ee6e000a4c8b75acf0b9f314bd529e3ff97c84aa5d57aac29d864c114f63bac8",
+      "checksum": "sha256:28822454acc8c9eee5f029c47d6d0dc303d99659655cc9caff5f800e3ad9182f",
       "description": "Echo - base moderation template"
     }
   },
-  "root_signature": "SCgUxftkC3ji7wgc7HtKls5iJF2d3Gbkw9nHT5tMS/M1VS0vzqPMvm8GdqV2blVYA3ZCZadXFvB7Odt3pQ9fCA==",
-  "root_public_key": "S5XLLlHYlj++YdXobxsaPAr4NZfBa3hfHT39SGJ2xiw="
+  "root_signature": "UJa+O0obNdX8xmtgx2N2c0D7+ynUlqSlATLcF12F0yuynhYX3cXZ0MrlNzqH49fe6NYzmVqAU83CPCgBxFtmBQ==",
+  "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk="
 }
