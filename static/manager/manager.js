@@ -278,6 +278,8 @@ function hideCreateDialog() {
 async function checkTemplateApproval() {
     const template = document.getElementById('template-select').value;
     const waField = document.getElementById('wa-signature-field');
+    const waReviewSection = document.getElementById('wa-review-section');
+    const waReviewCheckbox = document.getElementById('wa-review-checkbox');
 
     if (templates && template) {
         const isPreApproved = templates.pre_approved?.includes(template);
@@ -285,6 +287,35 @@ async function checkTemplateApproval() {
             waField.classList.add('hidden');
         } else {
             waField.classList.remove('hidden');
+        }
+
+        // Fetch template details to check stewardship tier
+        try {
+            const response = await fetch(`/manager/v1/templates/${template}/details`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('managerToken')}` }
+            });
+            
+            if (response.ok) {
+                const details = await response.json();
+                
+                // Show WA review checkbox for Tier 4/5 agents
+                if (details.stewardship_tier >= 4) {
+                    waReviewSection.classList.remove('hidden');
+                    // Update the message to show the tier
+                    const message = waReviewSection.querySelector('.text-amber-700');
+                    if (message) {
+                        message.textContent = `I confirm that this Tier ${details.stewardship_tier} agent has been reviewed and approved by the WA team.`;
+                    }
+                } else {
+                    waReviewSection.classList.add('hidden');
+                    waReviewCheckbox.checked = false;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch template details:', error);
+            // Hide on error
+            waReviewSection.classList.add('hidden');
+            waReviewCheckbox.checked = false;
         }
 
         // Load template default environment variables
@@ -363,13 +394,23 @@ async function handleCreateAgent(event) {
     event.preventDefault();
 
     const formData = new FormData(event.target);
+    const waReviewSection = document.getElementById('wa-review-section');
+    const waReviewCheckbox = document.getElementById('wa-review-checkbox');
+    
+    // Check if WA review is required (section is visible) but not completed
+    if (!waReviewSection.classList.contains('hidden') && !waReviewCheckbox.checked) {
+        showError('WA review confirmation is required for Tier 4/5 agents');
+        return;
+    }
+    
     const data = {
         template: formData.get('template'),
         name: formData.get('name'),
         environment: {},
         wa_signature: formData.get('wa_signature') || undefined,
         use_mock_llm: formData.get('use_mock_llm') === 'on',
-        enable_discord: formData.get('enable_discord') === 'on'
+        enable_discord: formData.get('enable_discord') === 'on',
+        wa_review_completed: formData.get('wa_review_completed') === 'on'
     };
 
     // Collect environment variables

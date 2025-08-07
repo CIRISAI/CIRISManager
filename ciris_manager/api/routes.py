@@ -330,6 +330,31 @@ def create_routes(manager: Any) -> APIRouter:
     ) -> AgentResponse:
         """Create a new agent."""
         try:
+            # Check if template requires WA review (Tier 4/5)
+            from pathlib import Path
+            import yaml
+
+            templates_dir = Path(manager.config.manager.templates_directory)
+            template_file = templates_dir / f"{request.template}.yaml"
+
+            if template_file.exists():
+                with open(template_file, "r") as f:
+                    template_data = yaml.safe_load(f)
+                stewardship_tier = template_data.get("identity", {}).get("stewardship_tier", 1)
+
+                # Validate WA review for Tier 4/5 agents
+                if stewardship_tier >= 4:
+                    if not request.wa_review_completed:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"WA review confirmation required for Tier {stewardship_tier} agent",
+                        )
+                    # Log the WA review confirmation for audit
+                    logger.info(
+                        f"WA review confirmed for Tier {stewardship_tier} agent '{request.name}' "
+                        f"(template: {request.template}) by {user['email']}"
+                    )
+
             result = await manager.create_agent(
                 template=request.template,
                 name=request.name,
@@ -338,6 +363,8 @@ def create_routes(manager: Any) -> APIRouter:
                 use_mock_llm=request.use_mock_llm,
                 enable_discord=request.enable_discord,
             )
+
+            logger.info(f"Agent {result['agent_id']} created by {user['email']}")
 
             return AgentResponse(
                 agent_id=result["agent_id"],
@@ -353,11 +380,11 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=400, detail=str(e))
         except PermissionError as e:
             raise HTTPException(status_code=403, detail=str(e))
+        except HTTPException:
+            raise  # Re-raise HTTP exceptions as-is
         except Exception as e:
             logger.error(f"Failed to create agent: {e}")
             raise HTTPException(status_code=500, detail="Failed to create agent")
-
-        logger.info(f"Agent {result['agent_id']} created by {user['email']}")
 
     @router.delete("/agents/{agent_id}")
     async def delete_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
@@ -579,6 +606,35 @@ def create_routes(manager: Any) -> APIRouter:
             pre_approved_list = list(pre_approved.keys())
 
         return TemplateListResponse(templates=all_templates, pre_approved=pre_approved_list)
+
+    @router.get("/templates/{template_name}/details")
+    async def get_template_details(template_name: str) -> Dict[str, Any]:
+        """Get detailed information about a specific template including stewardship tier."""
+        from pathlib import Path
+        import yaml
+
+        templates_dir = Path(manager.config.manager.templates_directory)
+        template_file = templates_dir / f"{template_name}.yaml"
+
+        if not template_file.exists():
+            raise HTTPException(status_code=404, detail=f"Template '{template_name}' not found")
+
+        try:
+            with open(template_file, "r") as f:
+                template_data = yaml.safe_load(f)
+
+            # Extract stewardship tier from identity section
+            stewardship_tier = template_data.get("identity", {}).get("stewardship_tier", 1)
+
+            return {
+                "name": template_name,
+                "description": template_data.get("description", ""),
+                "stewardship_tier": stewardship_tier,
+                "requires_wa_review": stewardship_tier >= 4,
+            }
+        except Exception as e:
+            logger.error(f"Failed to load template {template_name}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to load template details")
 
     @router.get("/env/default")
     async def get_default_env() -> Dict[str, str]:

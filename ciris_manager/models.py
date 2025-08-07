@@ -115,6 +115,9 @@ class CreateAgentRequest(BaseModel):
     wa_signature: Optional[str] = Field(None, description="WA signature for non-approved templates")
     use_mock_llm: Optional[bool] = Field(None, description="Use mock LLM instead of real API")
     enable_discord: Optional[bool] = Field(None, description="Enable Discord adapter for agent")
+    wa_review_completed: Optional[bool] = Field(
+        None, description="WA review completed for Tier 4/5 agents"
+    )
 
 
 class UpdateNotification(BaseModel):
