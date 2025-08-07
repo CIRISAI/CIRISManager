@@ -102,7 +102,7 @@ class DockerAgentDiscovery:
             # Extract runtime configuration from environment
             mock_llm = env_dict.get("CIRIS_MOCK_LLM", "").lower() == "true"
             discord_enabled = env_dict.get("CIRIS_ENABLE_DISCORD", "").lower() == "true"
-            
+
             # Build agent info - simple and typed
             agent_info = AgentInfo(
                 agent_id=agent_id,

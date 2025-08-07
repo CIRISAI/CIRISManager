@@ -34,7 +34,7 @@ class AgentInfo(BaseModel):
     # Runtime configuration from environment
     mock_llm: Optional[bool] = Field(None, description="Whether agent is using mock LLM")
     discord_enabled: Optional[bool] = Field(None, description="Whether Discord adapter is enabled")
-    
+
     # Metadata fields
     template: str = Field("unknown", description="Template used to create agent")
     created_at: Optional[str] = Field(None, description="When agent was created")
