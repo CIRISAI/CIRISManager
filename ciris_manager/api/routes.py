@@ -476,6 +476,8 @@ def create_routes(manager: Any) -> APIRouter:
                 "compose_file": str(compose_path),
             }
 
+        except HTTPException:
+            raise  # Re-raise HTTP exceptions as-is
         except FileNotFoundError:
             raise HTTPException(
                 status_code=404, detail=f"Configuration not found for agent '{agent_id}'"
