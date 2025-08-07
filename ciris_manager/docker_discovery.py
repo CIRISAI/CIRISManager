@@ -99,6 +99,10 @@ class DockerAgentDiscovery:
                     api_port = host_bindings[0].get("HostPort")
                     break
 
+            # Extract runtime configuration from environment
+            mock_llm = env_dict.get("CIRIS_MOCK_LLM", "").lower() == "true"
+            discord_enabled = env_dict.get("CIRIS_ENABLE_DISCORD", "").lower() == "true"
+            
             # Build agent info - simple and typed
             agent_info = AgentInfo(
                 agent_id=agent_id,
@@ -112,6 +116,8 @@ class DockerAgentDiscovery:
                 version=None,  # Will be populated by query_agent_version
                 codename=None,
                 code_hash=None,
+                mock_llm=mock_llm,
+                discord_enabled=discord_enabled,
             )
 
             # Query version info if agent is running

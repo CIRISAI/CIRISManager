@@ -950,10 +950,9 @@ async function showAgentSettings(agentId) {
     // Try to get current agent configuration
     const agent = agents.find(a => a.agent_id === agentId);
     if (agent) {
-        // Try to infer settings from agent metadata
-        // Check environment variables if available
-        mockLlmCheckbox.checked = agent.mock_llm === true || agent.use_mock_llm === true;
-        discordCheckbox.checked = agent.discord_enabled === true || agent.enable_discord === true;
+        // Use the fields from Docker discovery
+        mockLlmCheckbox.checked = agent.mock_llm === true;
+        discordCheckbox.checked = agent.discord_enabled === true;
     }
     
     // Show modal

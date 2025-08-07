@@ -31,6 +31,16 @@ class AgentInfo(BaseModel):
     code_hash: Optional[str] = Field(
         None, description="Agent code hash for exact version identification"
     )
+    # Runtime configuration from environment
+    mock_llm: Optional[bool] = Field(None, description="Whether agent is using mock LLM")
+    discord_enabled: Optional[bool] = Field(None, description="Whether Discord adapter is enabled")
+    
+    # Metadata fields
+    template: str = Field("unknown", description="Template used to create agent")
+    created_at: Optional[str] = Field(None, description="When agent was created")
+    health: Optional[str] = Field(None, description="Agent health status")
+    api_endpoint: Optional[str] = Field(None, description="Full API endpoint URL")
+    update_available: bool = Field(False, description="Whether an update is available")
 
     # Computed properties for common access patterns
     @property
