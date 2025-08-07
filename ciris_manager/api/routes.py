@@ -436,7 +436,28 @@ def create_routes(manager: Any) -> APIRouter:
                 if "services" in compose_data:
                     for service in compose_data["services"].values():
                         if "environment" in service:
-                            # Update the environment section
+                            # Special handling for CIRIS_ENABLE_DISCORD
+                            if "CIRIS_ENABLE_DISCORD" in config_update["environment"]:
+                                # Get current CIRIS_ADAPTER value
+                                current_adapter = service["environment"].get("CIRIS_ADAPTER", "api")
+                                adapters = [a.strip() for a in current_adapter.split(",")]
+                                
+                                # Add or remove discord based on the toggle
+                                enable_discord = config_update["environment"]["CIRIS_ENABLE_DISCORD"] == "true"
+                                if enable_discord:
+                                    if "discord" not in adapters:
+                                        adapters.append("discord")
+                                else:
+                                    if "discord" in adapters:
+                                        adapters.remove("discord")
+                                
+                                # Update CIRIS_ADAPTER with modified list
+                                service["environment"]["CIRIS_ADAPTER"] = ",".join(adapters)
+                                
+                                # Don't save CIRIS_ENABLE_DISCORD itself
+                                del config_update["environment"]["CIRIS_ENABLE_DISCORD"]
+                            
+                            # Update other environment variables normally
                             for key, value in config_update["environment"].items():
                                 service["environment"][key] = value
 

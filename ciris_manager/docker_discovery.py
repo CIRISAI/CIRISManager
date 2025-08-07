@@ -100,8 +100,13 @@ class DockerAgentDiscovery:
                     break
 
             # Extract runtime configuration from environment
-            mock_llm = env_dict.get("CIRIS_MOCK_LLM", "").lower() == "true"
-            discord_enabled = env_dict.get("CIRIS_ENABLE_DISCORD", "").lower() == "true"
+            # Check if mock LLM is disabled (defaults to true if not set)
+            mock_llm_setting = env_dict.get("CIRIS_MOCK_LLM", "true").lower()
+            mock_llm = mock_llm_setting != "false"  # Only false if explicitly set to false
+            
+            # Discord is enabled if "discord" is in the CIRIS_ADAPTER list
+            adapter_list = env_dict.get("CIRIS_ADAPTER", "api").lower()
+            discord_enabled = "discord" in adapter_list
 
             # Build agent info - simple and typed
             agent_info = AgentInfo(
