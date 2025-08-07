@@ -712,20 +712,57 @@ def create_routes(manager: Any) -> APIRouter:
     @router.get("/env/default")
     async def get_default_env() -> Dict[str, str]:
         """Get default environment variables for agent creation."""
-        # Return in .env file format as expected by GUI's parseEnvFile()
+        from pathlib import Path
+        
+        # Try to read from production .env file first
+        env_file_path = Path("/home/ciris/.env")
+        if env_file_path.exists():
+            try:
+                with open(env_file_path, "r") as f:
+                    content = f.read()
+                # Filter out sensitive values and keep only keys we want to expose
+                lines = []
+                sensitive_keys = {"DISCORD_BOT_TOKEN", "OPENAI_API_KEY", "CIRIS_OPENAI_API_KEY_2", "CIRIS_OPENAI_VISION_KEY"}
+                
+                for line in content.split("\n"):
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key = line.split("=", 1)[0].strip()
+                        # Keep the key but clear sensitive values
+                        if key in sensitive_keys:
+                            lines.append(f"{key}=")
+                        else:
+                            lines.append(line)
+                
+                # Add any missing essential keys
+                existing_keys = {line.split("=")[0] for line in lines if "=" in line}
+                if "CIRIS_API_PORT" not in existing_keys:
+                    lines.append("CIRIS_API_PORT=8080")
+                if "CIRIS_API_HOST" not in existing_keys:
+                    lines.append("CIRIS_API_HOST=0.0.0.0")
+                    
+                return {"content": "\n".join(lines)}
+            except Exception as e:
+                logger.warning(f"Failed to read default .env file: {e}")
+        
+        # Fallback to hardcoded defaults if file doesn't exist
         env_vars = [
             # Core CIRIS requirements
             "LLM_PROVIDER=openai",
             "OPENAI_API_KEY=",  # User must provide
             "DATABASE_URL=sqlite:////app/data/ciris_engine.db",
-            "API_HOST=0.0.0.0",
-            "API_PORT=8080",  # Will be dynamically assigned
+            "CIRIS_API_HOST=0.0.0.0",
+            "CIRIS_API_PORT=8080",  # Will be dynamically assigned
             "JWT_SECRET_KEY=generate-with-openssl-rand-hex-32",
             "ENVIRONMENT=production",
             "LOG_LEVEL=INFO",
-            # Optional: Admin credentials (not in .env.example but commonly used)
-            "ADMIN_USERNAME=admin",
-            "ADMIN_PASSWORD=ciris_admin_password",
+            # Discord
+            "DISCORD_BOT_TOKEN=",
+            "DISCORD_CHANNEL_IDS=",
+            "DISCORD_DEFERRAL_CHANNEL_ID=",
+            "WA_USER_IDS=",
+            # OAuth
+            "OAUTH_CALLBACK_BASE_URL=https://agents.ciris.ai",
         ]
 
         return {"content": "\n".join(env_vars)}

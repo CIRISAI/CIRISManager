@@ -406,38 +406,48 @@ async function loadTemplateDefaults(templateName) {
     const container = document.getElementById('env-vars-container');
     container.innerHTML = '';
 
-    // Define default environment variables for each template
-    const templateDefaults = {
-        'scout': {
-            'OPENAI_API_KEY': '',
-            'CIRIS_AGENT_NAME': 'scout',
-            'CIRIS_API_PORT': '8080'
-        },
-        'sage': {
-            'OPENAI_API_KEY': '',
-            'CIRIS_AGENT_NAME': 'sage',
-            'CIRIS_API_PORT': '8080'
-        },
-        'echo': {
-            'CIRIS_AGENT_NAME': 'echo',
-            'CIRIS_API_PORT': '8080'
-        },
-        'test': {
-            'CIRIS_AGENT_NAME': 'test',
-            'CIRIS_API_PORT': '8080',
-            'CIRIS_MOCK_LLM': 'true'
+    try {
+        // Fetch default environment variables from the API
+        const response = await fetch('/manager/v1/env/default', {
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const env = parseEnvFile(data.content);
+            
+            // Add template-specific overrides
+            env['CIRIS_AGENT_NAME'] = templateName;
+            if (templateName === 'test') {
+                env['CIRIS_MOCK_LLM'] = 'true';
+            }
+            
+            // Add each env var
+            for (const [key, value] of Object.entries(env)) {
+                addEnvVarRow(key, value);
+            }
+            return;
         }
-    };
-
-    // Get defaults for this template
-    const defaults = templateDefaults[templateName] || {
+    } catch (error) {
+        console.error('Failed to fetch default env vars:', error);
+    }
+    
+    // Fallback to minimal defaults if API fails
+    const fallbackDefaults = {
         'OPENAI_API_KEY': '',
         'CIRIS_AGENT_NAME': templateName,
-        'CIRIS_API_PORT': '8080'
+        'CIRIS_API_PORT': '8080',
+        'DISCORD_BOT_TOKEN': '',
+        'DISCORD_CHANNEL_IDS': '',
+        'OAUTH_CALLBACK_BASE_URL': 'https://agents.ciris.ai'
     };
+    
+    if (templateName === 'test') {
+        fallbackDefaults['CIRIS_MOCK_LLM'] = 'true';
+    }
 
     // Add env var rows with defaults
-    Object.entries(defaults).forEach(([key, value]) => {
+    Object.entries(fallbackDefaults).forEach(([key, value]) => {
         const newRow = document.createElement('div');
         newRow.className = 'flex gap-2';
         newRow.innerHTML = `
