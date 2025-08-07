@@ -341,7 +341,9 @@ def create_routes(manager: Any) -> APIRouter:
                 if template_file.exists():
                     with open(template_file, "r") as f:
                         template_data = yaml.safe_load(f)
-                    stewardship_tier = template_data.get("identity", {}).get("stewardship_tier", 1)
+                    stewardship_tier = template_data.get("stewardship", {}).get(
+                        "stewardship_tier", 1
+                    )
 
                     # Validate WA review for Tier 4/5 agents
                     if stewardship_tier >= 4:
@@ -628,8 +630,8 @@ def create_routes(manager: Any) -> APIRouter:
             with open(template_file, "r") as f:
                 template_data = yaml.safe_load(f)
 
-            # Extract stewardship tier from identity section
-            stewardship_tier = template_data.get("identity", {}).get("stewardship_tier", 1)
+            # Extract stewardship tier from stewardship section
+            stewardship_tier = template_data.get("stewardship", {}).get("stewardship_tier", 1)
 
             return {
                 "name": template_name,
