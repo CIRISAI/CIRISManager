@@ -26,39 +26,37 @@ class TestShutdownMessage:
             agent_image="ghcr.io/cirisai/ciris-agent:latest",
             version="78500ea1234567890abcdef",
             message="Update available",
-            strategy="canary"
+            strategy="canary",
         )
-        
+
         agent = AgentInfo(
             agent_id="test-agent",
             agent_name="Test Agent",
             api_port=8080,
             container_name="ciris-test-agent",
-            deployment_group="general"
+            deployment_group="general",
         )
-        
+
         deployment_id = "23a69b03-f44a-4026-8ce9-910b57bdb759"
-        
-        with patch('httpx.AsyncClient') as mock_client:
+
+        with patch("httpx.AsyncClient") as mock_client:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json = Mock(return_value={"status": "shutting_down"})
-            
+
             mock_post = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.post = mock_post
-            
-            result = await orchestrator._update_single_agent(
-                deployment_id, notification, agent
-            )
-            
+
+            await orchestrator._update_single_agent(deployment_id, notification, agent)
+
             # Check the shutdown payload
             mock_post.assert_called_once()
             call_args = mock_post.call_args
-            shutdown_payload = call_args.kwargs['json']
-            
+            shutdown_payload = call_args.kwargs["json"]
+
             # Should format commit SHA nicely
             expected_reason = "System shutdown requested: Runtime: CD update to commit 78500ea (deployment 23a69b03) (API shutdown by wa-system-admin)"
-            assert shutdown_payload['reason'] == expected_reason
+            assert shutdown_payload["reason"] == expected_reason
 
     @pytest.mark.asyncio
     async def test_shutdown_message_with_semantic_version(self, orchestrator):
@@ -67,39 +65,37 @@ class TestShutdownMessage:
             agent_image="ghcr.io/cirisai/ciris-agent:latest",
             version="v2.1.0",
             message="Security update",
-            strategy="immediate"
+            strategy="immediate",
         )
-        
+
         agent = AgentInfo(
             agent_id="test-agent",
             agent_name="Test Agent",
             api_port=8080,
             container_name="ciris-test-agent",
-            deployment_group="general"
+            deployment_group="general",
         )
-        
+
         deployment_id = "abc-123-def"
-        
-        with patch('httpx.AsyncClient') as mock_client:
+
+        with patch("httpx.AsyncClient") as mock_client:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json = Mock(return_value={"status": "shutting_down"})
-            
+
             mock_post = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.post = mock_post
-            
-            result = await orchestrator._update_single_agent(
-                deployment_id, notification, agent
-            )
-            
+
+            await orchestrator._update_single_agent(deployment_id, notification, agent)
+
             # Check the shutdown payload
             mock_post.assert_called_once()
             call_args = mock_post.call_args
-            shutdown_payload = call_args.kwargs['json']
-            
+            shutdown_payload = call_args.kwargs["json"]
+
             # Should format semantic version nicely
-            expected_reason = "System shutdown requested: Runtime: CD update to version v2.1.0 - Security update (deployment abc-123-) (API shutdown by wa-system-admin)"
-            assert shutdown_payload['reason'] == expected_reason
+            expected_reason = "System shutdown requested: Runtime: CD update to version v2.1.0 (deployment abc-123-) - Security update (API shutdown by wa-system-admin)"
+            assert shutdown_payload["reason"] == expected_reason
 
     @pytest.mark.asyncio
     async def test_shutdown_message_without_version(self, orchestrator):
@@ -107,39 +103,37 @@ class TestShutdownMessage:
         notification = UpdateNotification(
             agent_image="ghcr.io/cirisai/ciris-agent:latest",
             message="Emergency fix",
-            strategy="immediate"
+            strategy="immediate",
         )
-        
+
         agent = AgentInfo(
             agent_id="test-agent",
             agent_name="Test Agent",
             api_port=8080,
             container_name="ciris-test-agent",
-            deployment_group="general"
+            deployment_group="general",
         )
-        
+
         deployment_id = "xyz-789"
-        
-        with patch('httpx.AsyncClient') as mock_client:
+
+        with patch("httpx.AsyncClient") as mock_client:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json = Mock(return_value={"status": "shutting_down"})
-            
+
             mock_post = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.post = mock_post
-            
-            result = await orchestrator._update_single_agent(
-                deployment_id, notification, agent
-            )
-            
+
+            await orchestrator._update_single_agent(deployment_id, notification, agent)
+
             # Check the shutdown payload
             mock_post.assert_called_once()
             call_args = mock_post.call_args
-            shutdown_payload = call_args.kwargs['json']
-            
+            shutdown_payload = call_args.kwargs["json"]
+
             # Should handle missing version gracefully
-            expected_reason = "System shutdown requested: Runtime: CD update requested - Emergency fix (deployment xyz-789) (API shutdown by wa-system-admin)"
-            assert shutdown_payload['reason'] == expected_reason
+            expected_reason = "System shutdown requested: Runtime: CD update requested (deployment xyz-789) - Emergency fix (API shutdown by wa-system-admin)"
+            assert shutdown_payload["reason"] == expected_reason
 
     @pytest.mark.asyncio
     async def test_shutdown_message_numeric_version(self, orchestrator):
@@ -148,39 +142,127 @@ class TestShutdownMessage:
             agent_image="ghcr.io/cirisai/ciris-agent:latest",
             version="2.1.0",
             message="Update available",
-            strategy="canary"
+            strategy="canary",
         )
-        
+
         agent = AgentInfo(
             agent_id="test-agent",
             agent_name="Test Agent",
             api_port=8080,
             container_name="ciris-test-agent",
-            deployment_group="general"
+            deployment_group="general",
         )
-        
+
         deployment_id = "test-deployment-456"
-        
-        with patch('httpx.AsyncClient') as mock_client:
+
+        with patch("httpx.AsyncClient") as mock_client:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json = Mock(return_value={"status": "shutting_down"})
-            
+
             mock_post = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__.return_value.post = mock_post
-            
-            result = await orchestrator._update_single_agent(
-                deployment_id, notification, agent
-            )
-            
+
+            await orchestrator._update_single_agent(deployment_id, notification, agent)
+
             # Check the shutdown payload
             mock_post.assert_called_once()
             call_args = mock_post.call_args
-            shutdown_payload = call_args.kwargs['json']
-            
+            shutdown_payload = call_args.kwargs["json"]
+
             # Should recognize numeric version as semantic version
             expected_reason = "System shutdown requested: Runtime: CD update to version 2.1.0 (deployment test-dep) (API shutdown by wa-system-admin)"
-            assert shutdown_payload['reason'] == expected_reason
+            assert shutdown_payload["reason"] == expected_reason
+
+    @pytest.mark.asyncio
+    async def test_shutdown_message_with_full_changelog(self, orchestrator):
+        """Test shutdown message with full changelog (multiple commit messages)."""
+        changelog = """fix: improve shutdown reason message formatting
+feat: add template parameter to agent containers
+fix: env file parsing improvements
+test: add comprehensive file loading tests
+chore: bump version to 2.1.1"""
+
+        notification = UpdateNotification(
+            agent_image="ghcr.io/cirisai/ciris-agent:latest",
+            version="v2.1.1",
+            changelog=changelog,
+            strategy="canary",
+        )
+
+        agent = AgentInfo(
+            agent_id="test-agent",
+            agent_name="Test Agent",
+            api_port=8080,
+            container_name="ciris-test-agent",
+            deployment_group="general",
+        )
+
+        deployment_id = "release-deployment-789"
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json = Mock(return_value={"status": "shutting_down"})
+
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            await orchestrator._update_single_agent(deployment_id, notification, agent)
+
+            # Check the shutdown payload
+            mock_post.assert_called_once()
+            call_args = mock_post.call_args
+            shutdown_payload = call_args.kwargs["json"]
+
+            # Should include formatted changelog
+            expected_reason = """System shutdown requested: Runtime: CD update to version v2.1.1 (deployment release-)
+Release notes:
+  • fix: improve shutdown reason message formatting
+  • feat: add template parameter to agent containers
+  • fix: env file parsing improvements
+  • test: add comprehensive file loading tests
+  • chore: bump version to 2.1.1 (API shutdown by wa-system-admin)"""
+            assert shutdown_payload["reason"] == expected_reason
+
+    @pytest.mark.asyncio
+    async def test_shutdown_message_with_single_line_changelog(self, orchestrator):
+        """Test shutdown message with single line changelog."""
+        notification = UpdateNotification(
+            agent_image="ghcr.io/cirisai/ciris-agent:latest",
+            version="v2.1.2",
+            changelog="fix: critical security patch",
+            strategy="immediate",
+        )
+
+        agent = AgentInfo(
+            agent_id="test-agent",
+            agent_name="Test Agent",
+            api_port=8080,
+            container_name="ciris-test-agent",
+            deployment_group="general",
+        )
+
+        deployment_id = "hotfix-123"
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json = Mock(return_value={"status": "shutting_down"})
+
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            await orchestrator._update_single_agent(deployment_id, notification, agent)
+
+            # Check the shutdown payload
+            mock_post.assert_called_once()
+            call_args = mock_post.call_args
+            shutdown_payload = call_args.kwargs["json"]
+
+            # Should include single line changelog inline
+            expected_reason = "System shutdown requested: Runtime: CD update to version v2.1.2 (deployment hotfix-1) - fix: critical security patch (API shutdown by wa-system-admin)"
+            assert shutdown_payload["reason"] == expected_reason
 
 
 if __name__ == "__main__":

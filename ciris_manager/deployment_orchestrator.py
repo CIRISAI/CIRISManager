@@ -439,7 +439,9 @@ class DeploymentOrchestrator:
             async with httpx.AsyncClient() as client:
                 # Use shutdown endpoint instead of non-existent update endpoint
                 # Build a more descriptive shutdown reason
-                if notification.version and not notification.version.startswith(('v', '1', '2', '3')):
+                if notification.version and not notification.version.startswith(
+                    ("v", "1", "2", "3")
+                ):
                     # Looks like a commit SHA, use a more descriptive format
                     reason = f"Runtime: CD update to commit {notification.version[:7]}"
                 elif notification.version:
@@ -448,15 +450,30 @@ class DeploymentOrchestrator:
                 else:
                     # No version provided
                     reason = "Runtime: CD update requested"
-                
-                # Add deployment ID and message for context
-                if notification.message and notification.message != "Update available":
-                    reason = f"{reason} - {notification.message}"
+
+                # Add deployment ID for context
                 reason = f"{reason} (deployment {deployment_id[:8]})"
-                
+
+                # Include full changelog if available (all commit messages from release)
+                if notification.changelog:
+                    # Format changelog for readability
+                    changelog_lines = notification.changelog.strip().split("\n")
+                    if len(changelog_lines) > 1:
+                        # Multi-line changelog - include as bullet points
+                        formatted_changelog = "\nRelease notes:\n" + "\n".join(
+                            f"  • {line.strip()}" for line in changelog_lines if line.strip()
+                        )
+                        reason = f"{reason}{formatted_changelog}"
+                    else:
+                        # Single line changelog
+                        reason = f"{reason} - {notification.changelog}"
+                elif notification.message and notification.message != "Update available":
+                    # Fall back to message if no changelog
+                    reason = f"{reason} - {notification.message}"
+
                 # Add API indicator for clarity
                 reason = f"System shutdown requested: {reason} (API shutdown by wa-system-admin)"
-                
+
                 shutdown_payload = {
                     "reason": reason,
                     "force": False,

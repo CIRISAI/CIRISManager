@@ -13,12 +13,14 @@ Notifies agents of available updates with context.
   "agent_image": "ghcr.io/cirisai/ciris-agent:latest",
   "gui_image": "ghcr.io/cirisai/ciris-gui:latest",
   "strategy": "canary",
-  "changelog": "fix: memory leak in telemetry service",
+  "changelog": "fix: memory leak in telemetry service\nfeat: add new monitoring endpoint\ntest: improve coverage",
   "risk_level": "low",
   "commit_sha": "abc123",
   "version": "1.2.3"
 }
 ```
+
+**Note**: The `changelog` field should contain ALL commit messages from the release, separated by newlines. These will be formatted as bullet points in the shutdown message sent to agents.
 
 ### `GET /manager/v1/updates/status`
 Returns current deployment status.
@@ -34,11 +36,18 @@ The manager triggers agent updates by calling the agent's shutdown endpoint:
 **Payload**:
 ```json
 {
-  "reason": "CD update to v1.2.3 (deployment abc123)",
+  "reason": "System shutdown requested: Runtime: CD update to version v1.2.3 (deployment abc123)\nRelease notes:\n  • fix: memory leak in telemetry service\n  • feat: add new monitoring endpoint\n  • test: improve coverage\n(API shutdown by wa-system-admin)",
   "force": false,
   "confirm": true
 }
 ```
+
+**Shutdown Reason Format**:
+- For semantic versions: `CD update to version v1.2.3`
+- For commit SHAs: `CD update to commit abc123`
+- Includes full changelog as formatted bullet points when available
+- Always prefixed with `System shutdown requested: Runtime:`
+- Always suffixed with `(API shutdown by wa-system-admin)`
 
 **Authentication**: Uses secure service tokens (see Security section below)
 

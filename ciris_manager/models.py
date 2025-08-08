@@ -134,7 +134,7 @@ class UpdateNotification(BaseModel):
     source: Optional[str] = Field("github-actions", description="Source of update notification")
     commit_sha: Optional[str] = Field(None, description="Git commit SHA for this update")
     version: Optional[str] = Field(None, description="Semantic version if available")
-    changelog: Optional[str] = Field(None, description="Brief description of changes")
+    changelog: Optional[str] = Field(None, description="Full commit messages from release")
     risk_level: Optional[str] = Field("unknown", description="Risk assessment: low, medium, high")
 
 
