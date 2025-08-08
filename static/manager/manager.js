@@ -114,6 +114,9 @@ function renderAgents() {
                     <button onclick="showOAuthSetup('${agent.agent_id}')" class="px-3 py-1 text-indigo-600 hover:bg-indigo-50 rounded">
                         <i class="fas fa-key"></i> OAuth
                     </button>
+                    <button onclick="restartAgent('${agent.agent_id}')" class="px-3 py-1 text-orange-600 hover:bg-orange-50 rounded">
+                        <i class="fas fa-sync-alt"></i> Restart
+                    </button>
                     <button onclick="deleteAgent('${agent.agent_id}')" class="px-3 py-1 text-red-600 hover:bg-red-50 rounded">
                         <i class="fas fa-trash"></i> Delete
                     </button>
@@ -551,6 +554,38 @@ async function handleCreateAgent(event) {
         await refreshData();
     } catch (error) {
         showError('Failed to create agent: ' + error.message);
+    }
+}
+
+// Restart agent
+async function restartAgent(agentId) {
+    if (!confirm(`Are you sure you want to restart agent ${agentId}? The agent will be temporarily unavailable.`)) {
+        return;
+    }
+
+    try {
+        // Show loading state
+        showSuccess(`Restarting agent ${agentId}...`);
+        
+        const response = await fetch(`/manager/v1/agents/${agentId}/restart`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to restart agent');
+        }
+
+        const result = await response.json();
+        showSuccess(result.message || `Agent ${agentId} is restarting`);
+        
+        // Wait a moment then refresh the list to show updated status
+        setTimeout(async () => {
+            await refreshData();
+        }, 3000);
+    } catch (error) {
+        showError('Failed to restart agent: ' + error.message);
     }
 }
 

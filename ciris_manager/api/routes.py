@@ -443,6 +443,80 @@ def create_routes(manager: Any) -> APIRouter:
                 detail=f"Failed to delete agent {agent_id}. Check logs for details.",
             )
 
+    @router.post("/agents/{agent_id}/restart")
+    async def restart_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+        """
+        Restart an agent container using Docker.
+
+        This will perform a docker restart on the container,
+        which is faster than stop/start and preserves the container state.
+        """
+        try:
+            # Check if agent exists in registry
+            agent = manager.agent_registry.get_agent(agent_id)
+            if not agent:
+                # Check if it's a discovered agent
+                from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+                discovery = DockerAgentDiscovery()
+                discovered_agents = discovery.discover_agents()
+
+                discovered_agent = next(
+                    (a for a in discovered_agents if a.agent_id == agent_id), None
+                )
+                if not discovered_agent:
+                    raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            # Get container name
+            container_name = f"ciris-agent-{agent_id}"
+
+            # Use Docker API to restart the container
+            import docker
+
+            client = docker.from_env()
+
+            try:
+                container = client.containers.get(container_name)
+                container.restart(timeout=30)
+
+                logger.info(f"Agent {agent_id} restarted by {user['email']}")
+
+                return {
+                    "status": "success",
+                    "agent_id": agent_id,
+                    "message": f"Agent {agent_id} is restarting",
+                    "container": container_name,
+                }
+            except docker.errors.NotFound:
+                # Try with just the agent_id as container name
+                try:
+                    container = client.containers.get(f"ciris-{agent_id}")
+                    container.restart(timeout=30)
+
+                    logger.info(f"Agent {agent_id} restarted by {user['email']}")
+
+                    return {
+                        "status": "success",
+                        "agent_id": agent_id,
+                        "message": f"Agent {agent_id} is restarting",
+                        "container": f"ciris-{agent_id}",
+                    }
+                except docker.errors.NotFound:
+                    raise HTTPException(
+                        status_code=404, detail=f"Container for agent '{agent_id}' not found"
+                    )
+            except docker.errors.APIError as e:
+                logger.error(f"Docker API error restarting {agent_id}: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to restart container: {str(e)}"
+                )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to restart agent {agent_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to restart agent: {str(e)}")
+
     @router.get("/agents/{agent_id}/config")
     async def get_agent_config(agent_id: str, user: dict = auth_dependency) -> Dict[str, Any]:
         """Get agent configuration from docker-compose.yml."""
