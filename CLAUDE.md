@@ -241,6 +241,24 @@ ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
 # CIRIS deployment location: /opt/ciris
 ```
 
+### Agent API Authentication
+When making API calls to agents, use the centralized auth system:
+```python
+from ciris_manager.agent_auth import get_agent_auth
+
+# Get auth headers for an agent
+auth = get_agent_auth()
+headers = auth.get_auth_headers("datum")
+
+# Make authenticated request
+response = httpx.get(f"http://localhost:{port}/v1/agent/status", headers=headers)
+```
+
+The auth system automatically:
+- Uses service tokens when available (encrypted in agent registry)
+- Falls back to default admin credentials for legacy agents
+- Handles token decryption securely
+
 ### Production Directory Structure
 ```
 /opt/ciris/

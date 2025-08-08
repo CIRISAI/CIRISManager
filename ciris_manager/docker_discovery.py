@@ -152,12 +152,19 @@ class DockerAgentDiscovery:
         try:
             # Use synchronous httpx client for simplicity in sync context
             import httpx
+            from ciris_manager.agent_auth import get_agent_auth
+
+            # Get authentication headers
+            auth = get_agent_auth()
+            headers = auth.get_auth_headers(agent_id)
 
             url = f"http://localhost:{port}/v1/agent/status"
             with httpx.Client(timeout=2.0) as client:
-                response = client.get(url)
+                response = client.get(url, headers=headers)
                 if response.status_code == 200:
-                    data = response.json()
+                    result = response.json()
+                    # Handle wrapped response format
+                    data = result.get("data", result)
                     return {
                         "version": data.get("version"),
                         "codename": data.get("codename"),

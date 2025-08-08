@@ -661,32 +661,104 @@ function renderVersionData(data) {
     const deploymentStatus = document.getElementById('deployment-status');
     if (data.current_deployment) {
         const deployment = data.current_deployment;
+        
+        // Calculate progress percentage
+        const progressPercent = deployment.agents_total > 0 
+            ? Math.round((deployment.agents_updated / deployment.agents_total) * 100)
+            : 0;
+        
+        // Format start time
+        const startTime = new Date(deployment.started_at);
+        const timeAgo = getTimeAgo(startTime);
+        
+        // Determine status color and icon
+        let statusColor = 'text-gray-600';
+        let statusBg = 'bg-gray-100';
+        let statusIcon = 'fa-circle';
+        
+        if (deployment.status === 'in_progress') {
+            statusColor = 'text-yellow-600';
+            statusBg = 'bg-yellow-100';
+            statusIcon = 'fa-spinner fa-spin';
+        } else if (deployment.status === 'completed') {
+            statusColor = 'text-green-600';
+            statusBg = 'bg-green-100';
+            statusIcon = 'fa-check-circle';
+        } else if (deployment.status === 'failed') {
+            statusColor = 'text-red-600';
+            statusBg = 'bg-red-100';
+            statusIcon = 'fa-exclamation-circle';
+        }
+        
         deploymentStatus.innerHTML = `
-            <div class="space-y-2">
-                <div class="flex justify-between">
-                    <span class="font-medium">Deployment ID:</span>
-                    <span class="text-sm font-mono">${escapeHtml(deployment.deployment_id)}</span>
+            <div class="space-y-3">
+                <!-- Status Header -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i class="fas ${statusIcon} ${statusColor}"></i>
+                        <span class="font-semibold text-lg capitalize">${escapeHtml(deployment.status.replace('_', ' '))}</span>
+                        ${deployment.canary_phase ? `
+                            <span class="px-2 py-1 text-xs ${statusBg} ${statusColor} rounded-full">
+                                ${escapeHtml(deployment.canary_phase)} phase
+                            </span>
+                        ` : ''}
+                    </div>
+                    <span class="text-sm text-gray-500">${timeAgo}</span>
                 </div>
-                <div class="flex justify-between">
-                    <span class="font-medium">Status:</span>
-                    <span class="px-2 py-1 text-xs rounded ${
-                        deployment.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                        deployment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        'bg-red-100 text-red-800'
-                    }">${escapeHtml(deployment.status)}</span>
+                
+                <!-- Progress Bar -->
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="font-medium">Progress</span>
+                        <span>${deployment.agents_updated} of ${deployment.agents_total} agents (${progressPercent}%)</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="h-2 rounded-full transition-all duration-500 ${
+                            deployment.status === 'failed' ? 'bg-red-500' :
+                            deployment.status === 'completed' ? 'bg-green-500' :
+                            'bg-blue-500'
+                        }" style="width: ${progressPercent}%"></div>
+                    </div>
                 </div>
-                <div class="flex justify-between">
-                    <span class="font-medium">Progress:</span>
-                    <span>${deployment.agents_updated} / ${deployment.agents_total} agents</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="font-medium">Message:</span>
-                    <span class="text-sm">${escapeHtml(deployment.message)}</span>
+                
+                <!-- Details -->
+                <div class="space-y-2 text-sm">
+                    ${deployment.message ? `
+                        <div>
+                            <span class="font-medium">Message:</span>
+                            <span class="ml-2">${escapeHtml(deployment.message)}</span>
+                        </div>
+                    ` : ''}
+                    
+                    ${deployment.agents_failed > 0 ? `
+                        <div class="flex items-center gap-2 text-red-600">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span>${deployment.agents_failed} agent(s) failed to update</span>
+                        </div>
+                    ` : ''}
+                    
+                    ${deployment.agents_deferred > 0 ? `
+                        <div class="flex items-center gap-2 text-yellow-600">
+                            <i class="fas fa-clock"></i>
+                            <span>${deployment.agents_deferred} agent(s) deferred update</span>
+                        </div>
+                    ` : ''}
+                    
+                    <!-- Deployment ID (shortened) -->
+                    <div class="text-xs text-gray-500">
+                        <span>ID: ${escapeHtml(deployment.deployment_id.substring(0, 8))}...</span>
+                    </div>
                 </div>
             </div>
         `;
     } else {
-        deploymentStatus.innerHTML = '<p class="text-gray-600">No active deployment</p>';
+        deploymentStatus.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-check-circle text-3xl text-gray-300 mb-2"></i>
+                <p class="text-gray-600">No active deployment</p>
+                <p class="text-xs text-gray-500 mt-1">All systems operational</p>
+            </div>
+        `;
     }
 
     // Render agent version table and cards

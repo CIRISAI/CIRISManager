@@ -480,40 +480,20 @@ class DeploymentOrchestrator:
                     "confirm": True,
                 }
 
-                # Use agent's service token for authentication
-                # Get encrypted token from agent registry
-                service_token = None
-                if self.manager:
-                    registry_agent = self.manager.agent_registry.get_agent(agent.agent_id)
-                    if registry_agent and registry_agent.service_token:
-                        # Decrypt token for use
-                        from ciris_manager.crypto import get_token_encryption
+                # Use centralized agent authentication
+                from ciris_manager.agent_auth import get_agent_auth
 
-                        encryption = get_token_encryption()
-                        try:
-                            service_token = encryption.decrypt_token(registry_agent.service_token)
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to decrypt service token for {agent.agent_id}: {e}"
-                            )
+                auth = get_agent_auth(self.manager.agent_registry if self.manager else None)
+                headers = auth.get_auth_headers(agent.agent_id)
 
-                if service_token:
-                    # Use service token authentication
-                    headers = {"Authorization": f"Bearer service:{service_token}"}
-                    logger.debug(f"Using service token authentication for {agent.agent_id}")
-                    # Audit token use
+                # Audit token use if using service token
+                if "service:" in headers.get("Authorization", ""):
                     audit_service_token_use(
                         agent_id=agent.agent_id,
                         deployment_id=deployment_id,
                         success=True,
-                        token=service_token,
+                        token="[REDACTED]",  # Don't log actual token
                     )
-                else:
-                    # Fallback to default admin credentials for legacy agents
-                    logger.warning(
-                        f"No service token for agent {agent.agent_id}, using default credentials"
-                    )
-                    headers = {"Authorization": "Bearer admin:ciris_admin_password"}
 
                 # Log the shutdown request
                 logger.info(
