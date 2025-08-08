@@ -334,20 +334,38 @@ async function loadEnvFromFile() {
         if (!file) return;
         
         try {
+            console.log('Loading file:', file.name);
             const text = await file.text();
+            console.log('File content length:', text.length);
+            
             const env = parseEnvFile(text);
+            console.log('Parsed environment variables:', env);
+            
+            // Check if we got any variables
+            if (Object.keys(env).length === 0) {
+                showError('No valid environment variables found in file');
+                return;
+            }
             
             // Clear existing env vars
             const container = document.getElementById('env-vars-container');
+            if (!container) {
+                console.error('Container env-vars-container not found');
+                showError('Failed to find environment variables container');
+                return;
+            }
             container.innerHTML = '';
             
             // Add each env var
+            let count = 0;
             for (const [key, value] of Object.entries(env)) {
                 addEnvVarRow(key, value);
+                count++;
             }
             
-            showSuccess('Environment variables loaded from file');
+            showSuccess(`Loaded ${count} environment variables from ${file.name}`);
         } catch (error) {
+            console.error('Error loading file:', error);
             showError('Failed to load environment file: ' + error.message);
         }
     };
@@ -360,14 +378,18 @@ function parseEnvFile(content) {
     const env = {};
     const lines = content.split('\n');
     
-    for (const line of lines) {
-        // Skip comments and empty lines
-        if (!line || line.trim().startsWith('#')) continue;
+    for (let line of lines) {
+        // Trim the line
+        line = line.trim();
         
-        const match = line.match(/^([^=]+)=(.*)$/);
-        if (match) {
-            const key = match[1].trim();
-            let value = match[2].trim();
+        // Skip comments and empty lines
+        if (!line || line.startsWith('#')) continue;
+        
+        // Check if line contains an equals sign
+        const equalsIndex = line.indexOf('=');
+        if (equalsIndex > 0) {
+            const key = line.substring(0, equalsIndex).trim();
+            let value = line.substring(equalsIndex + 1).trim();
             
             // Remove quotes if present
             if ((value.startsWith('"') && value.endsWith('"')) ||
@@ -1199,20 +1221,36 @@ async function loadSettingsEnvFromFile() {
         if (!file) return;
         
         try {
+            console.log('Loading file for settings:', file.name);
             const text = await file.text();
             const env = parseEnvFile(text);
+            console.log('Parsed environment variables for settings:', env);
+            
+            // Check if we got any variables
+            if (Object.keys(env).length === 0) {
+                showError('No valid environment variables found in file');
+                return;
+            }
             
             // Clear existing env vars in settings
             const container = document.getElementById('env-vars-settings');
+            if (!container) {
+                console.error('Container env-vars-settings not found');
+                showError('Failed to find settings environment variables container');
+                return;
+            }
             container.innerHTML = '';
             
             // Add each env var to settings
+            let count = 0;
             for (const [key, value] of Object.entries(env)) {
                 addSettingsEnvVarRow(key, value);
+                count++;
             }
             
-            showSuccess('Environment variables loaded from file');
+            showSuccess(`Loaded ${count} environment variables from ${file.name}`);
         } catch (error) {
+            console.error('Error loading file for settings:', error);
             showError('Failed to load environment file: ' + error.message);
         }
     };
