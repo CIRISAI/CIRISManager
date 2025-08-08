@@ -761,6 +761,65 @@ function renderVersionData(data) {
         `;
     }
 
+    // Render deployment history
+    const deploymentHistory = document.getElementById('deployment-history');
+    if (data.recent_deployments && data.recent_deployments.length > 0) {
+        deploymentHistory.innerHTML = `
+            <div class="space-y-2">
+                ${data.recent_deployments.map(deployment => {
+                    const startTime = new Date(deployment.started_at);
+                    const endTime = deployment.completed_at ? new Date(deployment.completed_at) : null;
+                    const duration = endTime ? Math.round((endTime - startTime) / 1000) : null;
+                    
+                    // Determine status icon and color
+                    let statusIcon = 'fa-check-circle';
+                    let statusColor = 'text-green-600';
+                    if (deployment.status === 'failed') {
+                        statusIcon = 'fa-exclamation-circle';
+                        statusColor = 'text-red-600';
+                    } else if (deployment.status === 'cancelled') {
+                        statusIcon = 'fa-times-circle';
+                        statusColor = 'text-gray-600';
+                    }
+                    
+                    return `
+                        <div class="border-l-4 ${
+                            deployment.status === 'completed' ? 'border-green-500' :
+                            deployment.status === 'failed' ? 'border-red-500' :
+                            'border-gray-500'
+                        } pl-3 py-2">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <i class="fas ${statusIcon} ${statusColor} text-sm"></i>
+                                        <span class="text-sm font-medium">
+                                            ${deployment.agents_updated} of ${deployment.agents_total} agents notified
+                                        </span>
+                                    </div>
+                                    <div class="text-xs text-gray-600 mt-1">
+                                        <span class="font-mono">${escapeHtml(deployment.deployment_id.substring(0, 8))}</span>
+                                        ${deployment.message ? ` • ${escapeHtml(deployment.message)}` : ''}
+                                    </div>
+                                </div>
+                                <div class="text-right text-xs text-gray-500">
+                                    <div>${formatDate(startTime)}</div>
+                                    ${duration ? `<div>${formatDuration(duration)}</div>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    } else {
+        deploymentHistory.innerHTML = `
+            <div class="text-center text-gray-500">
+                <i class="fas fa-history text-2xl mb-2"></i>
+                <p>No recent deployments</p>
+            </div>
+        `;
+    }
+
     // Render agent version table and cards
     const tableBody = document.getElementById('agent-versions-table');
     const cardsContainer = document.getElementById('agent-versions-cards');
@@ -1022,6 +1081,58 @@ function escapeHtml(unsafe) {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;")
         : '';
+}
+
+// Helper function to get time ago string
+function getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+    return `${Math.floor(seconds / 86400)} days ago`;
+}
+
+// Helper function to format date
+function formatDate(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    
+    if (diffHours < 24) {
+        // Today - show time
+        return date.toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit'
+        });
+    } else if (diffHours < 48) {
+        // Yesterday
+        return 'Yesterday ' + date.toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit'
+        });
+    } else {
+        // Older - show date
+        return date.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+}
+
+// Helper function to format duration
+function formatDuration(seconds) {
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+    }
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
 // OAuth Modal Functions
