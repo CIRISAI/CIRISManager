@@ -115,6 +115,7 @@ class ComposeGenerator:
                     "image": f"{self.docker_registry}/{self.default_image}",
                     "platform": "linux/amd64",
                     "ports": [f"{port}:8080"],
+                    "command": ["python", "main.py", "--template", template],
                     "environment": base_env,
                     "volumes": [
                         f"{agent_id}_data:/app/data",
