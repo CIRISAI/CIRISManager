@@ -277,11 +277,22 @@ http {
         """Generate main server block with all routes."""
 
         server = """    # === MAIN SERVER ===
-    # Redirect HTTP to HTTPS
+    # Redirect HTTP to HTTPS (with health check exception)
     server {
         listen 80;
         server_name agents.ciris.ai;
-        return 301 https://$server_name$request_uri;
+        
+        # Health check endpoint (must be available on HTTP for Docker health check)
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+        
+        # Redirect everything else to HTTPS
+        location / {
+            return 301 https://$server_name$request_uri;
+        }
     }
 
     # HTTPS Server
