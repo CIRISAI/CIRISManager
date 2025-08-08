@@ -862,11 +862,25 @@ function showError(message) {
     const messageElement = document.getElementById('error-message');
     messageElement.textContent = message;
     alert.classList.remove('hidden');
+    // Auto-hide after 5 seconds
+    setTimeout(() => hideError(), 5000);
 }
 
 // Hide error message
 function hideError() {
     document.getElementById('error-alert').classList.add('hidden');
+}
+
+// Show success message
+function showSuccess(message) {
+    // For now, just log to console since we don't have a success alert in the HTML
+    console.log('Success:', message);
+    // Could also show a temporary notification
+    const notification = document.createElement('div');
+    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
 }
 
 // Utility: Escape HTML to prevent XSS
