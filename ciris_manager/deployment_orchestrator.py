@@ -438,8 +438,27 @@ class DeploymentOrchestrator:
             # Call agent's graceful shutdown endpoint
             async with httpx.AsyncClient() as client:
                 # Use shutdown endpoint instead of non-existent update endpoint
+                # Build a more descriptive shutdown reason
+                if notification.version and not notification.version.startswith(('v', '1', '2', '3')):
+                    # Looks like a commit SHA, use a more descriptive format
+                    reason = f"Runtime: CD update to commit {notification.version[:7]}"
+                elif notification.version:
+                    # Semantic version
+                    reason = f"Runtime: CD update to version {notification.version}"
+                else:
+                    # No version provided
+                    reason = "Runtime: CD update requested"
+                
+                # Add deployment ID and message for context
+                if notification.message and notification.message != "Update available":
+                    reason = f"{reason} - {notification.message}"
+                reason = f"{reason} (deployment {deployment_id[:8]})"
+                
+                # Add API indicator for clarity
+                reason = f"System shutdown requested: {reason} (API shutdown by wa-system-admin)"
+                
                 shutdown_payload = {
-                    "reason": f"CD update to {notification.version} (deployment {deployment_id})",
+                    "reason": reason,
                     "force": False,
                     "confirm": True,
                 }
