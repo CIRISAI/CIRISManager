@@ -235,7 +235,7 @@ class AgentRegistry:
             "explorer": [],
             "early_adopter": [],
             "general": [],
-            "unassigned": []
+            "unassigned": [],
         }
 
         for agent in self.agents.values():

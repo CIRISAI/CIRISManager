@@ -996,7 +996,7 @@ def create_routes(manager: Any) -> APIRouter:
             "explorer": [],
             "early_adopter": [],
             "general": [],
-            "unassigned": []
+            "unassigned": [],
         }
 
         for agent in agents:
