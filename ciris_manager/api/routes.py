@@ -307,6 +307,43 @@ def create_routes(manager: Any) -> APIRouter:
 
         return AgentListResponse(agents=agents)
 
+    @router.get("/agents/versions")
+    async def get_agent_versions(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
+        """
+        Get version information for all agents.
+
+        Returns version, codename, and code hash for each agent.
+        """
+        from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+        discovery = DockerAgentDiscovery()
+        agents = discovery.discover_agents()
+
+        # Build version response
+        agent_versions = []
+        version_summary: Dict[str, int] = {}
+
+        for agent in agents:
+            agent_version = {
+                "agent_id": agent.agent_id,
+                "agent_name": agent.agent_name,
+                "version": agent.version or "unknown",
+                "codename": agent.codename or "unknown",
+                "code_hash": agent.code_hash or "unknown",
+                "status": agent.status,
+            }
+            agent_versions.append(agent_version)
+
+            # Count versions for summary
+            version_key = agent.version or "unknown"
+            version_summary[version_key] = version_summary.get(version_key, 0) + 1
+
+        return {
+            "agents": agent_versions,
+            "version_summary": version_summary,
+            "total_agents": len(agents),
+        }
+
     @router.get("/agents/{agent_name}")
     async def get_agent(agent_name: str) -> AgentResponse:
         """Get specific agent by name."""
@@ -944,43 +981,6 @@ def create_routes(manager: Any) -> APIRouter:
             "summary": "3 changes: 1 fix, 1 feature, 1 security update",
             "recommended_action": "update",
             "breaking_changes": False,
-        }
-
-    @router.get("/agents/versions")
-    async def get_agent_versions(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
-        """
-        Get version information for all agents.
-
-        Returns version, codename, and code hash for each agent.
-        """
-        from ciris_manager.docker_discovery import DockerAgentDiscovery
-
-        discovery = DockerAgentDiscovery()
-        agents = discovery.discover_agents()
-
-        # Build version response
-        agent_versions = []
-        version_summary: Dict[str, int] = {}
-
-        for agent in agents:
-            agent_version = {
-                "agent_id": agent.agent_id,
-                "agent_name": agent.agent_name,
-                "version": agent.version or "unknown",
-                "codename": agent.codename or "unknown",
-                "code_hash": agent.code_hash or "unknown",
-                "status": agent.status,
-            }
-            agent_versions.append(agent_version)
-
-            # Count versions for summary
-            version_key = agent.version or "unknown"
-            version_summary[version_key] = version_summary.get(version_key, 0) + 1
-
-        return {
-            "agents": agent_versions,
-            "version_summary": version_summary,
-            "total_agents": len(agents),
         }
 
     @router.get("/versions/adoption")
