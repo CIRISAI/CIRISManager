@@ -265,7 +265,10 @@ class DeploymentOrchestrator:
         agents: List[AgentInfo],
     ) -> None:
         """
-        Run canary deployment (explorers → early adopters → general).
+        Run canary deployment using pre-assigned groups (explorers → early adopters → general).
+        
+        Only agents that have been manually assigned to canary groups will receive
+        update notifications. Unassigned agents are skipped.
 
         Args:
             deployment_id: Deployment identifier
@@ -274,76 +277,100 @@ class DeploymentOrchestrator:
         """
         status = self.deployments[deployment_id]
 
-        # Group agents by update readiness
-        # Simple split: 10% explorers, 20% early adopters, 70% general
-        running_agents = [a for a in agents if a.is_running]
-
-        if not running_agents:
-            status.message = "No running agents to update"
+        # Get agents organized by their pre-assigned canary groups
+        explorers = []
+        early_adopters = []
+        general = []
+        
+        if self.manager and hasattr(self.manager, "agent_registry"):
+            # Use pre-assigned groups from registry
+            groups = self.manager.agent_registry.get_agents_by_canary_group()
+            
+            # Only include running agents from each group
+            for agent in agents:
+                if agent.is_running:
+                    # Find which group this agent belongs to
+                    for group_agent in groups.get("explorer", []):
+                        if group_agent.agent_id == agent.agent_id:
+                            explorers.append(agent)
+                            break
+                    for group_agent in groups.get("early_adopter", []):
+                        if group_agent.agent_id == agent.agent_id:
+                            early_adopters.append(agent)
+                            break
+                    for group_agent in groups.get("general", []):
+                        if group_agent.agent_id == agent.agent_id:
+                            general.append(agent)
+                            break
+        else:
+            # Fallback if no registry available - skip unassigned agents
+            logger.warning("No agent registry available for canary groups, skipping canary deployment")
+            status.message = "Canary deployment requires agent registry with group assignments"
+            status.status = "failed"
+            return
+        
+        # Check if we have any agents in canary groups
+        if not explorers and not early_adopters and not general:
+            status.message = "No agents assigned to canary groups"
+            logger.warning("No agents assigned to canary groups, cannot proceed with canary deployment")
+            status.status = "failed"
             return
 
-        explorer_count = max(1, len(running_agents) // 10)
-        early_adopter_count = max(1, len(running_agents) // 5)
-
-        explorers = running_agents[:explorer_count]
-        early_adopters = running_agents[explorer_count : explorer_count + early_adopter_count]
-        general = running_agents[explorer_count + early_adopter_count :]
-
-        # Persist canary group assignments if we have a manager
-        if self.manager and hasattr(self.manager, "agent_registry"):
-            for agent in explorers:
-                self.manager.agent_registry.set_canary_group(agent.agent_id, "explorer")
-            for agent in early_adopters:
-                self.manager.agent_registry.set_canary_group(agent.agent_id, "early_adopter")
-            for agent in general:
-                self.manager.agent_registry.set_canary_group(agent.agent_id, "general")
-
-        # Phase 1: Explorers
+        # Phase 1: Explorers (if any)
         from ciris_manager.audit import audit_deployment_action
+        
+        if explorers:
+            status.canary_phase = "explorers"
+            status.message = f"Notifying {len(explorers)} explorer agents"
+            logger.info(
+                f"Deployment {deployment_id}: Starting explorer phase with {len(explorers)} pre-assigned explorer agents"
+            )
+            audit_deployment_action(
+                deployment_id=deployment_id,
+                action="canary_phase_started",
+                details={"phase": "explorers", "agent_count": len(explorers)},
+            )
+            await self._update_agent_group(deployment_id, notification, explorers)
+            
+            # Wait and check health
+            await asyncio.sleep(60)  # 1 minute observation period
+        else:
+            logger.info(f"Deployment {deployment_id}: No explorer agents assigned, skipping phase")
 
-        status.canary_phase = "explorers"
-        status.message = f"Updating {len(explorers)} explorer agents"
-        logger.info(
-            f"Deployment {deployment_id}: Starting explorer phase with {len(explorers)} agents"
-        )
-        audit_deployment_action(
-            deployment_id=deployment_id,
-            action="canary_phase_started",
-            details={"phase": "explorers", "agent_count": len(explorers)},
-        )
-        await self._update_agent_group(deployment_id, notification, explorers)
+        # Phase 2: Early Adopters (if any)
+        if early_adopters:
+            status.canary_phase = "early_adopters"
+            status.message = f"Notifying {len(early_adopters)} early adopter agents"
+            logger.info(
+                f"Deployment {deployment_id}: Starting early adopter phase with {len(early_adopters)} pre-assigned agents"
+            )
+            audit_deployment_action(
+                deployment_id=deployment_id,
+                action="canary_phase_started",
+                details={"phase": "early_adopters", "agent_count": len(early_adopters)},
+            )
+            await self._update_agent_group(deployment_id, notification, early_adopters)
+            
+            # Wait and check health
+            await asyncio.sleep(120)  # 2 minute observation period
+        else:
+            logger.info(f"Deployment {deployment_id}: No early adopter agents assigned, skipping phase")
 
-        # Wait and check health
-        await asyncio.sleep(60)  # 1 minute observation period
-
-        # Phase 2: Early Adopters
-        status.canary_phase = "early_adopters"
-        status.message = f"Updating {len(early_adopters)} early adopter agents"
-        logger.info(
-            f"Deployment {deployment_id}: Starting early adopter phase with {len(early_adopters)} agents"
-        )
-        audit_deployment_action(
-            deployment_id=deployment_id,
-            action="canary_phase_started",
-            details={"phase": "early_adopters", "agent_count": len(early_adopters)},
-        )
-        await self._update_agent_group(deployment_id, notification, early_adopters)
-
-        # Wait and check health
-        await asyncio.sleep(120)  # 2 minute observation period
-
-        # Phase 3: General Population
-        status.canary_phase = "general"
-        status.message = f"Updating {len(general)} general agents"
-        logger.info(
-            f"Deployment {deployment_id}: Starting general phase with {len(general)} agents"
-        )
-        audit_deployment_action(
-            deployment_id=deployment_id,
-            action="canary_phase_started",
-            details={"phase": "general", "agent_count": len(general)},
-        )
-        await self._update_agent_group(deployment_id, notification, general)
+        # Phase 3: General Population (if any)
+        if general:
+            status.canary_phase = "general"
+            status.message = f"Notifying {len(general)} general agents"
+            logger.info(
+                f"Deployment {deployment_id}: Starting general phase with {len(general)} pre-assigned agents"
+            )
+            audit_deployment_action(
+                deployment_id=deployment_id,
+                action="canary_phase_started",
+                details={"phase": "general", "agent_count": len(general)},
+            )
+            await self._update_agent_group(deployment_id, notification, general)
+        else:
+            logger.info(f"Deployment {deployment_id}: No general agents assigned, skipping phase")
 
     async def _run_immediate_deployment(
         self,
