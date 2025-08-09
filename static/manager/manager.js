@@ -1018,8 +1018,9 @@ function formatVersionDisplay(imageTag) {
 
 // Format date
 function formatDate(dateString) {
-    if (!dateString) return 'Unknown';
+    if (!dateString || dateString === 'never') return 'Unknown';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Unknown';
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
 }
 
