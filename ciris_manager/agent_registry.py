@@ -200,51 +200,51 @@ class AgentRegistry:
 
     def set_canary_group(self, agent_id: str, group: str) -> bool:
         """Set the canary deployment group for an agent.
-        
+
         Args:
             agent_id: Agent identifier
             group: Canary group ('explorer', 'early_adopter', 'general', or None)
-        
+
         Returns:
             True if successful, False if agent not found
         """
         agent = self.agents.get(agent_id)
         if not agent:
             return False
-        
-        if not hasattr(agent, 'metadata'):
+
+        if not hasattr(agent, "metadata"):
             agent.metadata = {}
-        
+
         if group:
-            agent.metadata['canary_group'] = group
+            agent.metadata["canary_group"] = group
         else:
             # Remove canary group assignment
-            agent.metadata.pop('canary_group', None)
-        
+            agent.metadata.pop("canary_group", None)
+
         self._save_metadata()
         logger.info(f"Set canary group for {agent_id} to {group}")
         return True
-    
+
     def get_agents_by_canary_group(self) -> Dict[str, List[AgentInfo]]:
         """Get agents organized by canary group.
-        
+
         Returns:
             Dict with keys 'explorer', 'early_adopter', 'general', 'unassigned'
         """
-        groups = {
-            'explorer': [],
-            'early_adopter': [],
-            'general': [],
-            'unassigned': []
+        groups: Dict[str, List[AgentInfo]] = {
+            "explorer": [],
+            "early_adopter": [],
+            "general": [],
+            "unassigned": []
         }
-        
+
         for agent in self.agents.values():
-            metadata = agent.metadata if hasattr(agent, 'metadata') else {}
-            group = metadata.get('canary_group', 'unassigned')
+            metadata = agent.metadata if hasattr(agent, "metadata") else {}
+            group = metadata.get("canary_group", "unassigned")
             if group not in groups:
-                group = 'unassigned'
+                group = "unassigned"
             groups[group].append(agent)
-        
+
         return groups
 
     def get_allocated_ports(self) -> Dict[str, int]:

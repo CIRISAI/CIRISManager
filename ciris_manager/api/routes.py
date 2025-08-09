@@ -987,85 +987,90 @@ def create_routes(manager: Any) -> APIRouter:
     async def get_canary_groups(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
         """Get agents organized by canary deployment groups."""
         from ciris_manager.docker_discovery import DockerAgentDiscovery
-        
+
         discovery = DockerAgentDiscovery()
         agents = discovery.discover_agents()
-        
+
         # Get canary group assignments from registry
-        groups = {
-            'explorer': [],
-            'early_adopter': [],
-            'general': [],
-            'unassigned': []
+        groups: Dict[str, List[Dict[str, Any]]] = {
+            "explorer": [],
+            "early_adopter": [],
+            "general": [],
+            "unassigned": []
         }
-        
+
         for agent in agents:
             registry_agent = manager.agent_registry.get_agent(agent.agent_id)
-            metadata = registry_agent.metadata if registry_agent and hasattr(registry_agent, 'metadata') else {}
-            group = metadata.get('canary_group', 'unassigned')
-            
+            metadata = (
+                registry_agent.metadata
+                if registry_agent and hasattr(registry_agent, "metadata")
+                else {}
+            )
+            group = metadata.get("canary_group", "unassigned")
+
             agent_data = {
-                'agent_id': agent.agent_id,
-                'agent_name': agent.agent_name,
-                'status': agent.status,
-                'version': agent.version or 'unknown',
-                'code_hash': agent.code_hash or 'unknown',
-                'last_updated': metadata.get('last_updated', 'never'),
+                "agent_id": agent.agent_id,
+                "agent_name": agent.agent_name,
+                "status": agent.status,
+                "version": agent.version or "unknown",
+                "code_hash": agent.code_hash or "unknown",
+                "last_updated": metadata.get("last_updated", "never"),
             }
-            
+
             if group not in groups:
-                group = 'unassigned'
+                group = "unassigned"
             groups[group].append(agent_data)
-        
+
         # Calculate group sizes
         total = len(agents)
         group_stats = {
-            'explorer': {
-                'count': len(groups['explorer']),
-                'target_percentage': 10,
-                'actual_percentage': round(len(groups['explorer']) / total * 100) if total > 0 else 0
+            "explorer": {
+                "count": len(groups["explorer"]),
+                "target_percentage": 10,
+                "actual_percentage": round(len(groups["explorer"]) / total * 100)
+                if total > 0
+                else 0,
             },
-            'early_adopter': {
-                'count': len(groups['early_adopter']),
-                'target_percentage': 20,
-                'actual_percentage': round(len(groups['early_adopter']) / total * 100) if total > 0 else 0
+            "early_adopter": {
+                "count": len(groups["early_adopter"]),
+                "target_percentage": 20,
+                "actual_percentage": round(len(groups["early_adopter"]) / total * 100)
+                if total > 0
+                else 0,
             },
-            'general': {
-                'count': len(groups['general']),
-                'target_percentage': 70,
-                'actual_percentage': round(len(groups['general']) / total * 100) if total > 0 else 0
+            "general": {
+                "count": len(groups["general"]),
+                "target_percentage": 70,
+                "actual_percentage": round(len(groups["general"]) / total * 100)
+                if total > 0
+                else 0,
             },
-            'unassigned': {
-                'count': len(groups['unassigned']),
-                'target_percentage': 0,
-                'actual_percentage': round(len(groups['unassigned']) / total * 100) if total > 0 else 0
-            }
+            "unassigned": {
+                "count": len(groups["unassigned"]),
+                "target_percentage": 0,
+                "actual_percentage": round(len(groups["unassigned"]) / total * 100)
+                if total > 0
+                else 0,
+            },
         }
-        
-        return {
-            'groups': groups,
-            'stats': group_stats,
-            'total_agents': total
-        }
+
+        return {"groups": groups, "stats": group_stats, "total_agents": total}
 
     @router.put("/canary/agent/{agent_id}/group")
     async def update_agent_canary_group(
-        agent_id: str,
-        request: Dict[str, str],
-        _user: Dict[str, str] = auth_dependency
+        agent_id: str, request: Dict[str, str], _user: Dict[str, str] = auth_dependency
     ) -> Dict[str, str]:
         """Update an agent's canary deployment group."""
-        group = request.get('group')
-        valid_groups = ['explorer', 'early_adopter', 'general', 'unassigned']
+        group = request.get("group")
+        valid_groups = ["explorer", "early_adopter", "general", "unassigned"]
         if group not in valid_groups:
             raise HTTPException(
-                status_code=400,
-                detail=f"Invalid group. Must be one of: {', '.join(valid_groups)}"
+                status_code=400, detail=f"Invalid group. Must be one of: {', '.join(valid_groups)}"
             )
-        
+
         # Set to None if unassigned
-        group_value = None if group == 'unassigned' else group
-        
+        group_value = None if group == "unassigned" else group
+
         if manager.agent_registry.set_canary_group(agent_id, group_value):
             return {"status": "success", "agent_id": agent_id, "group": group}
         else:
