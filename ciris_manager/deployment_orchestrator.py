@@ -266,7 +266,7 @@ class DeploymentOrchestrator:
     ) -> None:
         """
         Run canary deployment using pre-assigned groups (explorers → early adopters → general).
-        
+
         Only agents that have been manually assigned to canary groups will receive
         update notifications. Unassigned agents are skipped.
 
@@ -281,11 +281,11 @@ class DeploymentOrchestrator:
         explorers = []
         early_adopters = []
         general = []
-        
+
         if self.manager and hasattr(self.manager, "agent_registry"):
             # Use pre-assigned groups from registry
             groups = self.manager.agent_registry.get_agents_by_canary_group()
-            
+
             # Only include running agents from each group
             for agent in agents:
                 if agent.is_running:
@@ -304,21 +304,25 @@ class DeploymentOrchestrator:
                             break
         else:
             # Fallback if no registry available - skip unassigned agents
-            logger.warning("No agent registry available for canary groups, skipping canary deployment")
+            logger.warning(
+                "No agent registry available for canary groups, skipping canary deployment"
+            )
             status.message = "Canary deployment requires agent registry with group assignments"
             status.status = "failed"
             return
-        
+
         # Check if we have any agents in canary groups
         if not explorers and not early_adopters and not general:
             status.message = "No agents assigned to canary groups"
-            logger.warning("No agents assigned to canary groups, cannot proceed with canary deployment")
+            logger.warning(
+                "No agents assigned to canary groups, cannot proceed with canary deployment"
+            )
             status.status = "failed"
             return
 
         # Phase 1: Explorers (if any)
         from ciris_manager.audit import audit_deployment_action
-        
+
         if explorers:
             status.canary_phase = "explorers"
             status.message = f"Notifying {len(explorers)} explorer agents"
@@ -331,7 +335,7 @@ class DeploymentOrchestrator:
                 details={"phase": "explorers", "agent_count": len(explorers)},
             )
             await self._update_agent_group(deployment_id, notification, explorers)
-            
+
             # Wait and check health
             await asyncio.sleep(60)  # 1 minute observation period
         else:
@@ -350,11 +354,13 @@ class DeploymentOrchestrator:
                 details={"phase": "early_adopters", "agent_count": len(early_adopters)},
             )
             await self._update_agent_group(deployment_id, notification, early_adopters)
-            
+
             # Wait and check health
             await asyncio.sleep(120)  # 2 minute observation period
         else:
-            logger.info(f"Deployment {deployment_id}: No early adopter agents assigned, skipping phase")
+            logger.info(
+                f"Deployment {deployment_id}: No early adopter agents assigned, skipping phase"
+            )
 
         # Phase 3: General Population (if any)
         if general:
