@@ -845,7 +845,15 @@ function renderVersionData(data) {
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        ${formatVersionDisplay(agent.current_agent_image)}
+                        ${agent.version && agent.version !== 'unknown' ? `
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium">v${escapeHtml(agent.version)}</span>
+                                ${agent.code_hash && agent.code_hash !== 'unknown' ? 
+                                    `<span class="text-xs font-mono text-gray-400">(${escapeHtml(agent.code_hash.substring(0, 7))})</span>` : 
+                                    ''
+                                }
+                            </div>
+                        ` : formatVersionDisplay(agent.current_agent_image)}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         ${formatVersionDisplay(agent.current_gui_image)}
@@ -882,7 +890,15 @@ function renderVersionData(data) {
                         <div class="space-y-2 text-sm">
                             <div>
                                 <span class="text-gray-500">Agent:</span>
-                                <div class="ml-2">${formatVersionDisplay(agent.current_agent_image)}</div>
+                                <div class="ml-2">
+                                    ${agent.version && agent.version !== 'unknown' ? `
+                                        <span class="font-medium">v${escapeHtml(agent.version)}</span>
+                                        ${agent.code_hash && agent.code_hash !== 'unknown' ? 
+                                            `<span class="text-xs font-mono text-gray-400 ml-1">(${escapeHtml(agent.code_hash.substring(0, 7))})</span>` : 
+                                            ''
+                                        }
+                                    ` : formatVersionDisplay(agent.current_agent_image)}
+                                </div>
                             </div>
                             <div>
                                 <span class="text-gray-500">GUI:</span>
