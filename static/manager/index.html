@@ -79,6 +79,9 @@
                         <button onclick="switchTab('versions')" id="versions-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
                             Versions
                         </button>
+                        <button onclick="switchTab('canary')" id="canary-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
+                            Canary Groups
+                        </button>
                     </nav>
                 </div>
 
@@ -104,6 +107,27 @@
                                 <h3 class="text-lg font-semibold mb-2">Manager Status</h3>
                                 <div id="manager-status" class="bg-gray-50 p-4 rounded-lg">
                                     <!-- Status will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Canary Tab -->
+                    <div id="canary-content" class="hidden">
+                        <div class="space-y-6">
+                            <!-- Canary Group Overview -->
+                            <div>
+                                <h3 class="text-lg font-semibold mb-4">Canary Deployment Groups</h3>
+                                <div id="canary-stats" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                                    <!-- Stats cards will be populated here -->
+                                </div>
+                            </div>
+
+                            <!-- Group Assignments -->
+                            <div>
+                                <h3 class="text-lg font-semibold mb-4">Agent Group Assignments</h3>
+                                <div id="canary-groups" class="space-y-4">
+                                    <!-- Group cards will be populated here -->
                                 </div>
                             </div>
                         </div>

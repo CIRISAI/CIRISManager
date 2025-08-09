@@ -288,6 +288,15 @@ class DeploymentOrchestrator:
         explorers = running_agents[:explorer_count]
         early_adopters = running_agents[explorer_count : explorer_count + early_adopter_count]
         general = running_agents[explorer_count + early_adopter_count :]
+        
+        # Persist canary group assignments if we have a manager
+        if self.manager and hasattr(self.manager, 'agent_registry'):
+            for agent in explorers:
+                self.manager.agent_registry.set_canary_group(agent.agent_id, 'explorer')
+            for agent in early_adopters:
+                self.manager.agent_registry.set_canary_group(agent.agent_id, 'early_adopter')
+            for agent in general:
+                self.manager.agent_registry.set_canary_group(agent.agent_id, 'general')
 
         # Phase 1: Explorers
         from ciris_manager.audit import audit_deployment_action

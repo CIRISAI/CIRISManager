@@ -229,6 +229,11 @@ function switchTab(tab) {
     if (tab === 'versions') {
         fetchVersionData();
     }
+    
+    // Fetch canary data when switching to canary tab
+    if (tab === 'canary') {
+        fetchCanaryData();
+    }
 }
 
 // Refresh data
@@ -615,6 +620,152 @@ async function deleteAgent(agentId) {
 // Open agent API documentation
 function openAgentUI(agentId) {
     window.open(`/api/${agentId}/docs`, '_blank');
+}
+
+// Fetch canary group data
+async function fetchCanaryData() {
+    try {
+        const response = await fetch('/manager/v1/canary/groups', {
+            credentials: 'include'
+        });
+
+        if (!response.ok) throw new Error(`Failed to fetch canary data: ${response.status}`);
+
+        const data = await response.json();
+        renderCanaryData(data);
+    } catch (error) {
+        showError('Failed to fetch canary data: ' + error.message);
+    }
+}
+
+// Render canary group data
+function renderCanaryData(data) {
+    const statsContainer = document.getElementById('canary-stats');
+    const groupsContainer = document.getElementById('canary-groups');
+    
+    // Render stats cards
+    const groupOrder = ['explorer', 'early_adopter', 'general', 'unassigned'];
+    const groupConfig = {
+        explorer: { icon: 'fa-rocket', color: 'purple', label: 'Explorers', description: 'First to receive updates' },
+        early_adopter: { icon: 'fa-bolt', color: 'blue', label: 'Early Adopters', description: 'Second wave deployment' },
+        general: { icon: 'fa-users', color: 'green', label: 'General', description: 'Stable production rollout' },
+        unassigned: { icon: 'fa-question-circle', color: 'gray', label: 'Unassigned', description: 'Not in canary program' }
+    };
+    
+    statsContainer.innerHTML = groupOrder.map(group => {
+        const stats = data.stats[group];
+        const config = groupConfig[group];
+        
+        return `
+            <div class="bg-white rounded-lg border p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fas ${config.icon} text-${config.color}-600"></i>
+                        <h4 class="font-semibold">${config.label}</h4>
+                    </div>
+                    <span class="text-2xl font-bold">${stats.count}</span>
+                </div>
+                <p class="text-xs text-gray-500 mb-2">${config.description}</p>
+                <div class="flex justify-between text-xs">
+                    <span>Target: ${stats.target_percentage}%</span>
+                    <span>Actual: ${stats.actual_percentage}%</span>
+                </div>
+                <div class="mt-2 bg-gray-200 rounded-full h-2">
+                    <div class="bg-${config.color}-500 h-2 rounded-full" style="width: ${stats.actual_percentage}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Render group assignments
+    groupsContainer.innerHTML = groupOrder.map(group => {
+        const agents = data.groups[group];
+        const config = groupConfig[group];
+        
+        if (agents.length === 0 && group === 'unassigned') {
+            return ''; // Don't show unassigned if empty
+        }
+        
+        return `
+            <div class="bg-white rounded-lg border">
+                <div class="p-4 border-b bg-${config.color}-50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i class="fas ${config.icon} text-${config.color}-600"></i>
+                            <h4 class="font-semibold">${config.label}</h4>
+                            <span class="px-2 py-1 bg-${config.color}-100 text-${config.color}-700 text-xs rounded-full">
+                                ${agents.length} agent${agents.length !== 1 ? 's' : ''}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4">
+                    ${agents.length > 0 ? `
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            ${agents.map(agent => `
+                                <div class="border rounded-lg p-3 hover:bg-gray-50">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="font-medium">${escapeHtml(agent.agent_name)}</span>
+                                        <span class="px-2 py-1 text-xs rounded-full ${
+                                            agent.status === 'running' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                                        }">
+                                            ${escapeHtml(agent.status)}
+                                        </span>
+                                    </div>
+                                    <div class="text-xs text-gray-600 space-y-1">
+                                        <div>Version: v${escapeHtml(agent.version)} 
+                                            ${agent.code_hash !== 'unknown' ? `(${escapeHtml(agent.code_hash.substring(0, 7))})` : ''}
+                                        </div>
+                                        <div>Updated: ${agent.last_updated === 'never' ? 'Never' : getTimeAgo(new Date(agent.last_updated))}</div>
+                                    </div>
+                                    <div class="mt-2 flex gap-1">
+                                        <button onclick="moveAgent('${escapeHtml(agent.agent_id)}', 'explorer')" 
+                                                class="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                                                ${group === 'explorer' ? 'disabled style="opacity: 0.5"' : ''}>
+                                            <i class="fas fa-rocket"></i>
+                                        </button>
+                                        <button onclick="moveAgent('${escapeHtml(agent.agent_id)}', 'early_adopter')" 
+                                                class="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                                ${group === 'early_adopter' ? 'disabled style="opacity: 0.5"' : ''}>
+                                            <i class="fas fa-bolt"></i>
+                                        </button>
+                                        <button onclick="moveAgent('${escapeHtml(agent.agent_id)}', 'general')" 
+                                                class="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200"
+                                                ${group === 'general' ? 'disabled style="opacity: 0.5"' : ''}>
+                                            <i class="fas fa-users"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <p class="text-gray-500 text-center py-4">No agents in this group</p>
+                    `}
+                </div>
+            </div>
+        `;
+    }).filter(html => html !== '').join('');
+}
+
+// Move agent to a different canary group
+async function moveAgent(agentId, group) {
+    try {
+        const response = await fetch(`/manager/v1/canary/agent/${agentId}/group`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ group })
+        });
+        
+        if (!response.ok) throw new Error(`Failed to update agent group: ${response.status}`);
+        
+        // Refresh canary data
+        fetchCanaryData();
+    } catch (error) {
+        showError('Failed to update agent group: ' + error.message);
+    }
 }
 
 // Fetch version adoption data
