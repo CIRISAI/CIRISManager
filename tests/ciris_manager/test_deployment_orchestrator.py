@@ -22,11 +22,11 @@ class TestDeploymentOrchestrator:
     def orchestrator(self, tmp_path):
         """Create deployment orchestrator."""
         from ciris_manager.agent_registry import AgentRegistry
-        
+
         # Create a mock manager with agent registry
         mock_manager = Mock()
         mock_manager.agent_registry = AgentRegistry(tmp_path / "metadata.json")
-        
+
         orchestrator = DeploymentOrchestrator(manager=mock_manager)
         # Mock the registry client to avoid real network calls
         orchestrator.registry_client = Mock()
@@ -113,7 +113,7 @@ class TestDeploymentOrchestrator:
         """Test canary deployment phases."""
         # Pre-assign agents to canary groups
         registry = orchestrator.manager.agent_registry
-        
+
         # Register and assign agents to groups
         for i, agent in enumerate(sample_agents):
             registry.register_agent(
@@ -121,9 +121,9 @@ class TestDeploymentOrchestrator:
                 name=agent.agent_name,
                 port=agent.api_port,
                 template="base",
-                compose_file=f"/path/to/{agent.agent_id}.yml"
+                compose_file=f"/path/to/{agent.agent_id}.yml",
             )
-            
+
             # Assign to groups: first 2 to explorer, next 3 to early_adopter, rest to general
             if i < 2:
                 registry.set_canary_group(agent.agent_id, "explorer")
@@ -131,7 +131,7 @@ class TestDeploymentOrchestrator:
                 registry.set_canary_group(agent.agent_id, "early_adopter")
             else:
                 registry.set_canary_group(agent.agent_id, "general")
-        
+
         with patch.object(
             orchestrator, "_update_agent_group", new_callable=AsyncMock
         ) as mock_update:
@@ -185,7 +185,7 @@ class TestDeploymentOrchestrator:
             agent_image="ghcr.io/cirisai/ciris-agent:v2.0",
             message="Update",
         )
-        
+
         # Register agent in registry for auth
         registry = orchestrator.manager.agent_registry
         registry.register_agent(
@@ -193,7 +193,7 @@ class TestDeploymentOrchestrator:
             name="Test",
             port=8080,
             template="base",
-            compose_file="/path/to/test.yml"
+            compose_file="/path/to/test.yml",
         )
 
         with patch("httpx.AsyncClient") as mock_client_class:
@@ -226,7 +226,7 @@ class TestDeploymentOrchestrator:
             agent_image="ghcr.io/cirisai/ciris-agent:v2.0",
             message="Update",
         )
-        
+
         # Register agent in registry
         registry = orchestrator.manager.agent_registry
         registry.register_agent(
@@ -234,7 +234,7 @@ class TestDeploymentOrchestrator:
             name="Busy",
             port=8081,
             template="base",
-            compose_file="/path/to/busy.yml"
+            compose_file="/path/to/busy.yml",
         )
 
         with patch("httpx.AsyncClient") as mock_client_class:
@@ -270,7 +270,7 @@ class TestDeploymentOrchestrator:
             agent_image="ghcr.io/cirisai/ciris-agent:v2.0",
             message="Update",
         )
-        
+
         # Register agent in registry
         registry = orchestrator.manager.agent_registry
         registry.register_agent(
@@ -278,7 +278,7 @@ class TestDeploymentOrchestrator:
             name="Offline",
             port=8082,
             template="base",
-            compose_file="/path/to/offline.yml"
+            compose_file="/path/to/offline.yml",
         )
 
         with patch("httpx.AsyncClient") as mock_client_class:
@@ -293,13 +293,15 @@ class TestDeploymentOrchestrator:
             assert response.agent_id == "offline-agent"
             assert response.decision == "reject"
             assert "Connection refused" in response.reason
-    
+
     @pytest.mark.asyncio
     async def test_canary_deployment_with_manual_groups(self, orchestrator, update_notification):
         """Test that canary deployment only uses manually assigned groups."""
         # Mock registry client to return different digests (indicating images changed)
-        orchestrator.registry_client.resolve_image_digest = AsyncMock(return_value="sha256:newagent123")
-        
+        orchestrator.registry_client.resolve_image_digest = AsyncMock(
+            return_value="sha256:newagent123"
+        )
+
         # Create test agents
         agents = []
         for i in range(10):
@@ -312,19 +314,19 @@ class TestDeploymentOrchestrator:
                     status="running",
                 )
             )
-        
+
         # Register agents but only assign some to canary groups
         registry = orchestrator.manager.agent_registry
-        
+
         for i, agent in enumerate(agents):
             registry.register_agent(
                 agent_id=agent.agent_id,
                 name=agent.agent_name,
                 port=agent.api_port,
                 template="base",
-                compose_file=f"/path/to/{agent.agent_id}.yml"
+                compose_file=f"/path/to/{agent.agent_id}.yml",
             )
-            
+
             # Only assign first 3 agents to groups, leave rest unassigned
             if i == 0:
                 registry.set_canary_group(agent.agent_id, "explorer")
@@ -333,10 +335,12 @@ class TestDeploymentOrchestrator:
             elif i == 2:
                 registry.set_canary_group(agent.agent_id, "general")
             # agents 3-9 remain unassigned
-        
-        with patch.object(orchestrator, "_update_agent_group", new_callable=AsyncMock) as mock_update:
+
+        with patch.object(
+            orchestrator, "_update_agent_group", new_callable=AsyncMock
+        ) as mock_update:
             mock_update.return_value = None
-            
+
             # Call _run_canary_deployment directly instead of through background task
             deployment_id = "test-deployment-123"
             orchestrator.deployments[deployment_id] = DeploymentStatus(
@@ -351,43 +355,49 @@ class TestDeploymentOrchestrator:
                 message="Test",
                 canary_phase="explorers",
             )
-            
+
             # Mock asyncio.sleep to avoid waiting
-            with patch("ciris_manager.deployment_orchestrator.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            with patch(
+                "ciris_manager.deployment_orchestrator.asyncio.sleep", new_callable=AsyncMock
+            ) as mock_sleep:
                 mock_sleep.return_value = None
-                
-                await orchestrator._run_canary_deployment(deployment_id, update_notification, agents)
-                
+
+                await orchestrator._run_canary_deployment(
+                    deployment_id, update_notification, agents
+                )
+
                 # Verify that only 3 agents (the ones with assigned groups) were updated
                 # Should be called 3 times (once for each phase with 1 agent each)
                 assert mock_update.call_count == 3
-                
+
                 # Check that each call only had 1 agent (the assigned one)
                 for call in mock_update.call_args_list:
                     agents_in_call = call[0][2]  # Third argument is the agent list
                     assert len(agents_in_call) == 1
-    
+
     @pytest.mark.asyncio
-    async def test_canary_deployment_no_groups_assigned(self, orchestrator, update_notification, sample_agents):
+    async def test_canary_deployment_no_groups_assigned(
+        self, orchestrator, update_notification, sample_agents
+    ):
         """Test that canary deployment fails gracefully when no agents have groups assigned."""
         # Register agents but don't assign any to canary groups
         registry = orchestrator.manager.agent_registry
-        
+
         for agent in sample_agents:
             registry.register_agent(
                 agent_id=agent.agent_id,
                 name=agent.agent_name,
                 port=agent.api_port,
                 template="base",
-                compose_file=f"/path/to/{agent.agent_id}.yml"
+                compose_file=f"/path/to/{agent.agent_id}.yml",
             )
             # Don't assign any canary groups
-        
+
         status = await orchestrator.start_deployment(update_notification, sample_agents)
-        
+
         # Wait for deployment to complete
         await asyncio.sleep(0.1)
-        
+
         # Should fail because no agents are in canary groups
         final_status = await orchestrator.get_deployment_status(status.deployment_id)
         assert final_status.status == "failed"
@@ -411,7 +421,7 @@ class TestDeploymentOrchestrator:
             message="Update",
             strategy="canary",
         )
-        
+
         # Register the stopped agent in registry (but it won't be included since it's not running)
         registry = orchestrator.manager.agent_registry
         registry.register_agent(
@@ -419,7 +429,7 @@ class TestDeploymentOrchestrator:
             name="Stopped 1",
             port=8080,
             template="base",
-            compose_file="/path/to/stopped.yml"
+            compose_file="/path/to/stopped.yml",
         )
         registry.set_canary_group("stopped-1", "explorer")
 
