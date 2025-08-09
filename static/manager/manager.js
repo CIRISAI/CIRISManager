@@ -802,7 +802,7 @@ function renderVersionData(data) {
                                     </div>
                                 </div>
                                 <div class="text-right text-xs text-gray-500">
-                                    <div>${formatDate(startTime)}</div>
+                                    <div>${formatRelativeDate(startTime)}</div>
                                     ${duration ? `<div>${formatDuration(duration)}</div>` : ''}
                                 </div>
                             </div>
@@ -1094,8 +1094,8 @@ function getTimeAgo(date) {
     return `${Math.floor(seconds / 86400)} days ago`;
 }
 
-// Helper function to format date
-function formatDate(date) {
+// Helper function to format date object for relative display
+function formatRelativeDate(date) {
     const now = new Date();
     const diffMs = now - date;
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
