@@ -339,26 +339,16 @@ class CIRISManager:
         logger.info(f"Started agent {agent_id}")
 
     async def container_management_loop(self) -> None:
-        """Updated container management for per-agent compose files."""
+        """Container management loop - currently disabled.
+        
+        Auto-updates and image pulls have been removed to ensure deployments
+        only happen through the deployment orchestrator with proper canary groups.
+        """
+        # This loop is intentionally empty - container updates should only
+        # happen through the deployment orchestrator
         while self._running:
-            try:
-                # Iterate through all registered agents
-                for agent_info in self.agent_registry.list_agents():
-                    compose_path = Path(agent_info.compose_file)
-                    if compose_path.exists():
-                        # Pull latest images if configured
-                        if self.config.container_management.pull_images:
-                            await self._pull_agent_images(compose_path)
-
-                        # Run docker-compose up -d for this agent
-                        await self._start_agent(agent_info.agent_id, compose_path)
-
-                # Wait for next iteration
-                await asyncio.sleep(self.config.container_management.interval)
-
-            except Exception as e:
-                logger.error(f"Error in container management loop: {e}")
-                await asyncio.sleep(30)  # Back off on error
+            # Just sleep - no automatic updates
+            await asyncio.sleep(self.config.container_management.interval)
 
     async def _pull_agent_images(self, compose_path: Path) -> None:
         """Pull latest images for an agent."""

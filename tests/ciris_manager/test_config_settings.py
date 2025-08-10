@@ -35,7 +35,7 @@ class TestConfigSettings:
         """Test ContainerConfig defaults."""
         config = ContainerConfig()
         assert config.interval == 60
-        assert config.pull_images is True
+        assert config.pull_images is False  # Changed: auto-pull disabled by default
 
     def test_port_config_defaults(self):
         """Test PortConfig defaults."""
