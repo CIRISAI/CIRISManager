@@ -340,7 +340,7 @@ class CIRISManager:
 
     async def container_management_loop(self) -> None:
         """Container management loop - currently disabled.
-        
+
         Auto-updates and image pulls have been removed to ensure deployments
         only happen through the deployment orchestrator with proper canary groups.
         """

@@ -26,7 +26,9 @@ class ContainerConfig(BaseModel):
     """Container management configuration."""
 
     interval: int = Field(default=60, description="Seconds between health checks (no auto-updates)")
-    pull_images: bool = Field(default=False, description="DEPRECATED - Image pulls only via deployments")
+    pull_images: bool = Field(
+        default=False, description="DEPRECATED - Image pulls only via deployments"
+    )
 
 
 class PortConfig(BaseModel):
