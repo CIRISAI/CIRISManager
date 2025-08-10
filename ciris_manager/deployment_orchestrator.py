@@ -534,6 +534,7 @@ class DeploymentOrchestrator:
                         agent_id=agent.agent_id,
                         decision="reject",
                         reason=f"Authentication failed: {str(e)}",
+                        ready_at=None,
                     )
 
                 # Audit token use if using service token
