@@ -16,8 +16,8 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ciris_manager.crypto import TokenEncryption
-from ciris_manager.agent_registry import AgentRegistry
+from ciris_manager.crypto import TokenEncryption  # noqa: E402
+from ciris_manager.agent_registry import AgentRegistry  # noqa: E402
 
 
 def migrate_datum_token(metadata_path: str, dry_run: bool = False):
