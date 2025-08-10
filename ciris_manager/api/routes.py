@@ -301,7 +301,7 @@ def create_routes(manager: Any) -> APIRouter:
         """List all managed agents by discovering Docker containers."""
         from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-        discovery = DockerAgentDiscovery()
+        discovery = DockerAgentDiscovery(manager.agent_registry)
         agents = discovery.discover_agents()
 
         # Don't update nginx on GET requests - only update when agents change state
@@ -317,7 +317,7 @@ def create_routes(manager: Any) -> APIRouter:
         """
         from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-        discovery = DockerAgentDiscovery()
+        discovery = DockerAgentDiscovery(manager.agent_registry)
         agents = discovery.discover_agents()
 
         # Build version response
@@ -450,7 +450,7 @@ def create_routes(manager: Any) -> APIRouter:
             # Check if it's a discovered agent (not managed by CIRISManager)
             from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            discovery = DockerAgentDiscovery()
+            discovery = DockerAgentDiscovery(manager.agent_registry)
             discovered_agents = discovery.discover_agents()
 
             discovered_agent = next((a for a in discovered_agents if a.agent_id == agent_id), None)
@@ -497,7 +497,7 @@ def create_routes(manager: Any) -> APIRouter:
                 # Check if it's a discovered agent
                 from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-                discovery = DockerAgentDiscovery()
+                discovery = DockerAgentDiscovery(manager.agent_registry)
                 discovered_agents = discovery.discover_agents()
 
                 discovered_agent = next(
@@ -933,7 +933,7 @@ def create_routes(manager: Any) -> APIRouter:
             # Get current agents with runtime status
             from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            discovery = DockerAgentDiscovery()
+            discovery = DockerAgentDiscovery(manager.agent_registry)
             agents = discovery.discover_agents()
 
             # Start deployment
@@ -1011,7 +1011,7 @@ def create_routes(manager: Any) -> APIRouter:
         """Get agents organized by canary deployment groups."""
         from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-        discovery = DockerAgentDiscovery()
+        discovery = DockerAgentDiscovery(manager.agent_registry)
         agents = discovery.discover_agents()
 
         # Get canary group assignments from registry
@@ -1114,7 +1114,7 @@ def create_routes(manager: Any) -> APIRouter:
         # Get all agents with their metadata
         from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-        discovery = DockerAgentDiscovery()
+        discovery = DockerAgentDiscovery(manager.agent_registry)
         agents = discovery.discover_agents()
 
         # Get agent metadata from registry

@@ -15,13 +15,15 @@ logger = logging.getLogger("ciris_manager.docker_discovery")
 class DockerAgentDiscovery:
     """Discovers CIRIS agents running in Docker containers."""
 
-    def __init__(self) -> None:
+    def __init__(self, agent_registry=None) -> None:
         try:
             self.client = docker.from_env()
             logger.debug("Connected to Docker daemon successfully")
         except Exception as e:
             logger.error(f"Failed to connect to Docker: {e}")
             self.client = None  # type: ignore[assignment]
+        
+        self.agent_registry = agent_registry
 
     def discover_agents(self) -> List[AgentInfo]:
         """Discover all CIRIS agent containers."""
@@ -155,7 +157,7 @@ class DockerAgentDiscovery:
             from ciris_manager.agent_auth import get_agent_auth
 
             # Get authentication headers
-            auth = get_agent_auth()
+            auth = get_agent_auth(self.agent_registry)
             try:
                 headers = auth.get_auth_headers(agent_id)
             except ValueError as e:

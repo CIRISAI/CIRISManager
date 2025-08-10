@@ -299,7 +299,7 @@ class CIRISManager:
             # Discover all running agents
             from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            discovery = DockerAgentDiscovery()
+            discovery = DockerAgentDiscovery(self.agent_registry)
             agents = discovery.discover_agents()
 
             # Update nginx config with current agent list
@@ -517,7 +517,7 @@ class CIRISManager:
             # Get current list of agents to pass to nginx manager
             from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            discovery = DockerAgentDiscovery()
+            discovery = DockerAgentDiscovery(self.agent_registry)
             agents = discovery.discover_agents()
             self.nginx_manager.remove_agent_routes(agent_id, agents)
 
