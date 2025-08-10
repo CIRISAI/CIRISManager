@@ -27,6 +27,7 @@ except ImportError:
             self.detail = detail
             self.retry_after = None
 
+
 # Create limiter instance using client IP address as key
 if SLOWAPI_AVAILABLE:
     limiter = Limiter(
