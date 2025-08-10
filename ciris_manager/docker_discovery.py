@@ -22,7 +22,7 @@ class DockerAgentDiscovery:
         except Exception as e:
             logger.error(f"Failed to connect to Docker: {e}")
             self.client = None  # type: ignore[assignment]
-        
+
         self.agent_registry = agent_registry
 
     def discover_agents(self) -> List[AgentInfo]:
