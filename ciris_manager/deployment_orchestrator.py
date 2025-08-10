@@ -298,7 +298,7 @@ class DeploymentOrchestrator:
                 if image_id:
                     # If it's already a digest, return it
                     if image_id.startswith("sha256:"):
-                        return image_id
+                        return str(image_id)
 
                     # Otherwise get the full image details
                     image_name = container_data[0].get("Config", {}).get("Image", "")
