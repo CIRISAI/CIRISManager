@@ -1,10 +1,9 @@
 """Tests for authentication routes."""
 
 import os
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 import pytest
 from fastapi import HTTPException, Request
-from fastapi.testclient import TestClient
 
 from ciris_manager.api.auth_routes import (
     init_auth_service,
@@ -118,78 +117,58 @@ class TestAuthRoutes:
     """Test authentication routes."""
 
     @pytest.fixture
-    def app(self, tmp_path):
-        """Create test app with auth routes."""
+    def test_app_with_mock_auth(self):
+        """Create test app with mocked auth service."""
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        import ciris_manager.api.auth_routes
+        from ciris_manager.api.auth_service import AuthService
 
+        # Create mock auth service
+        mock_auth = Mock(spec=AuthService)
+
+        # Create app
         app = FastAPI()
 
-        # Initialize a real auth service for the test
-        from ciris_manager.api.auth_service import (
-            AuthService,
-            MockOAuthProvider,
-            InMemorySessionStore,
-            SQLiteUserStore,
-        )
+        # Override the get_auth_service dependency
+        def override_get_auth():
+            return mock_auth
 
-        # Use pytest's tmp_path fixture for temporary directory
-        db_path = tmp_path / "test_auth.db"
+        # Set the auth service
+        ciris_manager.api.auth_routes._auth_service = mock_auth
 
-        # Create auth service with mock provider
-        mock_provider = MockOAuthProvider()
-        session_store = InMemorySessionStore()
-        user_store = SQLiteUserStore(db_path)
-
-        test_auth_service = AuthService(
-            oauth_provider=mock_provider,
-            session_store=session_store,
-            user_store=user_store,
-            jwt_secret="test-secret",
-        )
-
-        # Set the global auth service
-        import ciris_manager.api.auth_routes
-
-        ciris_manager.api.auth_routes._auth_service = test_auth_service
-
+        # Create routes
         router = create_auth_routes()
         app.include_router(router)
 
-        return app
+        # Create client
+        client = TestClient(app)
 
-    @pytest.fixture
-    def client(self, app):
-        """Create test client."""
-        return TestClient(app)
+        return client, mock_auth
 
-    @pytest.fixture
-    def mock_auth_service(self):
-        """Create mock auth service."""
-        service = Mock(spec=AuthService)
-        with patch("ciris_manager.api.auth_routes.get_auth_service", return_value=service):
-            yield service
-
-    @pytest.mark.asyncio
-    async def test_login_route(self, client, mock_auth_service):
+    def test_login_route(self, test_app_with_mock_auth):
         """Test login route."""
-        # Setup mock
-        mock_auth_service.initiate_oauth_flow = AsyncMock(
-            return_value=("state123", "https://oauth.example.com/auth")
-        )
+        client, mock_auth = test_app_with_mock_auth
+
+        # Setup mock - Need to make initiate_oauth_flow awaitable since it's async
+        async def mock_flow(*args, **kwargs):
+            return ("state123", "https://oauth.example.com/auth")
+
+        mock_auth.initiate_oauth_flow = mock_flow
 
         # Make request
         response = client.get("/oauth/login")
 
         # Verify redirect
-        assert response.status_code == 302 or response.status_code == 307
+        assert response.status_code in [302, 307]
         assert "oauth.example.com" in response.headers["location"]
 
-    @pytest.mark.asyncio
-    async def test_login_route_with_redirect(self, client, mock_auth_service):
+    def test_login_route_with_redirect(self, client, mock_auth_service):
         """Test login route with redirect URI."""
         # Setup mock
-        mock_auth_service.initiate_oauth_flow = AsyncMock(
-            return_value=("state123", "https://oauth.example.com/auth")
+        mock_auth_service.initiate_oauth_flow.return_value = (
+            "state123",
+            "https://oauth.example.com/auth",
         )
 
         # Make request
@@ -199,13 +178,13 @@ class TestAuthRoutes:
         assert response.status_code in [302, 307]
         mock_auth_service.initiate_oauth_flow.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_callback_route_success(self, client, mock_auth_service):
+    def test_callback_route_success(self, client, mock_auth_service):
         """Test OAuth callback with successful authentication."""
         # Setup mock
-        mock_auth_service.handle_oauth_callback = AsyncMock(
-            return_value={"access_token": "jwt-token-123", "redirect_uri": "/dashboard"}
-        )
+        mock_auth_service.handle_oauth_callback.return_value = {
+            "access_token": "jwt-token-123",
+            "redirect_uri": "/dashboard",
+        }
 
         # Make request
         response = client.get("/oauth/callback?code=auth123&state=state123")
@@ -215,11 +194,10 @@ class TestAuthRoutes:
         assert "token=jwt-token-123" in response.headers["location"]
         assert "manager_token" in response.cookies
 
-    @pytest.mark.asyncio
-    async def test_callback_route_error(self, client, mock_auth_service):
+    def test_callback_route_error(self, client, mock_auth_service):
         """Test OAuth callback with error."""
         # Setup mock to raise error
-        mock_auth_service.handle_oauth_callback = AsyncMock(side_effect=ValueError("Invalid state"))
+        mock_auth_service.handle_oauth_callback.side_effect = ValueError("Invalid state")
 
         # Make request
         response = client.get("/oauth/callback?code=auth123&state=invalid")
@@ -228,11 +206,10 @@ class TestAuthRoutes:
         assert response.status_code == 400
         assert "Invalid state" in response.json()["detail"]
 
-    @pytest.mark.asyncio
-    async def test_callback_route_exception(self, client, mock_auth_service):
+    def test_callback_route_exception(self, client, mock_auth_service):
         """Test OAuth callback with exception."""
         # Setup mock to raise exception
-        mock_auth_service.handle_oauth_callback = AsyncMock(side_effect=Exception("OAuth failed"))
+        mock_auth_service.handle_oauth_callback.side_effect = Exception("OAuth failed")
 
         # Make request
         response = client.get("/oauth/callback?code=auth123&state=state123")
