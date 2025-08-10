@@ -59,7 +59,7 @@ class DeploymentOrchestrator:
             # Pull new images first to ensure we have the latest
             logger.info("Pulling new images before checking for updates...")
             pull_results = await self._pull_images(notification)
-            
+
             if not pull_results["success"]:
                 logger.error(f"Failed to pull images: {pull_results.get('error', 'Unknown error')}")
                 return DeploymentStatus(
@@ -77,7 +77,7 @@ class DeploymentOrchestrator:
 
             # Check if any agents actually need updating
             agents_needing_update = await self._check_agents_need_update(notification, agents)
-            
+
             # Check if nginx/GUI needs updating (separate from agent updates)
             nginx_needs_update = False
             if notification.gui_image:
@@ -100,15 +100,15 @@ class DeploymentOrchestrator:
                     message="No update needed - images unchanged",
                     canary_phase=None,
                 )
-            
+
             # Handle nginx-only updates immediately
             if nginx_needs_update and not agents_needing_update:
                 logger.info("Only nginx/GUI needs updating - deploying immediately")
                 deployment_id = str(uuid4())
-                
-                # Update nginx container
-                nginx_updated = await self._update_nginx_container(notification.gui_image)
-                
+
+                # Update nginx container (gui_image is guaranteed to be non-None here)
+                nginx_updated = await self._update_nginx_container(notification.gui_image)  # type: ignore[arg-type]
+
                 return DeploymentStatus(
                     deployment_id=deployment_id,
                     agents_total=0,
@@ -118,7 +118,9 @@ class DeploymentOrchestrator:
                     started_at=datetime.now(timezone.utc).isoformat(),
                     completed_at=datetime.now(timezone.utc).isoformat(),
                     status="completed" if nginx_updated else "failed",
-                    message="Nginx/GUI container updated" if nginx_updated else "Failed to update nginx/GUI",
+                    message="Nginx/GUI container updated"
+                    if nginx_updated
+                    else "Failed to update nginx/GUI",
                     canary_phase=None,
                 )
 
@@ -149,92 +151,96 @@ class DeploymentOrchestrator:
     async def _pull_images(self, notification: UpdateNotification) -> Dict[str, Any]:
         """
         Pull Docker images specified in the notification.
-        
+
         Args:
             notification: Update notification with image details
-            
+
         Returns:
             Dictionary with success status and any error messages
         """
-        import subprocess
         import asyncio
-        
+
         results = {"success": True, "agent_image": None, "gui_image": None}
-        
+
         try:
             # Pull agent image if specified
             if notification.agent_image:
                 logger.info(f"Pulling agent image: {notification.agent_image}")
                 process = await asyncio.create_subprocess_exec(
-                    "docker", "pull", notification.agent_image,
+                    "docker",
+                    "pull",
+                    notification.agent_image,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await process.communicate()
-                
+
                 if process.returncode != 0:
                     error_msg = stderr.decode() if stderr else "Failed to pull agent image"
                     logger.error(f"Failed to pull agent image: {error_msg}")
                     results["success"] = False
                     results["error"] = f"Agent image pull failed: {error_msg}"
                     return results
-                    
-                results["agent_image"] = notification.agent_image
+
+                results["agent_image"] = notification.agent_image  # type: ignore[assignment]
                 logger.info(f"Successfully pulled agent image: {notification.agent_image}")
-            
+
             # Pull GUI image if specified
             if notification.gui_image:
                 logger.info(f"Pulling GUI image: {notification.gui_image}")
                 process = await asyncio.create_subprocess_exec(
-                    "docker", "pull", notification.gui_image,
+                    "docker",
+                    "pull",
+                    notification.gui_image,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await process.communicate()
-                
+
                 if process.returncode != 0:
                     error_msg = stderr.decode() if stderr else "Failed to pull GUI image"
                     logger.error(f"Failed to pull GUI image: {error_msg}")
                     results["success"] = False
                     results["error"] = f"GUI image pull failed: {error_msg}"
                     return results
-                    
-                results["gui_image"] = notification.gui_image
+
+                results["gui_image"] = notification.gui_image  # type: ignore[assignment]
                 logger.info(f"Successfully pulled GUI image: {notification.gui_image}")
-                
+
         except Exception as e:
             logger.error(f"Exception during image pull: {e}")
             results["success"] = False
             results["error"] = str(e)
-            
+
         return results
 
     async def _get_local_image_digest(self, image_tag: str) -> Optional[str]:
         """
         Get the digest of a locally pulled Docker image.
-        
+
         Args:
             image_tag: Docker image tag (e.g., ghcr.io/cirisai/ciris-agent:latest)
-            
+
         Returns:
             Image digest or None if not found
         """
-        import subprocess
         import json
-        
+
         try:
             # Use docker inspect to get image details
             result = await asyncio.create_subprocess_exec(
-                "docker", "inspect", image_tag,
+                "docker",
+                "inspect",
+                image_tag,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await result.communicate()
-            
+
             if result.returncode != 0:
                 logger.warning(f"Failed to inspect image {image_tag}: {stderr.decode()}")
                 return None
-                
+
             # Parse JSON output
             image_data = json.loads(stdout.decode())
             if image_data and len(image_data) > 0:
@@ -245,44 +251,45 @@ class DeploymentOrchestrator:
                     for digest in repo_digests:
                         if "@sha256:" in digest:
                             return digest.split("@")[-1]  # Return just the sha256:... part
-                            
+
                 # Fallback to Id if no RepoDigests
                 image_id = image_data[0].get("Id", "")
                 if image_id:
-                    return image_id
-                    
+                    return str(image_id)
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error getting local image digest for {image_tag}: {e}")
             return None
-    
+
     async def _get_container_image_digest(self, container_name: str) -> Optional[str]:
         """
         Get the digest of the image used by a running container.
-        
+
         Args:
             container_name: Name of the container
-            
+
         Returns:
             Image digest or None if not found
         """
-        import subprocess
         import json
-        
+
         try:
             # Get container details
             result = await asyncio.create_subprocess_exec(
-                "docker", "inspect", container_name,
+                "docker",
+                "inspect",
+                container_name,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await result.communicate()
-            
+
             if result.returncode != 0:
                 logger.warning(f"Failed to inspect container {container_name}: {stderr.decode()}")
                 return None
-                
+
             # Parse JSON output
             container_data = json.loads(stdout.decode())
             if container_data and len(container_data) > 0:
@@ -292,15 +299,15 @@ class DeploymentOrchestrator:
                     # If it's already a digest, return it
                     if image_id.startswith("sha256:"):
                         return image_id
-                        
+
                     # Otherwise get the full image details
                     image_name = container_data[0].get("Config", {}).get("Image", "")
                     if image_name:
                         # Get digest of the image the container is using
                         return await self._get_local_image_digest(image_name)
-                        
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error getting container image digest for {container_name}: {e}")
             return None
@@ -344,7 +351,7 @@ class DeploymentOrchestrator:
 
             # Check if agent image changed
             agent_changed = new_agent_digest and new_agent_digest != current_agent_digest
-            
+
             # For GUI/nginx changes, we always update (no need to check current)
             gui_changed = bool(new_gui_digest)
 
@@ -356,7 +363,7 @@ class DeploymentOrchestrator:
                 if agent_changed:
                     logger.debug(f"  Agent image: {current_agent_digest} -> {new_agent_digest}")
                 if gui_changed:
-                    logger.debug(f"  GUI image will be updated")
+                    logger.debug("  GUI image will be updated")
                 agents_needing_update.append(agent)
             else:
                 logger.info(f"Agent {agent.agent_name} is up to date")
@@ -851,77 +858,91 @@ class DeploymentOrchestrator:
     async def _update_nginx_container(self, gui_image: str) -> bool:
         """
         Update the nginx/GUI container with a new image.
-        
+
         Args:
             gui_image: New GUI image to deploy
-            
+
         Returns:
             True if successful, False otherwise
         """
         try:
             logger.info(f"Updating nginx/GUI container to {gui_image}")
-            
+
             # Find and restart the GUI container (usually named ciris-gui)
             result = await asyncio.create_subprocess_exec(
-                "docker", "ps", "--format", "{{.Names}}", "--filter", "name=gui",
+                "docker",
+                "ps",
+                "--format",
+                "{{.Names}}",
+                "--filter",
+                "name=gui",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await result.communicate()
-            
+
             if result.returncode != 0:
                 logger.error(f"Failed to list GUI containers: {stderr.decode()}")
                 return False
-                
-            gui_containers = stdout.decode().strip().split('\n')
+
+            gui_containers = stdout.decode().strip().split("\n")
             gui_containers = [c for c in gui_containers if c]  # Remove empty strings
-            
+
             if not gui_containers:
                 logger.warning("No GUI container found to update")
                 # This might be OK if there's no separate GUI container
                 return True
-                
+
             for container_name in gui_containers:
                 logger.info(f"Restarting GUI container: {container_name}")
-                
+
                 # Stop the container
                 stop_result = await asyncio.create_subprocess_exec(
-                    "docker", "stop", container_name,
+                    "docker",
+                    "stop",
+                    container_name,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 await stop_result.communicate()
-                
-                # Remove the container  
+
+                # Remove the container
                 rm_result = await asyncio.create_subprocess_exec(
-                    "docker", "rm", container_name,
+                    "docker",
+                    "rm",
+                    container_name,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 await rm_result.communicate()
-                
+
                 # Docker compose or the container manager should recreate it with the new image
                 # If using docker-compose, we need to recreate the service
                 compose_result = await asyncio.create_subprocess_exec(
-                    "docker-compose", "-f", "/opt/ciris/docker-compose.yml",
-                    "up", "-d", "--force-recreate", container_name,
+                    "docker-compose",
+                    "-f",
+                    "/opt/ciris/docker-compose.yml",
+                    "up",
+                    "-d",
+                    "--force-recreate",
+                    container_name,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    cwd="/opt/ciris"
+                    cwd="/opt/ciris",
                 )
                 stdout, stderr = await compose_result.communicate()
-                
+
                 if compose_result.returncode != 0:
                     logger.error(f"Failed to recreate GUI container: {stderr.decode()}")
                     return False
-                    
+
             logger.info("Successfully updated nginx/GUI container")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error updating nginx/GUI container: {e}")
             return False
-    
+
     async def _update_agent_metadata(self, agent_id: str, notification: UpdateNotification) -> None:
         """
         Update agent metadata with current image digests after successful deployment.
