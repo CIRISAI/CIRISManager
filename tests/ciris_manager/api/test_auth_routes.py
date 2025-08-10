@@ -4,7 +4,6 @@ import os
 from unittest.mock import Mock, AsyncMock, patch
 import pytest
 from fastapi import HTTPException, Request
-from fastapi.testclient import TestClient
 
 from ciris_manager.api.auth_routes import (
     init_auth_service,
@@ -121,50 +120,46 @@ class TestAuthRoutes:
     def mock_auth_service(self):
         """Create mock auth service."""
         from ciris_manager.api.auth_service import AuthService
-        
+
         # Create mock auth service with AsyncMock for async methods
         service = Mock(spec=AuthService)
         service.initiate_oauth_flow = AsyncMock(
             return_value=("state123", "https://oauth.example.com/auth")
         )
         service.handle_oauth_callback = AsyncMock(
-            return_value={
-                "access_token": "jwt-token-123",
-                "redirect_uri": "/dashboard"
-            }
+            return_value={"access_token": "jwt-token-123", "redirect_uri": "/dashboard"}
         )
-        service.get_current_user = Mock(return_value={
-            "email": "test@example.com",
-            "name": "Test User",
-            "id": "user123"
-        })
+        service.get_current_user = Mock(
+            return_value={"email": "test@example.com", "name": "Test User", "id": "user123"}
+        )
         service.logout_user = Mock()
         return service
 
-    @pytest.fixture 
+    @pytest.fixture
     def app(self, mock_auth_service):
         """Create test app with auth routes."""
         from fastapi import FastAPI
         from ciris_manager.api.auth_routes import get_auth_service
-        
+
         app = FastAPI()
-        
+
         # Override the dependency using FastAPI's dependency injection
         def override_auth_service():
             return mock_auth_service
-            
+
         app.dependency_overrides[get_auth_service] = override_auth_service
-        
+
         # Create and include routes with the correct prefix
         router = create_auth_routes()
         app.include_router(router, prefix="/manager/v1")
-        
+
         return app
-    
+
     @pytest.fixture
     def client(self, app):
         """Create test client."""
         from fastapi.testclient import TestClient
+
         return TestClient(app)
 
     def test_login_route(self, client, mock_auth_service, app):
@@ -175,19 +170,21 @@ class TestAuthRoutes:
         # Verify redirect
         assert response.status_code in [302, 307]
         assert "oauth.example.com" in response.headers["location"]
-        
+
         # Verify the mock was called
         mock_auth_service.initiate_oauth_flow.assert_called_once()
 
     def test_login_route_with_redirect(self, client, mock_auth_service):
         """Test login route with redirect URI."""
         # Make request
-        response = client.get("/manager/v1/oauth/login?redirect_uri=/dashboard", follow_redirects=False)
+        response = client.get(
+            "/manager/v1/oauth/login?redirect_uri=/dashboard", follow_redirects=False
+        )
 
         # Verify
         assert response.status_code in [302, 307]
         assert "oauth.example.com" in response.headers["location"]
-        
+
         # Verify the redirect URI was passed through
         call_args = mock_auth_service.initiate_oauth_flow.call_args
         assert "/dashboard" in str(call_args)
@@ -195,13 +192,15 @@ class TestAuthRoutes:
     def test_callback_route_success(self, client, mock_auth_service):
         """Test OAuth callback with successful authentication."""
         # Make request
-        response = client.get("/manager/v1/oauth/callback?code=auth123&state=state123", follow_redirects=False)
+        response = client.get(
+            "/manager/v1/oauth/callback?code=auth123&state=state123", follow_redirects=False
+        )
 
         # Verify redirect and cookie set
         assert response.status_code in [302, 307]
         assert "token=jwt-token-123" in response.headers["location"]
         assert "manager_token" in response.cookies
-        
+
         # Verify the mock was called with correct arguments
         mock_auth_service.handle_oauth_callback.assert_called_once_with("auth123", "state123")
 
@@ -211,7 +210,9 @@ class TestAuthRoutes:
         mock_auth_service.handle_oauth_callback.side_effect = ValueError("Invalid state")
 
         # Make request
-        response = client.get("/manager/v1/oauth/callback?code=auth123&state=invalid", follow_redirects=False)
+        response = client.get(
+            "/manager/v1/oauth/callback?code=auth123&state=invalid", follow_redirects=False
+        )
 
         # Verify error response
         assert response.status_code == 400
@@ -223,7 +224,9 @@ class TestAuthRoutes:
         mock_auth_service.handle_oauth_callback.side_effect = Exception("OAuth failed")
 
         # Make request
-        response = client.get("/manager/v1/oauth/callback?code=auth123&state=state123", follow_redirects=False)
+        response = client.get(
+            "/manager/v1/oauth/callback?code=auth123&state=state123", follow_redirects=False
+        )
 
         # Verify error response
         assert response.status_code == 500
