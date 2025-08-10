@@ -15,12 +15,14 @@ try:
     from slowapi import Limiter
     from slowapi.util import get_remote_address
     from slowapi.errors import RateLimitExceeded
+
     SLOWAPI_AVAILABLE = True
 except ImportError:
     logger.warning("slowapi not installed - rate limiting disabled")
     SLOWAPI_AVAILABLE = False
-    # Create dummy types
-    class RateLimitExceeded(Exception):
+
+    # Create dummy type only if not imported
+    class RateLimitExceeded(Exception):  # type: ignore
         def __init__(self, detail):
             self.detail = detail
             self.retry_after = None
@@ -59,7 +61,7 @@ RATE_LIMITS = {
 }
 
 
-def rate_limit_exceeded_handler(request: Request, exc: 'RateLimitExceeded') -> JSONResponse:
+def rate_limit_exceeded_handler(request: Request, exc: "RateLimitExceeded") -> JSONResponse:
     """
     Custom handler for rate limit exceeded errors.
 
@@ -118,7 +120,7 @@ else:
     # Create no-op decorators when slowapi is not available
     def no_op_decorator(func):
         return func
-    
+
     auth_limit = no_op_decorator
     login_limit = no_op_decorator
     create_limit = no_op_decorator

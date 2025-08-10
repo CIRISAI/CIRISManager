@@ -409,8 +409,10 @@ class CIRISManager:
             # Try to add rate limiting if available
             try:
                 from .api.rate_limit import limiter, rate_limit_exceeded_handler, SLOWAPI_AVAILABLE
+
                 if SLOWAPI_AVAILABLE and limiter:
                     from slowapi.errors import RateLimitExceeded
+
                     app.state.limiter = limiter
                     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
                     logger.info("Rate limiting enabled")
