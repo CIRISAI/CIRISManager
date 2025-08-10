@@ -29,8 +29,8 @@ def set_test_environment():
 
     # Set test environment variables
     os.environ["CIRIS_TEST_MODE"] = "true"
-    os.environ["MANAGER_JWT_SECRET"] = "test-secret-key"
-    os.environ["CIRIS_ENCRYPTION_SALT"] = "test-salt"
+    os.environ["MANAGER_JWT_SECRET"] = "test-secret-key-for-testing"
+    os.environ["CIRIS_ENCRYPTION_SALT"] = "test-salt-sixteen-chars-long"
 
     yield
 
