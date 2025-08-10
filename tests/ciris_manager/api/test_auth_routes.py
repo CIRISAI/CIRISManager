@@ -118,7 +118,7 @@ class TestAuthRoutes:
     """Test authentication routes."""
 
     @pytest.fixture
-    def app(self):
+    def app(self, tmp_path):
         """Create test app with auth routes."""
         from fastapi import FastAPI
 
@@ -129,34 +129,31 @@ class TestAuthRoutes:
             AuthService,
             MockOAuthProvider,
             InMemorySessionStore,
+            SQLiteUserStore,
         )
-        from pathlib import Path
-        import tempfile
 
-        # Create a temporary database for testing
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "test_auth.db"
-            from ciris_manager.api.auth_service import SQLiteUserStore
+        # Use pytest's tmp_path fixture for temporary directory
+        db_path = tmp_path / "test_auth.db"
 
-            # Create auth service with mock provider
-            mock_provider = MockOAuthProvider()
-            session_store = InMemorySessionStore()
-            user_store = SQLiteUserStore(db_path)
+        # Create auth service with mock provider
+        mock_provider = MockOAuthProvider()
+        session_store = InMemorySessionStore()
+        user_store = SQLiteUserStore(db_path)
 
-            test_auth_service = AuthService(
-                oauth_provider=mock_provider,
-                session_store=session_store,
-                user_store=user_store,
-                jwt_secret="test-secret",
-            )
+        test_auth_service = AuthService(
+            oauth_provider=mock_provider,
+            session_store=session_store,
+            user_store=user_store,
+            jwt_secret="test-secret",
+        )
 
-            # Set the global auth service
-            import ciris_manager.api.auth_routes
+        # Set the global auth service
+        import ciris_manager.api.auth_routes
 
-            ciris_manager.api.auth_routes._auth_service = test_auth_service
+        ciris_manager.api.auth_routes._auth_service = test_auth_service
 
-            router = create_auth_routes()
-            app.include_router(router)
+        router = create_auth_routes()
+        app.include_router(router)
 
         return app
 

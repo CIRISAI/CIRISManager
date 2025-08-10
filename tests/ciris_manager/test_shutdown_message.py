@@ -42,15 +42,19 @@ class TestShutdownMessage:
 
         deployment_id = "23a69b03-f44a-4026-8ce9-910b57bdb759"
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json = Mock(return_value={"status": "shutting_down"})
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json = Mock(return_value={"status": "shutting_down"})
 
-            mock_post = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value.post = mock_post
+                mock_post = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value.post = mock_post
 
-            await orchestrator._update_single_agent(deployment_id, notification, agent)
+                await orchestrator._update_single_agent(deployment_id, notification, agent)
 
             # Check the shutdown payload
             mock_post.assert_called_once()
@@ -81,15 +85,19 @@ class TestShutdownMessage:
 
         deployment_id = "abc-123-def"
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json = Mock(return_value={"status": "shutting_down"})
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json = Mock(return_value={"status": "shutting_down"})
 
-            mock_post = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value.post = mock_post
+                mock_post = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value.post = mock_post
 
-            await orchestrator._update_single_agent(deployment_id, notification, agent)
+                await orchestrator._update_single_agent(deployment_id, notification, agent)
 
             # Check the shutdown payload
             mock_post.assert_called_once()
@@ -119,15 +127,19 @@ class TestShutdownMessage:
 
         deployment_id = "xyz-789"
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json = Mock(return_value={"status": "shutting_down"})
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json = Mock(return_value={"status": "shutting_down"})
 
-            mock_post = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value.post = mock_post
+                mock_post = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value.post = mock_post
 
-            await orchestrator._update_single_agent(deployment_id, notification, agent)
+                await orchestrator._update_single_agent(deployment_id, notification, agent)
 
             # Check the shutdown payload
             mock_post.assert_called_once()
@@ -158,15 +170,19 @@ class TestShutdownMessage:
 
         deployment_id = "test-deployment-456"
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json = Mock(return_value={"status": "shutting_down"})
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json = Mock(return_value={"status": "shutting_down"})
 
-            mock_post = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value.post = mock_post
+                mock_post = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value.post = mock_post
 
-            await orchestrator._update_single_agent(deployment_id, notification, agent)
+                await orchestrator._update_single_agent(deployment_id, notification, agent)
 
             # Check the shutdown payload
             mock_post.assert_called_once()
@@ -203,15 +219,19 @@ chore: bump version to 2.1.1"""
 
         deployment_id = "release-deployment-789"
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json = Mock(return_value={"status": "shutting_down"})
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json = Mock(return_value={"status": "shutting_down"})
 
-            mock_post = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value.post = mock_post
+                mock_post = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value.post = mock_post
 
-            await orchestrator._update_single_agent(deployment_id, notification, agent)
+                await orchestrator._update_single_agent(deployment_id, notification, agent)
 
             # Check the shutdown payload
             mock_post.assert_called_once()
@@ -248,15 +268,19 @@ Release notes:
 
         deployment_id = "hotfix-123"
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json = Mock(return_value={"status": "shutting_down"})
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json = Mock(return_value={"status": "shutting_down"})
 
-            mock_post = AsyncMock(return_value=mock_response)
-            mock_client.return_value.__aenter__.return_value.post = mock_post
+                mock_post = AsyncMock(return_value=mock_response)
+                mock_client.return_value.__aenter__.return_value.post = mock_post
 
-            await orchestrator._update_single_agent(deployment_id, notification, agent)
+                await orchestrator._update_single_agent(deployment_id, notification, agent)
 
             # Check the shutdown payload
             mock_post.assert_called_once()

@@ -197,17 +197,21 @@ class TestDeploymentOrchestrator:
             service_token="test-token-123",  # Add service token
         )
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {"decision": "accept"}
-            mock_client.post.return_value = mock_response
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json.return_value = {"decision": "accept"}
+                mock_client.post.return_value = mock_response
+                mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            response = await orchestrator._update_single_agent(
-                "deployment-123", notification, agent
-            )
+                response = await orchestrator._update_single_agent(
+                    "deployment-123", notification, agent
+                )
 
             assert response.agent_id == "test-agent"
             assert response.decision == "notified"  # Changed to match new behavior
@@ -239,18 +243,22 @@ class TestDeploymentOrchestrator:
             service_token="busy-token-456",  # Add service token
         )
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            # Non-200 response means agent rejects shutdown
-            mock_response.status_code = 503
-            mock_response.text = "Service busy, cannot shutdown now"
-            mock_client.post.return_value = mock_response
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_response = Mock()
+                # Non-200 response means agent rejects shutdown
+                mock_response.status_code = 503
+                mock_response.text = "Service busy, cannot shutdown now"
+                mock_client.post.return_value = mock_response
+                mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            response = await orchestrator._update_single_agent(
-                "deployment-123", notification, agent
-            )
+                response = await orchestrator._update_single_agent(
+                    "deployment-123", notification, agent
+                )
 
             assert response.agent_id == "busy-agent"
             assert response.decision == "reject"
@@ -284,14 +292,18 @@ class TestDeploymentOrchestrator:
             service_token="offline-token-789",  # Add service token
         )
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.post.side_effect = Exception("Connection refused")
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        # Mock agent_auth to bypass encryption
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.post.side_effect = Exception("Connection refused")
+                mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            response = await orchestrator._update_single_agent(
-                "deployment-123", notification, agent
-            )
+                response = await orchestrator._update_single_agent(
+                    "deployment-123", notification, agent
+                )
 
             assert response.agent_id == "offline-agent"
             assert response.decision == "reject"

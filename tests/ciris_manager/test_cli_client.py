@@ -158,6 +158,7 @@ class TestAgentCommands:
             mock_llm=True,
             discord=False,
             env=["KEY1=value1", "KEY2=value2"],
+            json=False,  # Add missing json attribute
         )
 
         # Run command
