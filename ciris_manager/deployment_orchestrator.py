@@ -76,14 +76,7 @@ class DeploymentOrchestrator:
                 )
 
             # Check if any agents actually need updating
-            agents_needing_update = await self._check_agents_need_update(notification, agents)
-
-            # Check if nginx/GUI needs updating (separate from agent updates)
-            nginx_needs_update = False
-            if notification.gui_image:
-                # Always update nginx when a new GUI image is provided
-                nginx_needs_update = True
-                logger.info("Nginx/GUI container will be updated with new image")
+            agents_needing_update, nginx_needs_update = await self._check_agents_need_update(notification, agents)
 
             if not agents_needing_update and not nginx_needs_update:
                 # No agents need updating and no nginx update - this is a no-op deployment
@@ -317,7 +310,7 @@ class DeploymentOrchestrator:
         self,
         notification: UpdateNotification,
         agents: List[AgentInfo],
-    ) -> List[AgentInfo]:
+    ) -> tuple[List[AgentInfo], bool]:
         """
         Check which agents actually need updating based on image digests.
 
@@ -326,11 +319,12 @@ class DeploymentOrchestrator:
             agents: List of all agents
 
         Returns:
-            List of agents that need updating
+            Tuple of (List of agents that need updating, bool for nginx needs update)
         """
         # Get digests of newly pulled images from local Docker
         new_agent_digest = None
         new_gui_digest = None
+        nginx_needs_update = False
 
         if notification.agent_image:
             new_agent_digest = await self._get_local_image_digest(notification.agent_image)
@@ -339,6 +333,15 @@ class DeploymentOrchestrator:
         if notification.gui_image:
             new_gui_digest = await self._get_local_image_digest(notification.gui_image)
             logger.info(f"New GUI image digest: {new_gui_digest}")
+            
+            # Check if GUI container needs updating by comparing digests
+            # Try to get current GUI container digest
+            current_gui_digest = await self._get_container_image_digest("ciris-gui")
+            if new_gui_digest and new_gui_digest != current_gui_digest:
+                nginx_needs_update = True
+                logger.info(f"GUI/nginx needs update: {current_gui_digest} -> {new_gui_digest}")
+            else:
+                logger.info("GUI/nginx image unchanged")
 
         # Check each agent to see if it needs updating
         agents_needing_update = []
@@ -353,23 +356,16 @@ class DeploymentOrchestrator:
             # Check if agent image changed
             agent_changed = new_agent_digest and new_agent_digest != current_agent_digest
 
-            # For GUI/nginx changes, we always update (no need to check current)
-            gui_changed = bool(new_gui_digest)
-
-            if agent_changed or gui_changed:
+            if agent_changed:
                 logger.info(
                     f"Agent {agent.agent_name} needs update: "
-                    f"agent_changed={agent_changed}, gui_changed={gui_changed}"
+                    f"agent image changed from {current_agent_digest} to {new_agent_digest}"
                 )
-                if agent_changed:
-                    logger.debug(f"  Agent image: {current_agent_digest} -> {new_agent_digest}")
-                if gui_changed:
-                    logger.debug("  GUI image will be updated")
                 agents_needing_update.append(agent)
             else:
                 logger.info(f"Agent {agent.agent_name} is up to date")
 
-        return agents_needing_update
+        return agents_needing_update, nginx_needs_update
 
     async def get_deployment_status(self, deployment_id: str) -> Optional[DeploymentStatus]:
         """Get status of a deployment."""

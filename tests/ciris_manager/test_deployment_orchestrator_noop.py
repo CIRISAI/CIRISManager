@@ -45,6 +45,19 @@ class TestNoOpDeployment:
         """Test deployment is skipped when image digests haven't changed."""
         orchestrator = DeploymentOrchestrator(mock_manager)
         orchestrator.registry_client = mock_registry_client
+        
+        # Mock the new image pull and digest methods
+        orchestrator._pull_images = AsyncMock(
+            return_value={
+                "success": True, 
+                "agent_image": "ghcr.io/cirisai/ciris-agent:latest",
+                "gui_image": "ghcr.io/cirisai/ciris-gui:latest"
+            }
+        )
+        # Mock same digests for both new and current images (no change)
+        # For agent image, return same digest for both
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:abc123")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:abc123")
 
         # Create test agents
         agents = [
@@ -91,6 +104,18 @@ class TestNoOpDeployment:
             ]
         )
         orchestrator.registry_client = mock_registry_client
+        
+        # Mock the new image pull and digest methods
+        orchestrator._pull_images = AsyncMock(
+            return_value={
+                "success": True,
+                "agent_image": "ghcr.io/cirisai/ciris-agent:latest",
+                "gui_image": "ghcr.io/cirisai/ciris-gui:latest"
+            }
+        )
+        # Mock different digests - images have changed
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:xyz789")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:abc123")
 
         # Create test agents
         agents = [
