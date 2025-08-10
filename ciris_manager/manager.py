@@ -403,14 +403,21 @@ class CIRISManager:
             from .api.routes import create_routes
             from .api.auth import create_auth_routes, load_oauth_config
             from .api.device_auth_routes import create_device_auth_routes
-            from .api.rate_limit import limiter, rate_limit_exceeded_handler
-            from slowapi.errors import RateLimitExceeded
 
             app = FastAPI(title="CIRISManager API", version="1.0.0")
 
-            # Add rate limiting
-            app.state.limiter = limiter
-            app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+            # Try to add rate limiting if available
+            try:
+                from .api.rate_limit import limiter, rate_limit_exceeded_handler, SLOWAPI_AVAILABLE
+                if SLOWAPI_AVAILABLE and limiter:
+                    from slowapi.errors import RateLimitExceeded
+                    app.state.limiter = limiter
+                    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+                    logger.info("Rate limiting enabled")
+                else:
+                    logger.warning("Rate limiting disabled - slowapi not available")
+            except ImportError:
+                logger.warning("Rate limiting disabled - module not available")
 
             # Add exception handler for 401 errors to redirect browsers to login
             from fastapi import Request, HTTPException

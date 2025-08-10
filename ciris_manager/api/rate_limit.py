@@ -4,21 +4,36 @@ Rate limiting for CIRISManager API endpoints.
 Provides configurable rate limiting to prevent abuse and ensure fair usage.
 """
 
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+import logging
 from fastapi import Request
 from fastapi.responses import JSONResponse
-import logging
 
 logger = logging.getLogger(__name__)
 
+# Try to import slowapi, but make it optional
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    SLOWAPI_AVAILABLE = True
+except ImportError:
+    logger.warning("slowapi not installed - rate limiting disabled")
+    SLOWAPI_AVAILABLE = False
+    # Create dummy types
+    class RateLimitExceeded(Exception):
+        def __init__(self, detail):
+            self.detail = detail
+            self.retry_after = None
+
 # Create limiter instance using client IP address as key
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["1000 per hour"],  # Global default limit
-    storage_uri="memory://",  # In-memory storage (can be changed to Redis for distributed systems)
-)
+if SLOWAPI_AVAILABLE:
+    limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=["1000 per hour"],  # Global default limit
+        storage_uri="memory://",  # In-memory storage (can be changed to Redis for distributed systems)
+    )
+else:
+    limiter = None
 
 # Rate limit configurations for different endpoint types
 RATE_LIMITS = {
@@ -44,7 +59,7 @@ RATE_LIMITS = {
 }
 
 
-def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+def rate_limit_exceeded_handler(request: Request, exc: 'RateLimitExceeded') -> JSONResponse:
     """
     Custom handler for rate limit exceeded errors.
 
@@ -69,7 +84,11 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
         response.headers["Retry-After"] = str(exc.retry_after)
 
     # Log rate limit violation for monitoring
-    client_ip = get_remote_address(request)
+    if SLOWAPI_AVAILABLE:
+        client_ip = get_remote_address(request)
+    else:
+        # Fallback to getting IP from request
+        client_ip = request.client.host if request.client else "unknown"
     logger.warning(f"Rate limit exceeded for {client_ip} on {request.url.path}: {exc.detail}")
 
     return response
@@ -89,8 +108,19 @@ def get_rate_limit(endpoint_type: str) -> str:
 
 
 # Decorator shortcuts for common rate limits
-auth_limit = limiter.limit(RATE_LIMITS["auth"])
-login_limit = limiter.limit(RATE_LIMITS["login"])
-create_limit = limiter.limit(RATE_LIMITS["create_agent"])
-read_limit = limiter.limit(RATE_LIMITS["get_agent"])
-deploy_limit = limiter.limit(RATE_LIMITS["deploy"])
+if SLOWAPI_AVAILABLE and limiter:
+    auth_limit = limiter.limit(RATE_LIMITS["auth"])
+    login_limit = limiter.limit(RATE_LIMITS["login"])
+    create_limit = limiter.limit(RATE_LIMITS["create_agent"])
+    read_limit = limiter.limit(RATE_LIMITS["get_agent"])
+    deploy_limit = limiter.limit(RATE_LIMITS["deploy"])
+else:
+    # Create no-op decorators when slowapi is not available
+    def no_op_decorator(func):
+        return func
+    
+    auth_limit = no_op_decorator
+    login_limit = no_op_decorator
+    create_limit = no_op_decorator
+    read_limit = no_op_decorator
+    deploy_limit = no_op_decorator
