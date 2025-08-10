@@ -124,8 +124,37 @@ class TestAuthRoutes:
 
         app = FastAPI()
 
-        # Initialize a mock auth service
-        with patch("ciris_manager.api.auth_routes._auth_service"):
+        # Initialize a real auth service for the test
+        from ciris_manager.api.auth_service import (
+            AuthService,
+            MockOAuthProvider,
+            InMemorySessionStore,
+        )
+        from pathlib import Path
+        import tempfile
+
+        # Create a temporary database for testing
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "test_auth.db"
+            from ciris_manager.api.auth_service import SQLiteUserStore
+
+            # Create auth service with mock provider
+            mock_provider = MockOAuthProvider()
+            session_store = InMemorySessionStore()
+            user_store = SQLiteUserStore(db_path)
+
+            test_auth_service = AuthService(
+                oauth_provider=mock_provider,
+                session_store=session_store,
+                user_store=user_store,
+                jwt_secret="test-secret",
+            )
+
+            # Set the global auth service
+            import ciris_manager.api.auth_routes
+
+            ciris_manager.api.auth_routes._auth_service = test_auth_service
+
             router = create_auth_routes()
             app.include_router(router)
 
@@ -260,8 +289,7 @@ class TestAuthRoutes:
 class TestAuthDependency:
     """Test authentication dependency."""
 
-    @pytest.mark.asyncio
-    async def test_get_current_user_with_bearer_token(self):
+    def test_get_current_user_with_bearer_token(self):
         """Test getting current user with bearer token."""
         # Setup mock request
         request = Mock(spec=Request)
@@ -273,14 +301,14 @@ class TestAuthDependency:
         mock_service.get_current_user.return_value = mock_user
 
         with patch("ciris_manager.api.auth_routes.get_auth_service", return_value=mock_service):
-            user = await get_current_user_dependency(
+            # get_current_user_dependency is not async, it's a regular function
+            user = get_current_user_dependency(
                 request, authorization="Bearer test-token", auth_service=mock_service
             )
             assert user == mock_user
             mock_service.get_current_user.assert_called_with("Bearer test-token")
 
-    @pytest.mark.asyncio
-    async def test_get_current_user_with_cookie(self):
+    def test_get_current_user_with_cookie(self):
         """Test getting current user with cookie."""
         # Setup mock request
         request = Mock(spec=Request)
@@ -293,7 +321,8 @@ class TestAuthDependency:
         mock_service.get_current_user.side_effect = [None, mock_user]
 
         with patch("ciris_manager.api.auth_routes.get_auth_service", return_value=mock_service):
-            user = await get_current_user_dependency(
+            # get_current_user_dependency is not async
+            user = get_current_user_dependency(
                 request, authorization=None, auth_service=mock_service
             )
             assert user == mock_user
@@ -301,8 +330,7 @@ class TestAuthDependency:
             assert mock_service.get_current_user.call_count == 2
             mock_service.get_current_user.assert_any_call("Bearer cookie-token")
 
-    @pytest.mark.asyncio
-    async def test_get_current_user_no_auth(self):
+    def test_get_current_user_no_auth(self):
         """Test getting current user without authentication."""
         # Setup mock request
         request = Mock(spec=Request)
@@ -313,20 +341,17 @@ class TestAuthDependency:
         mock_service.get_current_user.return_value = None
 
         with pytest.raises(HTTPException) as exc:
-            await get_current_user_dependency(
-                request, authorization=None, auth_service=mock_service
-            )
+            get_current_user_dependency(request, authorization=None, auth_service=mock_service)
         assert exc.value.status_code == 401
         assert "Not authenticated" in str(exc.value.detail)
 
-    @pytest.mark.asyncio
-    async def test_get_current_user_no_service(self):
+    def test_get_current_user_no_service(self):
         """Test getting current user when service not configured."""
         request = Mock(spec=Request)
 
         with patch("ciris_manager.api.auth_routes.get_auth_service", return_value=None):
             with pytest.raises(HTTPException) as exc:
-                await get_current_user_dependency(
+                get_current_user_dependency(
                     request, authorization="Bearer token", auth_service=None
                 )
             assert exc.value.status_code == 500

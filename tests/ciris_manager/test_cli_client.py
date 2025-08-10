@@ -113,30 +113,24 @@ class TestAgentCommands:
         assert data["agent_id"] == "test-123"
         mock_client.get_agent.assert_called_once_with("test-123")
 
-    @patch("builtins.input")
-    def test_agent_create(self, mock_input, capsys):
+    def test_agent_create(self, capsys):
         """Test agent create command."""
         # Setup mock client
         mock_client = Mock()
-        mock_client.list_templates.return_value = [
-            {"name": "scout", "description": "Scout template"}
-        ]
         mock_client.create_agent.return_value = {
             "agent_id": "test-123",
             "status": "created",
         }
 
-        # Mock user inputs
-        mock_input.side_effect = [
-            "1",  # Select template
-            "Test Agent",  # Agent name
-            "y",  # Use mock LLM
-            "n",  # No Discord
-        ]
-
-        # Setup args
+        # Setup args - provide required name and template
         args = argparse.Namespace(
-            agent_command="create", template=None, name=None, mock_llm=None, discord=None, env=[]
+            agent_command="create",
+            template="scout",
+            name="Test Agent",
+            mock_llm=True,
+            discord=False,
+            env=[],
+            json=False,
         )
 
         # Run command
@@ -189,8 +183,10 @@ class TestAgentCommands:
         # Mock confirmation
         mock_input.return_value = "y"
 
-        # Setup args
-        args = argparse.Namespace(agent_command="delete", agent_id="test-123")
+        # Setup args with yes=False to trigger confirmation prompt
+        args = argparse.Namespace(
+            agent_command="delete", agent_id="test-123", yes=False, json=False
+        )
 
         # Run command
         result = handle_agent_commands(mock_client, args)
@@ -208,7 +204,7 @@ class TestAgentCommands:
         mock_client.restart_agent.return_value = {"status": "restarted"}
 
         # Setup args
-        args = argparse.Namespace(agent_command="restart", agent_id="test-123")
+        args = argparse.Namespace(agent_command="restart", agent_id="test-123", json=False)
 
         # Run command
         result = handle_agent_commands(mock_client, args)
@@ -243,9 +239,13 @@ class TestAgentCommands:
         mock_client = Mock()
         mock_client.update_agent_config.return_value = {"status": "updated"}
 
-        # Setup args
+        # Setup args - the refactored code uses "update" command directly
         args = argparse.Namespace(
-            agent_command="config", config_action="update", agent_id="test-123", env=["KEY1=value1"]
+            agent_command="update",
+            agent_id="test-123",
+            disable_mock_llm=True,
+            enable_production=False,
+            json=False,
         )
 
         # Run command
@@ -263,7 +263,7 @@ class TestAgentCommands:
         mock_client.start_agent.return_value = {"status": "started"}
 
         # Setup args
-        args = argparse.Namespace(agent_command="start", agent_id="test-123")
+        args = argparse.Namespace(agent_command="start", agent_id="test-123", json=False)
 
         # Run command
         result = handle_agent_commands(mock_client, args)
@@ -280,7 +280,7 @@ class TestAgentCommands:
         mock_client.stop_agent.return_value = {"status": "stopped"}
 
         # Setup args
-        args = argparse.Namespace(agent_command="stop", agent_id="test-123")
+        args = argparse.Namespace(agent_command="stop", agent_id="test-123", json=False)
 
         # Run command
         result = handle_agent_commands(mock_client, args)
@@ -395,13 +395,15 @@ class TestSystemCommands:
         # Mock confirmation
         mock_input.return_value = "y"
 
-        # Setup args
+        # Setup args with yes=False to trigger confirmation
         args = argparse.Namespace(
             system_command="notify-update",
             agent_image="agent:latest",
             gui_image="gui:latest",
             strategy="canary",
             message=None,
+            yes=False,
+            json=False,
         )
 
         # Run command
@@ -472,7 +474,7 @@ class TestCLIErrorHandling:
         # Verify error handling
         assert result != 0
         captured = capsys.readouterr()
-        assert "Connection refused" in captured.out
+        assert "Connection refused" in captured.err  # Check stderr, not stdout
 
     def test_authentication_error(self, capsys):
         """Test handling of authentication errors."""
@@ -491,7 +493,7 @@ class TestCLIErrorHandling:
         # Verify error handling
         assert result != 0
         captured = capsys.readouterr()
-        assert "Invalid token" in captured.out or "Authentication" in captured.out
+        assert "Invalid token" in captured.err or "Authentication" in captured.err  # Check stderr
 
     def test_invalid_command(self):
         """Test handling of invalid command."""

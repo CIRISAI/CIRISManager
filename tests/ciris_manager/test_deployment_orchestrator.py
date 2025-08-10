@@ -186,7 +186,7 @@ class TestDeploymentOrchestrator:
             message="Update",
         )
 
-        # Register agent in registry for auth
+        # Register agent in registry for auth with service token
         registry = orchestrator.manager.agent_registry
         registry.register_agent(
             agent_id="test-agent",
@@ -194,6 +194,7 @@ class TestDeploymentOrchestrator:
             port=8080,
             template="base",
             compose_file="/path/to/test.yml",
+            service_token="test-token-123",  # Add service token
         )
 
         with patch("httpx.AsyncClient") as mock_client_class:
@@ -227,7 +228,7 @@ class TestDeploymentOrchestrator:
             message="Update",
         )
 
-        # Register agent in registry
+        # Register agent in registry with service token
         registry = orchestrator.manager.agent_registry
         registry.register_agent(
             agent_id="busy-agent",
@@ -235,6 +236,7 @@ class TestDeploymentOrchestrator:
             port=8081,
             template="base",
             compose_file="/path/to/busy.yml",
+            service_token="busy-token-456",  # Add service token
         )
 
         with patch("httpx.AsyncClient") as mock_client_class:
@@ -271,7 +273,7 @@ class TestDeploymentOrchestrator:
             message="Update",
         )
 
-        # Register agent in registry
+        # Register agent in registry with service token
         registry = orchestrator.manager.agent_registry
         registry.register_agent(
             agent_id="offline-agent",
@@ -279,6 +281,7 @@ class TestDeploymentOrchestrator:
             port=8082,
             template="base",
             compose_file="/path/to/offline.yml",
+            service_token="offline-token-789",  # Add service token
         )
 
         with patch("httpx.AsyncClient") as mock_client_class:

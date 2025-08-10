@@ -16,7 +16,10 @@ class TestShutdownMessage:
         """Create orchestrator instance."""
         manager = Mock()
         manager.agent_registry = Mock()
-        manager.agent_registry.get_agent = Mock(return_value=None)
+        # Return agent info with service token
+        agent_info = Mock()
+        agent_info.service_token = "test-service-token"
+        manager.agent_registry.get_agent = Mock(return_value=agent_info)
         return DeploymentOrchestrator(manager)
 
     @pytest.mark.asyncio

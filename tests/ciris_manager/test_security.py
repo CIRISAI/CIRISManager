@@ -225,9 +225,9 @@ class TestRateLimiting:
         mock_request.client.host = "127.0.0.1"
         mock_request.headers = Headers({})
 
-        # Create mock exception
-        exc = RateLimitExceeded("5 per minute")
-        exc.detail = "Rate limit exceeded"
+        # Create mock exception with detail parameter
+        exc = RateLimitExceeded("Rate limit exceeded")
+        exc.retry_after = 60  # Optional retry after
 
         # Call handler
         response = rate_limit_exceeded_handler(mock_request, exc)
