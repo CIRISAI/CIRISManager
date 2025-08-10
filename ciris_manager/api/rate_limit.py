@@ -36,7 +36,7 @@ if SLOWAPI_AVAILABLE:
         storage_uri="memory://",  # In-memory storage (can be changed to Redis for distributed systems)
     )
 else:
-    limiter = None
+    limiter = None  # type: ignore
 
 # Rate limit configurations for different endpoint types
 RATE_LIMITS = {

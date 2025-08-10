@@ -531,9 +531,9 @@ class DeploymentOrchestrator:
                 except ValueError as e:
                     logger.error(f"Failed to authenticate with agent {agent.agent_id}: {e}")
                     return AgentUpdateResponse(
-                        status="error",
-                        message=f"Authentication failed: {str(e)}",
                         agent_id=agent.agent_id,
+                        decision="reject",
+                        reasoning=f"Authentication failed: {str(e)}",
                     )
 
                 # Audit token use if using service token

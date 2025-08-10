@@ -300,9 +300,8 @@ def handle_system_commands(client: CIRISManagerClient, args: argparse.Namespace)
         return 1
 
 
-def add_cli_commands(parser: argparse.ArgumentParser) -> None:
-    """Add CLI commands to argument parser."""
-    subparsers = parser.add_subparsers(dest="command", help="Commands")
+def add_cli_commands(subparsers: argparse._SubParsersAction) -> None:
+    """Add CLI commands to argument parser subparsers."""
 
     # Agent commands
     agent_parser = subparsers.add_parser("agent", help="Agent management")
