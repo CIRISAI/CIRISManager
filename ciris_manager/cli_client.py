@@ -51,13 +51,15 @@ def handle_list_agents(client: CIRISManagerClient, args: argparse.Namespace) -> 
     else:
         table_data = []
         for agent in agents:
-            table_data.append([
-                agent.get("agent_id", "N/A"),
-                agent.get("agent_name", "N/A"),
-                agent.get("status", "N/A"),
-                agent.get("api_port", "N/A"),
-                agent.get("container_name", "N/A")[:30],
-            ])
+            table_data.append(
+                [
+                    agent.get("agent_id", "N/A"),
+                    agent.get("agent_name", "N/A"),
+                    agent.get("status", "N/A"),
+                    agent.get("api_port", "N/A"),
+                    agent.get("container_name", "N/A")[:30],
+                ]
+            )
         print_table(table_data, ["ID", "Name", "Status", "Port", "Container"])
     return 0
 
@@ -72,8 +74,8 @@ def handle_get_agent(client: CIRISManagerClient, args: argparse.Namespace) -> in
 def handle_create_agent(client: CIRISManagerClient, args: argparse.Namespace) -> int:
     """Handle agent create command."""
     env = parse_environment_vars(args.env)
-    mounts = parse_mounts(args.mount) if hasattr(args, 'mount') else []
-    
+    mounts = parse_mounts(args.mount) if hasattr(args, "mount") else []
+
     result = client.create_agent(
         name=args.name,
         template=args.template,
@@ -82,7 +84,7 @@ def handle_create_agent(client: CIRISManagerClient, args: argparse.Namespace) ->
         use_mock_llm=args.mock_llm if hasattr(args, "mock_llm") else False,
         enable_discord=args.enable_discord if hasattr(args, "enable_discord") else False,
     )
-    
+
     print(f"✅ Agent created: {result.get('agent_id', 'unknown')}")
     if args.json:
         print_json(result)
@@ -92,11 +94,11 @@ def handle_create_agent(client: CIRISManagerClient, args: argparse.Namespace) ->
 def handle_update_agent(client: CIRISManagerClient, args: argparse.Namespace) -> int:
     """Handle agent update command."""
     config = {}
-    if hasattr(args, 'disable_mock_llm') and args.disable_mock_llm:
+    if hasattr(args, "disable_mock_llm") and args.disable_mock_llm:
         config["environment"] = {"CIRIS_MOCK_LLM": "false"}
-    if hasattr(args, 'enable_production') and args.enable_production:
+    if hasattr(args, "enable_production") and args.enable_production:
         config["environment"] = {"CIRIS_MOCK_LLM": "false"}
-    
+
     result = client.update_agent_config(args.agent_id, config)
     print(f"✅ Agent configuration updated: {args.agent_id}")
     if args.json:
@@ -111,7 +113,7 @@ def handle_delete_agent(client: CIRISManagerClient, args: argparse.Namespace) ->
         if response.lower() != "y":
             print("Cancelled")
             return 1
-    
+
     result = client.delete_agent(args.agent_id)
     print(f"✅ Agent deleted: {args.agent_id}")
     if args.json:
@@ -176,7 +178,7 @@ def handle_agent_commands(client: CIRISManagerClient, args: argparse.Namespace) 
         else:
             print(f"Unknown agent command: {args.agent_command}", file=sys.stderr)
             return 1
-            
+
     except AuthenticationError as e:
         print(f"❌ Authentication error: {e}", file=sys.stderr)
         print("Please run: ciris-manager auth login your-email@ciris.ai", file=sys.stderr)
@@ -214,16 +216,18 @@ def handle_metrics(client: CIRISManagerClient, args: argparse.Namespace) -> int:
 def handle_templates(client: CIRISManagerClient, args: argparse.Namespace) -> int:
     """Handle templates list command."""
     templates = client.list_templates()
-    if args.json if hasattr(args, 'json') else False:
+    if args.json if hasattr(args, "json") else False:
         print_json(templates)
     else:
         table_data = []
         for template in templates:
-            table_data.append([
-                template.get("name", "N/A"),
-                template.get("description", "N/A")[:60],
-                "✓" if template.get("approved", False) else "",
-            ])
+            table_data.append(
+                [
+                    template.get("name", "N/A"),
+                    template.get("description", "N/A")[:60],
+                    "✓" if template.get("approved", False) else "",
+                ]
+            )
         print_table(table_data, ["Template", "Description", "Approved"])
     return 0
 
@@ -242,7 +246,7 @@ def handle_notify_update(client: CIRISManagerClient, args: argparse.Namespace) -
         if response.lower() != "y":
             print("Cancelled")
             return 1
-    
+
     result = client.notify_update(
         agent_image=args.agent_image,
         gui_image=args.gui_image,
@@ -283,7 +287,7 @@ def handle_system_commands(client: CIRISManagerClient, args: argparse.Namespace)
         else:
             print(f"Unknown system command: {args.system_command}", file=sys.stderr)
             return 1
-            
+
     except AuthenticationError as e:
         print(f"❌ Authentication error: {e}", file=sys.stderr)
         print("Please run: ciris-manager auth login your-email@ciris.ai", file=sys.stderr)
@@ -299,19 +303,19 @@ def handle_system_commands(client: CIRISManagerClient, args: argparse.Namespace)
 def add_cli_commands(parser: argparse.ArgumentParser) -> None:
     """Add CLI commands to argument parser."""
     subparsers = parser.add_subparsers(dest="command", help="Commands")
-    
+
     # Agent commands
     agent_parser = subparsers.add_parser("agent", help="Agent management")
     agent_subparsers = agent_parser.add_subparsers(dest="agent_command", help="Agent commands")
-    
+
     # Agent list
     list_parser = agent_subparsers.add_parser("list", help="List all agents")
     list_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    
+
     # Agent get
     get_parser = agent_subparsers.add_parser("get", help="Get agent details")
     get_parser.add_argument("agent_id", help="Agent ID")
-    
+
     # Agent create
     create_parser = agent_subparsers.add_parser("create", help="Create a new agent")
     create_parser.add_argument("--name", required=True, help="Agent name")
@@ -321,39 +325,41 @@ def add_cli_commands(parser: argparse.ArgumentParser) -> None:
     create_parser.add_argument("--mock-llm", action="store_true", help="Use mock LLM")
     create_parser.add_argument("--enable-discord", action="store_true", help="Enable Discord")
     create_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    
+
     # Agent update
     update_parser = agent_subparsers.add_parser("update", help="Update agent configuration")
     update_parser.add_argument("agent_id", help="Agent ID")
     update_parser.add_argument("--disable-mock-llm", action="store_true", help="Disable mock LLM")
-    update_parser.add_argument("--enable-production", action="store_true", help="Enable production mode")
+    update_parser.add_argument(
+        "--enable-production", action="store_true", help="Enable production mode"
+    )
     update_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    
+
     # Agent delete
     delete_parser = agent_subparsers.add_parser("delete", help="Delete an agent")
     delete_parser.add_argument("agent_id", help="Agent ID")
     delete_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation")
     delete_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    
+
     # Agent start/stop/restart
     for cmd in ["start", "stop", "restart"]:
         cmd_parser = agent_subparsers.add_parser(cmd, help=f"{cmd.capitalize()} an agent")
         cmd_parser.add_argument("agent_id", help="Agent ID")
         cmd_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    
+
     # Agent logs
     logs_parser = agent_subparsers.add_parser("logs", help="Get agent logs")
     logs_parser.add_argument("agent_id", help="Agent ID")
     logs_parser.add_argument("--lines", type=int, default=100, help="Number of lines")
-    
+
     # System commands
     system_parser = subparsers.add_parser("system", help="System management")
     system_subparsers = system_parser.add_subparsers(dest="system_command", help="System commands")
-    
+
     # Simple system commands
     for cmd in ["status", "health", "metrics", "templates", "update-status", "ping"]:
         system_subparsers.add_parser(cmd, help=f"Get system {cmd}")
-    
+
     # Notify update
     notify_parser = system_subparsers.add_parser("notify-update", help="Notify agents of update")
     notify_parser.add_argument("--agent-image", required=True, help="Agent image")

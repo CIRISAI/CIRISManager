@@ -1,8 +1,7 @@
 """Tests for CLI client commands."""
 
 import json
-from unittest.mock import Mock, patch, MagicMock
-import pytest
+from unittest.mock import Mock, patch
 import argparse
 
 from ciris_manager.cli_client import (
@@ -50,19 +49,16 @@ class TestAgentCommands:
                 "agent_name": "Test Agent",
                 "status": "running",
                 "api_port": 8080,
-                "container_name": "ciris-test-123"
+                "container_name": "ciris-test-123",
             }
         ]
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="list",
-            json=False
-        )
-        
+        args = argparse.Namespace(agent_command="list", json=False)
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -81,16 +77,13 @@ class TestAgentCommands:
                 "status": "running",
             }
         ]
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="list",
-            json=True
-        )
-        
+        args = argparse.Namespace(agent_command="list", json=True)
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -106,16 +99,13 @@ class TestAgentCommands:
             "agent_name": "Test Agent",
             "status": "running",
         }
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="get",
-            agent_id="test-123"
-        )
-        
+        args = argparse.Namespace(agent_command="get", agent_id="test-123")
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -135,7 +125,7 @@ class TestAgentCommands:
             "agent_id": "test-123",
             "status": "created",
         }
-        
+
         # Mock user inputs
         mock_input.side_effect = [
             "1",  # Select template
@@ -143,20 +133,15 @@ class TestAgentCommands:
             "y",  # Use mock LLM
             "n",  # No Discord
         ]
-        
+
         # Setup args
         args = argparse.Namespace(
-            agent_command="create",
-            template=None,
-            name=None,
-            mock_llm=None,
-            discord=None,
-            env=[]
+            agent_command="create", template=None, name=None, mock_llm=None, discord=None, env=[]
         )
-        
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -170,7 +155,7 @@ class TestAgentCommands:
             "agent_id": "test-123",
             "status": "created",
         }
-        
+
         # Setup args
         args = argparse.Namespace(
             agent_command="create",
@@ -178,12 +163,12 @@ class TestAgentCommands:
             name="Test Agent",
             mock_llm=True,
             discord=False,
-            env=["KEY1=value1", "KEY2=value2"]
+            env=["KEY1=value1", "KEY2=value2"],
         )
-        
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         mock_client.create_agent.assert_called_once_with(
@@ -191,7 +176,7 @@ class TestAgentCommands:
             name="Test Agent",
             use_mock_llm=True,
             enable_discord=False,
-            environment={"KEY1": "value1", "KEY2": "value2"}
+            environment={"KEY1": "value1", "KEY2": "value2"},
         )
 
     @patch("builtins.input")
@@ -200,19 +185,16 @@ class TestAgentCommands:
         # Setup mock client
         mock_client = Mock()
         mock_client.delete_agent.return_value = {"status": "deleted"}
-        
+
         # Mock confirmation
         mock_input.return_value = "y"
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="delete",
-            agent_id="test-123"
-        )
-        
+        args = argparse.Namespace(agent_command="delete", agent_id="test-123")
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -224,16 +206,13 @@ class TestAgentCommands:
         # Setup mock client
         mock_client = Mock()
         mock_client.restart_agent.return_value = {"status": "restarted"}
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="restart",
-            agent_id="test-123"
-        )
-        
+        args = argparse.Namespace(agent_command="restart", agent_id="test-123")
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -244,20 +223,14 @@ class TestAgentCommands:
         """Test agent logs command."""
         # Setup mock client
         mock_client = Mock()
-        mock_client.get_agent_logs.return_value = {
-            "logs": "Test log output\nAnother line"
-        }
-        
+        mock_client.get_agent_logs.return_value = {"logs": "Test log output\nAnother line"}
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="logs",
-            agent_id="test-123",
-            lines=50
-        )
-        
+        args = argparse.Namespace(agent_command="logs", agent_id="test-123", lines=50)
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -269,18 +242,15 @@ class TestAgentCommands:
         # Setup mock client
         mock_client = Mock()
         mock_client.update_agent_config.return_value = {"status": "updated"}
-        
+
         # Setup args
         args = argparse.Namespace(
-            agent_command="config",
-            config_action="update",
-            agent_id="test-123",
-            env=["KEY1=value1"]
+            agent_command="config", config_action="update", agent_id="test-123", env=["KEY1=value1"]
         )
-        
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -291,16 +261,13 @@ class TestAgentCommands:
         # Setup mock client
         mock_client = Mock()
         mock_client.start_agent.return_value = {"status": "started"}
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="start",
-            agent_id="test-123"
-        )
-        
+        args = argparse.Namespace(agent_command="start", agent_id="test-123")
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -311,16 +278,13 @@ class TestAgentCommands:
         # Setup mock client
         mock_client = Mock()
         mock_client.stop_agent.return_value = {"status": "stopped"}
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="stop",
-            agent_id="test-123"
-        )
-        
+        args = argparse.Namespace(agent_command="stop", agent_id="test-123")
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -339,15 +303,13 @@ class TestSystemCommands:
             "agents": 5,
             "version": "1.0.0",
         }
-        
+
         # Setup args
-        args = argparse.Namespace(
-            system_command="status"
-        )
-        
+        args = argparse.Namespace(system_command="status")
+
         # Run command
         result = handle_system_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -360,15 +322,13 @@ class TestSystemCommands:
         # Setup mock client
         mock_client = Mock()
         mock_client.get_health.return_value = {"status": "healthy"}
-        
+
         # Setup args
-        args = argparse.Namespace(
-            system_command="health"
-        )
-        
+        args = argparse.Namespace(system_command="health")
+
         # Run command
         result = handle_system_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -385,15 +345,13 @@ class TestSystemCommands:
             "memory_usage": 1024,
             "disk_usage": 50.0,
         }
-        
+
         # Setup args
-        args = argparse.Namespace(
-            system_command="metrics"
-        )
-        
+        args = argparse.Namespace(system_command="metrics")
+
         # Run command
         result = handle_system_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -410,15 +368,13 @@ class TestSystemCommands:
             "status": "in_progress",
             "phase": "canary",
         }
-        
+
         # Setup args
-        args = argparse.Namespace(
-            system_command="update-status"
-        )
-        
+        args = argparse.Namespace(system_command="update-status")
+
         # Run command
         result = handle_system_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -435,22 +391,22 @@ class TestSystemCommands:
             "deployment_id": "dep-123",
             "status": "started",
         }
-        
+
         # Mock confirmation
         mock_input.return_value = "y"
-        
+
         # Setup args
         args = argparse.Namespace(
             system_command="notify-update",
             agent_image="agent:latest",
             gui_image="gui:latest",
             strategy="canary",
-            message=None
+            message=None,
         )
-        
+
         # Run command
         result = handle_system_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -463,17 +419,15 @@ class TestSystemCommands:
         mock_client = Mock()
         mock_client.list_templates.return_value = [
             {"name": "scout", "description": "Scout template"},
-            {"name": "sage", "description": "Sage template"}
+            {"name": "sage", "description": "Sage template"},
         ]
-        
+
         # Setup args
-        args = argparse.Namespace(
-            system_command="templates"
-        )
-        
+        args = argparse.Namespace(system_command="templates")
+
         # Run command
         result = handle_system_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -485,15 +439,13 @@ class TestSystemCommands:
         # Setup mock client
         mock_client = Mock()
         mock_client.ping.return_value = {"status": "pong"}
-        
+
         # Setup args
-        args = argparse.Namespace(
-            system_command="ping"
-        )
-        
+        args = argparse.Namespace(system_command="ping")
+
         # Run command
         result = handle_system_commands(mock_client, args)
-        
+
         # Verify
         assert result == 0
         captured = capsys.readouterr()
@@ -506,20 +458,17 @@ class TestCLIErrorHandling:
     def test_connection_error(self, capsys):
         """Test handling of connection errors."""
         from ciris_manager.sdk import CIRISManagerError
-        
+
         # Setup mock client to raise exception
         mock_client = Mock()
         mock_client.list_agents.side_effect = CIRISManagerError("Connection refused")
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="list",
-            json=False
-        )
-        
+        args = argparse.Namespace(agent_command="list", json=False)
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify error handling
         assert result != 0
         captured = capsys.readouterr()
@@ -528,20 +477,17 @@ class TestCLIErrorHandling:
     def test_authentication_error(self, capsys):
         """Test handling of authentication errors."""
         from ciris_manager.sdk import AuthenticationError
-        
+
         # Setup mock client to raise exception
         mock_client = Mock()
         mock_client.get_agent.side_effect = AuthenticationError("Invalid token")
-        
+
         # Setup args
-        args = argparse.Namespace(
-            agent_command="get",
-            agent_id="test-123"
-        )
-        
+        args = argparse.Namespace(agent_command="get", agent_id="test-123")
+
         # Run command
         result = handle_agent_commands(mock_client, args)
-        
+
         # Verify error handling
         assert result != 0
         captured = capsys.readouterr()
@@ -551,14 +497,14 @@ class TestCLIErrorHandling:
         """Test handling of invalid command."""
         # Setup mock client
         mock_client = Mock()
-        
+
         # Setup args with invalid command
         args = argparse.Namespace(
             agent_command="invalid_command",
         )
-        
+
         # Run command - should not crash
         result = handle_agent_commands(mock_client, args)
-        
+
         # Should return non-zero for unknown command
         assert result != 0

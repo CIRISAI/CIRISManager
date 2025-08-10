@@ -1,11 +1,10 @@
 """Tests for authentication routes."""
 
 import os
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import Mock, patch, AsyncMock
 import pytest
-from fastapi import HTTPException, Request, Response
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
-from starlette.datastructures import URL
 
 from ciris_manager.api.auth_routes import (
     init_auth_service,
@@ -16,7 +15,6 @@ from ciris_manager.api.auth_routes import (
     get_current_user_dependency,
 )
 from ciris_manager.api.auth_service import AuthService, OAuthProvider
-from ciris_manager.models import OAuthUser
 
 
 class TestAuthServiceInitialization:
@@ -25,9 +23,7 @@ class TestAuthServiceInitialization:
     @patch.dict(os.environ, {"CIRIS_DEV_MODE": "false"})
     @patch("ciris_manager.api.auth_routes.GoogleOAuthProvider")
     @patch("ciris_manager.api.auth_routes.SQLiteUserStore")
-    def test_init_auth_service_production(
-        self, mock_user_store, mock_oauth_provider
-    ):
+    def test_init_auth_service_production(self, mock_user_store, mock_oauth_provider):
         """Test auth service initialization in production mode."""
         # Setup mocks
         mock_provider = Mock(spec=OAuthProvider)
@@ -39,24 +35,20 @@ class TestAuthServiceInitialization:
         service = init_auth_service(
             google_client_id="test-client-id",
             google_client_secret="test-client-secret",
-            jwt_secret="test-secret"
+            jwt_secret="test-secret",
         )
 
         # Verify
         assert isinstance(service, AuthService)
         mock_oauth_provider.assert_called_once_with(
-            client_id="test-client-id",
-            client_secret="test-client-secret",
-            hd_domain="ciris.ai"
+            client_id="test-client-id", client_secret="test-client-secret", hd_domain="ciris.ai"
         )
         mock_user_store.assert_called_once()
 
     @patch.dict(os.environ, {"CIRIS_DEV_MODE": "true"})
     @patch("ciris_manager.api.auth_routes.MockOAuthProvider")
     @patch("ciris_manager.api.auth_routes.SQLiteUserStore")
-    def test_init_auth_service_development(
-        self, mock_user_store, mock_oauth_provider
-    ):
+    def test_init_auth_service_development(self, mock_user_store, mock_oauth_provider):
         """Test auth service initialization in development mode."""
         # Setup mocks
         mock_provider = Mock(spec=OAuthProvider)
@@ -92,7 +84,7 @@ class TestURLHelpers:
         request = Mock(spec=Request)
         request.url = Mock()
         request.url.hostname = "localhost"
-        
+
         url = _get_callback_url(request)
         assert url == "http://localhost:8888/manager/v1/oauth/callback"
 
@@ -101,7 +93,7 @@ class TestURLHelpers:
         request = Mock(spec=Request)
         request.url = Mock()
         request.url.hostname = "agents.ciris.ai"
-        
+
         url = _get_callback_url(request)
         assert url == "https://agents.ciris.ai/manager/oauth/callback"
 
@@ -117,7 +109,7 @@ class TestURLHelpers:
         request.url = Mock()
         request.url.scheme = "https"
         request.url.netloc = "example.com"
-        
+
         uri = _get_redirect_uri(request, None)
         assert uri == "https://example.com/manager/"
 
@@ -129,14 +121,14 @@ class TestAuthRoutes:
     def app(self):
         """Create test app with auth routes."""
         from fastapi import FastAPI
-        
+
         app = FastAPI()
-        
+
         # Initialize a mock auth service
         with patch("ciris_manager.api.auth_routes._auth_service"):
             router = create_auth_routes()
             app.include_router(router)
-        
+
         return app
 
     @pytest.fixture
@@ -186,10 +178,7 @@ class TestAuthRoutes:
         """Test OAuth callback with successful authentication."""
         # Setup mock
         mock_auth_service.handle_oauth_callback = AsyncMock(
-            return_value={
-                "access_token": "jwt-token-123",
-                "redirect_uri": "/dashboard"
-            }
+            return_value={"access_token": "jwt-token-123", "redirect_uri": "/dashboard"}
         )
 
         # Make request
@@ -204,9 +193,7 @@ class TestAuthRoutes:
     async def test_callback_route_error(self, client, mock_auth_service):
         """Test OAuth callback with error."""
         # Setup mock to raise error
-        mock_auth_service.handle_oauth_callback = AsyncMock(
-            side_effect=ValueError("Invalid state")
-        )
+        mock_auth_service.handle_oauth_callback = AsyncMock(side_effect=ValueError("Invalid state"))
 
         # Make request
         response = client.get("/oauth/callback?code=auth123&state=invalid")
@@ -219,9 +206,7 @@ class TestAuthRoutes:
     async def test_callback_route_exception(self, client, mock_auth_service):
         """Test OAuth callback with exception."""
         # Setup mock to raise exception
-        mock_auth_service.handle_oauth_callback = AsyncMock(
-            side_effect=Exception("OAuth failed")
-        )
+        mock_auth_service.handle_oauth_callback = AsyncMock(side_effect=Exception("OAuth failed"))
 
         # Make request
         response = client.get("/oauth/callback?code=auth123&state=state123")
@@ -246,11 +231,7 @@ class TestAuthRoutes:
     def test_user_info_route(self, client, mock_auth_service):
         """Test user info route."""
         # Setup mock
-        mock_user = {
-            "email": "test@example.com",
-            "name": "Test User",
-            "id": "user123"
-        }
+        mock_user = {"email": "test@example.com", "name": "Test User", "id": "user123"}
         mock_auth_service.get_current_user.return_value = mock_user
 
         # Make request with auth header
@@ -293,9 +274,7 @@ class TestAuthDependency:
 
         with patch("ciris_manager.api.auth_routes.get_auth_service", return_value=mock_service):
             user = await get_current_user_dependency(
-                request, 
-                authorization="Bearer test-token",
-                auth_service=mock_service
+                request, authorization="Bearer test-token", auth_service=mock_service
             )
             assert user == mock_user
             mock_service.get_current_user.assert_called_with("Bearer test-token")
@@ -315,9 +294,7 @@ class TestAuthDependency:
 
         with patch("ciris_manager.api.auth_routes.get_auth_service", return_value=mock_service):
             user = await get_current_user_dependency(
-                request,
-                authorization=None,
-                auth_service=mock_service
+                request, authorization=None, auth_service=mock_service
             )
             assert user == mock_user
             # Should be called twice - once for header, once for cookie
@@ -337,9 +314,7 @@ class TestAuthDependency:
 
         with pytest.raises(HTTPException) as exc:
             await get_current_user_dependency(
-                request,
-                authorization=None,
-                auth_service=mock_service
+                request, authorization=None, auth_service=mock_service
             )
         assert exc.value.status_code == 401
         assert "Not authenticated" in str(exc.value.detail)
@@ -348,13 +323,11 @@ class TestAuthDependency:
     async def test_get_current_user_no_service(self):
         """Test getting current user when service not configured."""
         request = Mock(spec=Request)
-        
+
         with patch("ciris_manager.api.auth_routes.get_auth_service", return_value=None):
             with pytest.raises(HTTPException) as exc:
                 await get_current_user_dependency(
-                    request,
-                    authorization="Bearer token",
-                    auth_service=None
+                    request, authorization="Bearer token", auth_service=None
                 )
             assert exc.value.status_code == 500
             assert "OAuth not configured" in str(exc.value.detail)
