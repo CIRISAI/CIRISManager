@@ -49,6 +49,12 @@ class CIRISManagerClient:
         self.session = requests.Session()
         if self.token:
             self.session.headers["Authorization"] = f"Bearer {self.token}"
+    
+    def _validate_agent_id(self, agent_id: str) -> None:
+        """Validate agent ID format to prevent injection attacks."""
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', agent_id):
+            raise ValueError(f"Invalid agent ID format: {agent_id}")
 
     def _load_token(self) -> Optional[str]:
         """Load token from config file."""
@@ -70,6 +76,17 @@ class CIRISManagerClient:
         if not self.token:
             raise AuthenticationError("No authentication token available. Please login first.")
 
+        # Validate endpoint to prevent injection attacks
+        # Endpoint should start with / and only contain safe characters
+        import re
+        if not endpoint.startswith('/'):
+            raise ValueError("Endpoint must start with /")
+        
+        # Allow only safe characters in endpoint: alphanumeric, -, _, /, {}
+        # The {} is for path parameters that will be validated separately
+        if not re.match(r'^/[a-zA-Z0-9/_\-{}]+$', endpoint):
+            raise ValueError("Invalid endpoint format")
+        
         url = f"{self.base_url}{endpoint}"
         response = self.session.request(method, url, **kwargs)
 
@@ -97,6 +114,7 @@ class CIRISManagerClient:
 
     def get_agent(self, agent_id: str) -> Dict[str, Any]:
         """Get details for a specific agent."""
+        self._validate_agent_id(agent_id)
         response = self._request("GET", f"/manager/v1/agents/{agent_id}")
         return response.json()
 
@@ -136,31 +154,37 @@ class CIRISManagerClient:
 
     def update_agent_config(self, agent_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
         """Update agent configuration."""
+        self._validate_agent_id(agent_id)
         response = self._request("PATCH", f"/manager/v1/agents/{agent_id}/config", json=config)
         return response.json()
 
     def delete_agent(self, agent_id: str) -> Dict[str, Any]:
         """Delete an agent."""
+        self._validate_agent_id(agent_id)
         response = self._request("DELETE", f"/manager/v1/agents/{agent_id}")
         return response.json()
 
     def start_agent(self, agent_id: str) -> Dict[str, Any]:
         """Start an agent."""
+        self._validate_agent_id(agent_id)
         response = self._request("POST", f"/manager/v1/agents/{agent_id}/start")
         return response.json()
 
     def stop_agent(self, agent_id: str) -> Dict[str, Any]:
         """Stop an agent."""
+        self._validate_agent_id(agent_id)
         response = self._request("POST", f"/manager/v1/agents/{agent_id}/stop")
         return response.json()
 
     def restart_agent(self, agent_id: str) -> Dict[str, Any]:
         """Restart an agent."""
+        self._validate_agent_id(agent_id)
         response = self._request("POST", f"/manager/v1/agents/{agent_id}/restart")
         return response.json()
 
     def get_agent_logs(self, agent_id: str, lines: int = 100) -> str:
         """Get agent logs."""
+        self._validate_agent_id(agent_id)
         response = self._request(
             "GET", f"/manager/v1/agents/{agent_id}/logs", params={"lines": lines}
         )

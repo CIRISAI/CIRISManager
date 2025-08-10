@@ -129,7 +129,8 @@ def create_device_auth_routes() -> APIRouter:
 
         device_info = _device_codes.get(token_request.device_code)
         if not device_info:
-            logger.warning(f"Invalid device code: {token_request.device_code[:10]}...")
+            # Log without user input to prevent log injection
+            logger.warning("Invalid device code submitted")
             return JSONResponse(
                 status_code=400,
                 content={"error": "invalid_grant", "error_description": "Invalid device code"},
@@ -437,10 +438,15 @@ def create_device_auth_routes() -> APIRouter:
 
         user = auth_service.get_current_user(auth_header)
         if not user:
-            logger.warning(f"Unauthenticated verification attempt for user_code: {user_code}")
+            # Log without user input to prevent log injection
+            logger.warning("Unauthenticated verification attempt")
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        logger.info(f"User {user.get('email', 'unknown')} attempting to verify code: {user_code}")
+        # Sanitize email for logging to prevent log injection
+        email = user.get('email', 'unknown')
+        # Replace any control characters that could affect log parsing
+        safe_email = ''.join(c if c.isprintable() and c not in '\r\n' else '?' for c in email)
+        logger.info(f"User {safe_email} attempting to verify device code")
 
         # Verify user is from @ciris.ai domain in production
         if auth_service.oauth_provider.__class__.__name__ != "MockOAuthProvider":
@@ -450,8 +456,9 @@ def create_device_auth_routes() -> APIRouter:
         # Find device code by user code
         device_code = _user_codes.get(user_code.upper())
         if not device_code:
-            logger.warning(f"Invalid user_code submitted: {user_code}")
-            logger.debug(f"Available user codes: {list(_user_codes.keys())}")
+            # Log without user input to prevent log injection
+            logger.warning("Invalid user_code submitted")
+            logger.debug(f"Available user codes count: {len(_user_codes)}")
             raise HTTPException(status_code=400, detail="Invalid code")
 
         device_info = _device_codes.get(device_code)

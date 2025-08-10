@@ -819,9 +819,27 @@ def create_routes(manager: Any) -> APIRouter:
         """Get detailed information about a specific template including stewardship tier."""
         from pathlib import Path
         import yaml
+        import re
+
+        # Validate template name to prevent path traversal
+        if not re.match(r'^[a-zA-Z0-9_-]+$', template_name):
+            raise HTTPException(status_code=400, detail="Invalid template name")
+        
+        # Additional check for path traversal attempts
+        if ".." in template_name or "/" in template_name or "\\" in template_name:
+            raise HTTPException(status_code=400, detail="Invalid template name")
 
         templates_dir = Path(manager.config.manager.templates_directory)
         template_file = templates_dir / f"{template_name}.yaml"
+        
+        # Ensure the resolved path is within the templates directory
+        try:
+            template_file = template_file.resolve()
+            templates_dir_resolved = templates_dir.resolve()
+            if not str(template_file).startswith(str(templates_dir_resolved)):
+                raise HTTPException(status_code=400, detail="Invalid template path")
+        except (OSError, RuntimeError):
+            raise HTTPException(status_code=400, detail="Invalid template path")
 
         if not template_file.exists():
             raise HTTPException(status_code=404, detail=f"Template '{template_name}' not found")
