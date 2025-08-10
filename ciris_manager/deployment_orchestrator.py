@@ -533,7 +533,7 @@ class DeploymentOrchestrator:
                     return AgentUpdateResponse(
                         agent_id=agent.agent_id,
                         decision="reject",
-                        reasoning=f"Authentication failed: {str(e)}",
+                        reason=f"Authentication failed: {str(e)}",
                     )
 
                 # Audit token use if using service token
