@@ -167,11 +167,12 @@ class TestAgentCommands:
         # Verify
         assert result == 0
         mock_client.create_agent.assert_called_once_with(
-            template="scout",
             name="Test Agent",
+            template="scout",
+            environment={"KEY1": "value1", "KEY2": "value2"},
+            mounts=None,
             use_mock_llm=True,
             enable_discord=False,
-            environment={"KEY1": "value1", "KEY2": "value2"},
         )
 
     @patch("builtins.input")
