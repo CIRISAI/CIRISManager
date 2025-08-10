@@ -32,7 +32,7 @@ class AgentAuth:
 
         Returns:
             Dictionary with Authorization header
-        
+
         Raises:
             ValueError: If no service token exists for the agent
         """

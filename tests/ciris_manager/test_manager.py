@@ -214,9 +214,10 @@ class TestCIRISManager:
         """Test creating agent with pre-approved template."""
         # Set required environment variables for encryption
         import os
+
         os.environ["MANAGER_JWT_SECRET"] = "test-secret-key-for-testing-only"
         os.environ["CIRIS_ENCRYPTION_SALT"] = "test-salt-sixteen-chars"
-        
+
         # Mock template verifier
         manager.template_verifier.is_pre_approved = Mock(return_value=True)
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from .auth import get_current_user_dependency as get_current_user
 from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
-from .rate_limit import limiter, auth_limit, create_limit, read_limit, deploy_limit
+from .rate_limit import create_limit
 
 logger = logging.getLogger(__name__)
 
@@ -565,22 +565,16 @@ def create_routes(manager: Any) -> APIRouter:
 
         try:
             # Validate agent_id to prevent directory traversal
-            if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-_]{0,63}$', agent_id):
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Invalid agent ID format"
-                )
-            
+            if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9\-_]{0,63}$", agent_id):
+                raise HTTPException(status_code=400, detail="Invalid agent ID format")
+
             # Path to agent's docker-compose file - use Path to safely join
             base_path = Path("/opt/ciris/agents")
             compose_path = (base_path / agent_id / "docker-compose.yml").resolve()
-            
+
             # Ensure the resolved path is still within the agents directory
             if not str(compose_path).startswith(str(base_path)):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid agent path"
-                )
+                raise HTTPException(status_code=400, detail="Invalid agent path")
 
             if not compose_path.exists():
                 raise HTTPException(
@@ -650,22 +644,16 @@ def create_routes(manager: Any) -> APIRouter:
 
         try:
             # Validate agent_id to prevent directory traversal
-            if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-_]{0,63}$', agent_id):
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Invalid agent ID format"
-                )
-            
+            if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9\-_]{0,63}$", agent_id):
+                raise HTTPException(status_code=400, detail="Invalid agent ID format")
+
             # Path to agent's docker-compose file - use Path to safely join
             base_path = Path("/opt/ciris/agents")
             compose_path = (base_path / agent_id / "docker-compose.yml").resolve()
-            
+
             # Ensure the resolved path is still within the agents directory
             if not str(compose_path).startswith(str(base_path)):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid agent path"
-                )
+                raise HTTPException(status_code=400, detail="Invalid agent path")
 
             if not compose_path.exists():
                 raise HTTPException(

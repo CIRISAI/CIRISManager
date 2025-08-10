@@ -530,7 +530,7 @@ class DeploymentOrchestrator:
                     headers = auth.get_auth_headers(agent.agent_id)
                 except ValueError as e:
                     logger.error(f"Failed to authenticate with agent {agent.agent_id}: {e}")
-                    return UpdateResponse(
+                    return AgentUpdateResponse(
                         status="error",
                         message=f"Authentication failed: {str(e)}",
                         agent_id=agent.agent_id,

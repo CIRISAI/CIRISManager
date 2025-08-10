@@ -407,7 +407,7 @@ class CIRISManager:
             from slowapi.errors import RateLimitExceeded
 
             app = FastAPI(title="CIRISManager API", version="1.0.0")
-            
+
             # Add rate limiting
             app.state.limiter = limiter
             app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)

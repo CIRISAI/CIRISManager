@@ -48,13 +48,13 @@ class TokenEncryption:
             error_msg = "MANAGER_JWT_SECRET environment variable is required for encryption"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        
+
         salt = os.getenv("CIRIS_ENCRYPTION_SALT")
         if not salt:
             error_msg = "CIRIS_ENCRYPTION_SALT environment variable is required for encryption"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        
+
         # Ensure salt is at least 16 bytes
         if len(salt) < 16:
             error_msg = "CIRIS_ENCRYPTION_SALT must be at least 16 characters long"
