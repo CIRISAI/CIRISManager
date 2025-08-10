@@ -63,6 +63,13 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_start_deployment(self, orchestrator, update_notification, sample_agents):
         """Test starting a deployment."""
+        # Mock the image pull operation
+        orchestrator._pull_images = AsyncMock(return_value={"success": True, "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0", "gui_image": "ghcr.io/cirisai/ciris-gui:v2.0"})
+        
+        # Mock the local image digest checks to indicate images have changed
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest123")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:olddigest456")
+        
         # Mock registry client to return different digests (indicating images changed)
         orchestrator.registry_client.resolve_image_digest = AsyncMock(
             side_effect=[
@@ -85,6 +92,11 @@ class TestDeploymentOrchestrator:
         self, orchestrator, update_notification, sample_agents
     ):
         """Test that concurrent deployments are rejected."""
+        # Mock the image pull operation
+        orchestrator._pull_images = AsyncMock(return_value={"success": True, "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0", "gui_image": "ghcr.io/cirisai/ciris-gui:v2.0"})
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest123")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:olddigest456")
+        
         # Start first deployment
         await orchestrator.start_deployment(update_notification, sample_agents)
 
@@ -95,6 +107,11 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_get_deployment_status(self, orchestrator, update_notification, sample_agents):
         """Test getting deployment status."""
+        # Mock the image pull operation
+        orchestrator._pull_images = AsyncMock(return_value={"success": True, "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0", "gui_image": "ghcr.io/cirisai/ciris-gui:v2.0"})
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest123")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:olddigest456")
+        
         status = await orchestrator.start_deployment(update_notification, sample_agents)
         deployment_id = status.deployment_id
 
@@ -111,6 +128,11 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_canary_deployment_phases(self, orchestrator, update_notification, sample_agents):
         """Test canary deployment phases."""
+        # Mock the image pull operation
+        orchestrator._pull_images = AsyncMock(return_value={"success": True, "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0", "gui_image": "ghcr.io/cirisai/ciris-gui:v2.0"})
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest123")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:olddigest456")
+        
         # Pre-assign agents to canary groups
         registry = orchestrator.manager.agent_registry
 
@@ -150,6 +172,11 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_immediate_deployment(self, orchestrator, sample_agents):
         """Test immediate deployment strategy."""
+        # Mock the image pull operation
+        orchestrator._pull_images = AsyncMock(return_value={"success": True, "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0"})
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest123")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:olddigest456")
+        
         notification = UpdateNotification(
             agent_image="ghcr.io/cirisai/ciris-agent:v2.0",
             message="Emergency update",
@@ -395,6 +422,11 @@ class TestDeploymentOrchestrator:
         self, orchestrator, update_notification, sample_agents
     ):
         """Test that canary deployment fails gracefully when no agents have groups assigned."""
+        # Mock the image pull operation
+        orchestrator._pull_images = AsyncMock(return_value={"success": True, "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0", "gui_image": "ghcr.io/cirisai/ciris-gui:v2.0"})
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest123")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:olddigest456")
+        
         # Register agents but don't assign any to canary groups
         registry = orchestrator.manager.agent_registry
 
@@ -421,6 +453,11 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_no_running_agents(self, orchestrator):
         """Test deployment with no running agents."""
+        # Mock the image pull operation
+        orchestrator._pull_images = AsyncMock(return_value={"success": True, "agent_image": "ghcr.io/cirisai/ciris-agent:v2.0"})
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest123")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:olddigest456")
+        
         stopped_agents = [
             AgentInfo(
                 agent_id="stopped-1",
