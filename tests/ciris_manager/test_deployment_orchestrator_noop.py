@@ -45,13 +45,13 @@ class TestNoOpDeployment:
         """Test deployment is skipped when image digests haven't changed."""
         orchestrator = DeploymentOrchestrator(mock_manager)
         orchestrator.registry_client = mock_registry_client
-        
+
         # Mock the new image pull and digest methods
         orchestrator._pull_images = AsyncMock(
             return_value={
-                "success": True, 
+                "success": True,
                 "agent_image": "ghcr.io/cirisai/ciris-agent:latest",
-                "gui_image": "ghcr.io/cirisai/ciris-gui:latest"
+                "gui_image": "ghcr.io/cirisai/ciris-gui:latest",
             }
         )
         # Mock same digests for both new and current images (no change)
@@ -104,13 +104,13 @@ class TestNoOpDeployment:
             ]
         )
         orchestrator.registry_client = mock_registry_client
-        
+
         # Mock the new image pull and digest methods
         orchestrator._pull_images = AsyncMock(
             return_value={
                 "success": True,
                 "agent_image": "ghcr.io/cirisai/ciris-agent:latest",
-                "gui_image": "ghcr.io/cirisai/ciris-gui:latest"
+                "gui_image": "ghcr.io/cirisai/ciris-gui:latest",
             }
         )
         # Mock different digests - images have changed

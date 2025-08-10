@@ -76,7 +76,9 @@ class DeploymentOrchestrator:
                 )
 
             # Check if any agents actually need updating
-            agents_needing_update, nginx_needs_update = await self._check_agents_need_update(notification, agents)
+            agents_needing_update, nginx_needs_update = await self._check_agents_need_update(
+                notification, agents
+            )
 
             if not agents_needing_update and not nginx_needs_update:
                 # No agents need updating and no nginx update - this is a no-op deployment
@@ -333,7 +335,7 @@ class DeploymentOrchestrator:
         if notification.gui_image:
             new_gui_digest = await self._get_local_image_digest(notification.gui_image)
             logger.info(f"New GUI image digest: {new_gui_digest}")
-            
+
             # Check if GUI container needs updating by comparing digests
             # Try to get current GUI container digest
             current_gui_digest = await self._get_container_image_digest("ciris-gui")
