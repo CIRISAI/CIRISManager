@@ -357,8 +357,9 @@ class TestCIRISManager:
             except asyncio.CancelledError:
                 pass
 
-        # Should have called docker-compose at least once
-        assert call_count > 0
+        # Container management loop no longer calls docker-compose
+        # It's disabled to prevent bypassing canary deployments
+        assert call_count == 0  # Should NOT have called docker-compose
 
     @pytest.mark.asyncio
     async def test_start_stop(self, manager):
