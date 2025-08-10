@@ -36,7 +36,7 @@ jobs:
       
       - name: Run tests
         run: |
-          pytest tests/ -v --cov=ciris_manager --cov-report=term-missing
+          python -m pytest tests/ -v --cov=ciris_manager --cov-report=term-missing
     
   deploy:
     name: Deploy to Production
