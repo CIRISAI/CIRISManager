@@ -160,7 +160,7 @@ class DeploymentOrchestrator:
         """
         import asyncio
 
-        results = {"success": True, "agent_image": None, "gui_image": None}
+        results: Dict[str, Any] = {"success": True, "agent_image": None, "gui_image": None}
 
         try:
             # Pull agent image if specified
@@ -250,7 +250,7 @@ class DeploymentOrchestrator:
                     # Extract digest from format like "ghcr.io/cirisai/ciris-agent@sha256:abc123..."
                     for digest in repo_digests:
                         if "@sha256:" in digest:
-                            return digest.split("@")[-1]  # Return just the sha256:... part
+                            return str(digest.split("@")[-1])  # Return just the sha256:... part
 
                 # Fallback to Id if no RepoDigests
                 image_id = image_data[0].get("Id", "")
@@ -304,7 +304,8 @@ class DeploymentOrchestrator:
                     image_name = container_data[0].get("Config", {}).get("Image", "")
                     if image_name:
                         # Get digest of the image the container is using
-                        return await self._get_local_image_digest(image_name)
+                        digest = await self._get_local_image_digest(image_name)
+                        return digest if digest else None
 
             return None
 
