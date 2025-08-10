@@ -528,3 +528,226 @@ class TestDeploymentOrchestrator:
         final_status = await orchestrator.get_deployment_status(status.deployment_id)
         assert final_status.status == "failed"
         assert "No agents assigned to canary groups" in final_status.message
+
+    @pytest.mark.asyncio
+    async def test_container_recreation_after_shutdown(self, orchestrator):
+        """Test that containers are recreated after successful shutdown."""
+        agent = AgentInfo(
+            agent_id="test-agent",
+            agent_name="Test",
+            container_name="ciris-test-agent",
+            api_port=8080,
+            status="running",
+        )
+
+        notification = UpdateNotification(
+            agent_image="ghcr.io/cirisai/ciris-agent:v2.0",
+            message="Update with recreation",
+        )
+
+        # Register agent in registry
+        registry = orchestrator.manager.agent_registry
+        registry.register_agent(
+            agent_id="test-agent",
+            name="Test",
+            port=8080,
+            template="base",
+            compose_file="/tmp/test-agent/docker-compose.yml",
+            service_token="test-token-123",
+        )
+
+        # Mock the helper methods
+        orchestrator._wait_for_container_stop = AsyncMock(return_value=True)
+        orchestrator._recreate_agent_container = AsyncMock(return_value=True)
+
+        # Mock agent_auth
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_response = Mock()
+                mock_response.status_code = 200  # Agent accepts shutdown
+                mock_response.json.return_value = {"status": "shutdown initiated"}
+                mock_client.post.return_value = mock_response
+                mock_client_class.return_value.__aenter__.return_value = mock_client
+
+                response = await orchestrator._update_single_agent(
+                    "deployment-123", notification, agent
+                )
+
+                # Verify the sequence of calls
+                orchestrator._wait_for_container_stop.assert_called_once_with(
+                    "ciris-test-agent", timeout=60
+                )
+                orchestrator._recreate_agent_container.assert_called_once_with("test-agent")
+
+                assert response.agent_id == "test-agent"
+                assert response.decision == "accept"
+
+    @pytest.mark.asyncio
+    async def test_container_not_recreated_on_rejection(self, orchestrator):
+        """Test that containers are NOT recreated when agent rejects shutdown."""
+        agent = AgentInfo(
+            agent_id="busy-agent",
+            agent_name="Busy",
+            container_name="ciris-busy-agent",
+            api_port=8081,
+            status="running",
+        )
+
+        notification = UpdateNotification(
+            agent_image="ghcr.io/cirisai/ciris-agent:v2.0",
+            message="Update attempt",
+        )
+
+        # Register agent
+        registry = orchestrator.manager.agent_registry
+        registry.register_agent(
+            agent_id="busy-agent",
+            name="Busy",
+            port=8081,
+            template="base",
+            compose_file="/tmp/busy-agent/docker-compose.yml",
+            service_token="busy-token-456",
+        )
+
+        # Mock the helper methods
+        orchestrator._wait_for_container_stop = AsyncMock(return_value=True)
+        orchestrator._recreate_agent_container = AsyncMock(return_value=True)
+
+        # Mock agent_auth
+        mock_auth = Mock()
+        mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_response = Mock()
+                mock_response.status_code = 503  # Agent rejects shutdown
+                mock_response.text = "Service busy"
+                mock_client.post.return_value = mock_response
+                mock_client_class.return_value.__aenter__.return_value = mock_client
+
+                response = await orchestrator._update_single_agent(
+                    "deployment-123", notification, agent
+                )
+
+                # Verify recreation methods were NOT called
+                orchestrator._wait_for_container_stop.assert_not_called()
+                orchestrator._recreate_agent_container.assert_not_called()
+
+                assert response.agent_id == "busy-agent"
+                assert response.decision == "reject"
+
+    @pytest.mark.asyncio
+    async def test_wait_for_container_stop(self, orchestrator):
+        """Test waiting for container to stop."""
+        with patch("docker.from_env") as mock_docker:
+            mock_client = Mock()
+            mock_container = Mock()
+            
+            # Simulate container stopping after a few checks
+            mock_container.status = "running"
+            mock_container.reload = Mock(side_effect=[
+                None,  # First reload, still running
+                None,  # Second reload, still running  
+                Mock(status="exited"),  # Third reload, stopped
+            ])
+            
+            # Track status changes
+            status_sequence = ["running", "running", "exited"]
+            status_index = [0]
+            
+            def get_status():
+                result = status_sequence[status_index[0]]
+                if status_index[0] < len(status_sequence) - 1:
+                    status_index[0] += 1
+                return result
+            
+            type(mock_container).status = property(lambda self: get_status())
+            
+            mock_client.containers.get.return_value = mock_container
+            mock_docker.return_value = mock_client
+
+            # Mock asyncio.sleep to speed up test
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await orchestrator._wait_for_container_stop("test-container", timeout=10)
+
+            assert result is True
+            assert mock_container.reload.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_wait_for_container_stop_timeout(self, orchestrator):
+        """Test timeout when waiting for container to stop."""
+        with patch("docker.from_env") as mock_docker:
+            mock_client = Mock()
+            mock_container = Mock()
+            mock_container.status = "running"  # Never stops
+            mock_container.reload = Mock()
+            
+            mock_client.containers.get.return_value = mock_container
+            mock_docker.return_value = mock_client
+
+            # Mock time.time to simulate timeout
+            with patch("time.time") as mock_time:
+                mock_time.side_effect = [0, 1, 2, 3, 61]  # Exceeds 60 second timeout
+                
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    result = await orchestrator._wait_for_container_stop("test-container", timeout=60)
+
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_recreate_agent_container(self, orchestrator):
+        """Test recreating an agent container."""
+        # Set up agent in registry
+        registry = orchestrator.manager.agent_registry
+        registry.register_agent(
+            agent_id="test-agent",
+            name="Test Agent",
+            port=8080,
+            template="base",
+            compose_file="/tmp/test-agent/docker-compose.yml",
+        )
+
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate.return_value = (b"Container started", b"")
+            mock_subprocess.return_value = mock_process
+
+            result = await orchestrator._recreate_agent_container("test-agent")
+
+            assert result is True
+            mock_subprocess.assert_called_once()
+            
+            # Verify the correct docker-compose command was used
+            call_args = mock_subprocess.call_args[0]
+            assert "docker-compose" in call_args
+            assert "-f" in call_args
+            assert "/tmp/test-agent/docker-compose.yml" in call_args
+            assert "up" in call_args
+            assert "-d" in call_args
+
+    @pytest.mark.asyncio
+    async def test_recreate_agent_container_failure(self, orchestrator):
+        """Test handling failure when recreating container."""
+        # Set up agent in registry
+        registry = orchestrator.manager.agent_registry
+        registry.register_agent(
+            agent_id="test-agent",
+            name="Test Agent",
+            port=8080,
+            template="base",
+            compose_file="/tmp/test-agent/docker-compose.yml",
+        )
+
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+            mock_process = AsyncMock()
+            mock_process.returncode = 1
+            mock_process.communicate.return_value = (b"", b"Error: Container failed to start")
+            mock_subprocess.return_value = mock_process
+
+            result = await orchestrator._recreate_agent_container("test-agent")
+
+            assert result is False

@@ -7,7 +7,7 @@ import tempfile
 import asyncio
 import json
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from ciris_manager.manager import CIRISManager
 from ciris_manager.config.settings import CIRISManagerConfig
 
@@ -532,3 +532,275 @@ class TestCIRISManager:
 
         # Should return False on error
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_crash_recovery_non_zero_exit(self, manager, tmp_path):
+        """Test that containers with non-zero exit codes are restarted."""
+        # Create a temporary compose file
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+        
+        # Register test agents
+        manager.agent_registry.register_agent(
+            agent_id="crashed-agent",
+            name="Crashed Agent",
+            port=8080,
+            template="test",
+            compose_file=str(compose_file),
+        )
+
+        # Mock Docker client
+        with patch("docker.from_env") as mock_docker:
+            mock_client = MagicMock()
+            mock_container = MagicMock()
+            
+            # Container has crashed (non-zero exit code)
+            mock_container.status = "exited"
+            mock_container.attrs = {"State": {"ExitCode": 1}}  # Non-zero = crash
+            
+            mock_client.containers.get.return_value = mock_container
+            mock_docker.return_value = mock_client
+
+            # Mock subprocess for docker-compose restart
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                mock_process = AsyncMock()
+                mock_process.returncode = 0
+                mock_process.communicate = AsyncMock(return_value=(b"Container restarted", b""))
+                mock_subprocess.return_value = mock_process
+
+                # Run recovery
+                await manager._recover_crashed_containers()
+
+                # Verify docker-compose was called to restart
+                mock_subprocess.assert_called_once()
+                call_args = mock_subprocess.call_args[0]
+                assert "docker-compose" in call_args
+                assert "up" in call_args
+                assert "-d" in call_args
+
+    @pytest.mark.asyncio
+    async def test_crash_recovery_zero_exit_not_restarted(self, manager, tmp_path):
+        """Test that containers with exit code 0 (consensual shutdown) are NOT restarted."""
+        # Create a temporary compose file
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+        
+        # Register test agent
+        manager.agent_registry.register_agent(
+            agent_id="shutdown-agent",
+            name="Shutdown Agent",
+            port=8081,
+            template="test",
+            compose_file=str(compose_file),
+        )
+
+        # Mock Docker client
+        with patch("docker.from_env") as mock_docker:
+            mock_client = MagicMock()
+            mock_container = MagicMock()
+            
+            # Container exited cleanly (exit code 0)
+            mock_container.status = "exited"
+            mock_container.attrs = {"State": {"ExitCode": 0}}  # Zero = consensual shutdown
+            
+            mock_client.containers.get.return_value = mock_container
+            mock_docker.return_value = mock_client
+
+            # Mock subprocess
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                # Run recovery
+                await manager._recover_crashed_containers()
+
+                # Verify docker-compose was NOT called
+                mock_subprocess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_crash_recovery_running_containers_ignored(self, manager, tmp_path):
+        """Test that running containers are never touched (maintains autonomy)."""
+        # Create a temporary compose file
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+        
+        # Register test agent
+        manager.agent_registry.register_agent(
+            agent_id="running-agent",
+            name="Running Agent",
+            port=8082,
+            template="test",
+            compose_file=str(compose_file),
+        )
+
+        # Mock Docker client
+        with patch("docker.from_env") as mock_docker:
+            mock_client = MagicMock()
+            mock_container = MagicMock()
+            
+            # Container is running
+            mock_container.status = "running"
+            
+            mock_client.containers.get.return_value = mock_container
+            mock_docker.return_value = mock_client
+
+            # Mock subprocess
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                # Run recovery
+                await manager._recover_crashed_containers()
+
+                # Verify docker-compose was NOT called (never touch running containers)
+                mock_subprocess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_crash_recovery_recent_stop_ignored(self, manager, tmp_path):
+        """Test that recently stopped containers (potential deployment) are not restarted."""
+        # Create a temporary compose file
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+        
+        # Register test agent
+        manager.agent_registry.register_agent(
+            agent_id="recent-stop",
+            name="Recent Stop",
+            port=8083,
+            template="test",
+            compose_file=str(compose_file),
+        )
+
+        # Mock Docker client for _is_agent_in_deployment check
+        with patch("docker.from_env") as mock_docker:
+            mock_client = MagicMock()
+            mock_container = MagicMock()
+            
+            # Container crashed but very recently (might be deployment)
+            mock_container.status = "exited"
+            mock_container.attrs = {
+                "State": {
+                    "ExitCode": 1,
+                    "FinishedAt": "2024-01-01T12:00:00.000000000Z"  # Recent timestamp
+                }
+            }
+            
+            mock_client.containers.get.return_value = mock_container
+            mock_docker.return_value = mock_client
+
+            # Mock time to make it look like container just stopped
+            with patch("ciris_manager.manager.datetime") as mock_datetime:
+                from datetime import datetime, timezone
+                mock_datetime.now.return_value = datetime(2024, 1, 1, 12, 0, 30, tzinfo=timezone.utc)
+                mock_datetime.timezone = timezone
+
+                # Mock dateutil.parser
+                with patch("ciris_manager.manager.dateutil.parser.parse") as mock_parse:
+                    mock_parse.return_value = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+                    
+                    # Mock subprocess
+                    with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                        # Run recovery
+                        await manager._recover_crashed_containers()
+
+                        # Should not restart (too recent, might be deployment)
+                        mock_subprocess.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_crash_recovery_old_crash_restarted(self, manager, tmp_path):
+        """Test that old crashed containers (not deployment) are restarted."""
+        # Create a temporary compose file
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+        
+        # Register test agent
+        manager.agent_registry.register_agent(
+            agent_id="old-crash",
+            name="Old Crash",
+            port=8084,
+            template="test",
+            compose_file=str(compose_file),
+        )
+
+        # Mock Docker client
+        with patch("docker.from_env") as mock_docker:
+            mock_client = MagicMock()
+            mock_container = MagicMock()
+            
+            # Container crashed a while ago (not deployment)
+            mock_container.status = "exited"
+            mock_container.attrs = {
+                "State": {
+                    "ExitCode": 1,
+                    "FinishedAt": "2024-01-01T11:00:00.000000000Z"  # Old timestamp
+                }
+            }
+            
+            # First call for main check, second for deployment check
+            mock_client.containers.get.return_value = mock_container
+            mock_docker.return_value = mock_client
+
+            # Mock time to show crash was > 5 minutes ago
+            with patch("ciris_manager.manager.datetime") as mock_datetime:
+                from datetime import datetime, timezone
+                mock_datetime.now.return_value = datetime(2024, 1, 1, 12, 10, 0, tzinfo=timezone.utc)
+                mock_datetime.timezone = timezone
+
+                # Mock dateutil.parser
+                with patch("ciris_manager.manager.dateutil.parser.parse") as mock_parse:
+                    mock_parse.return_value = datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc)
+                    
+                    # Mock subprocess for restart
+                    with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                        mock_process = AsyncMock()
+                        mock_process.returncode = 0
+                        mock_process.communicate = AsyncMock(return_value=(b"Restarted", b""))
+                        mock_subprocess.return_value = mock_process
+
+                        # Run recovery
+                        await manager._recover_crashed_containers()
+
+                        # Should restart (old crash, not deployment)
+                        mock_subprocess.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_crash_recovery_docker_error_handled(self, manager, tmp_path):
+        """Test that Docker errors are handled gracefully in crash recovery."""
+        # Create a temporary compose file
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3.8'\n")
+        
+        # Register test agent
+        manager.agent_registry.register_agent(
+            agent_id="error-agent",
+            name="Error Agent",
+            port=8085,
+            template="test",
+            compose_file=str(compose_file),
+        )
+
+        # Mock Docker client to raise an error
+        with patch("docker.from_env") as mock_docker:
+            mock_docker.side_effect = Exception("Docker daemon not accessible")
+
+            # Run recovery - should not crash
+            await manager._recover_crashed_containers()  # Should complete without exception
+
+    @pytest.mark.asyncio
+    async def test_container_management_loop_crash_recovery(self, manager):
+        """Test that container management loop calls crash recovery."""
+        manager._running = True
+        
+        # Mock the recovery method
+        manager._recover_crashed_containers = AsyncMock()
+
+        # Run the loop for a short time
+        loop_task = asyncio.create_task(manager.container_management_loop())
+        
+        # Let it run for one iteration
+        await asyncio.sleep(0.1)
+        
+        # Stop the loop
+        manager._running = False
+        loop_task.cancel()
+        try:
+            await loop_task
+        except asyncio.CancelledError:
+            pass
+
+        # Verify recovery was called
+        manager._recover_crashed_containers.assert_called()

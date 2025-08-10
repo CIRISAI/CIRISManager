@@ -122,7 +122,7 @@ class ComposeGenerator:
                         f"{agent_id}_logs:/app/logs",
                         f"{oauth_volume}:/home/ciris/shared/oauth:ro",
                     ],
-                    "restart": "unless-stopped",
+                    "restart": "no",
                     "healthcheck": {
                         "test": ["CMD", "curl", "-f", "http://localhost:8080/v1/system/health"],
                         "interval": "30s",

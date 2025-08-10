@@ -12,6 +12,8 @@ import secrets
 from pathlib import Path
 from typing import Optional, Dict, Any
 import time
+from datetime import datetime, timezone
+import dateutil.parser
 
 from ciris_manager.core.watchdog import CrashLoopWatchdog
 from ciris_manager.config.settings import CIRISManagerConfig
@@ -339,16 +341,159 @@ class CIRISManager:
         logger.info(f"Started agent {agent_id}")
 
     async def container_management_loop(self) -> None:
-        """Container management loop - currently disabled.
+        """Container management loop - handles crash recovery only.
 
-        Auto-updates and image pulls have been removed to ensure deployments
-        only happen through the deployment orchestrator with proper canary groups.
+        This loop ONLY restarts containers that have crashed (stopped unexpectedly).
+        It does NOT:
+        - Pull new images (that's handled by deployment orchestrator)
+        - Restart running containers (maintains agent autonomy)
+        - Interfere with consensual shutdowns (deployment updates)
+        
+        The loop specifically checks for stopped containers and only restarts them
+        if they are not part of an active deployment.
         """
-        # This loop is intentionally empty - container updates should only
-        # happen through the deployment orchestrator
+        logger.info("Container management loop started - crash recovery mode only")
+        
+        # Import deployment orchestrator to check active deployments
+        from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+        
         while self._running:
-            # Just sleep - no automatic updates
-            await asyncio.sleep(self.config.container_management.interval)
+            try:
+                # Check for stopped containers that need recovery
+                await self._recover_crashed_containers()
+            except Exception as e:
+                logger.error(f"Error in container recovery loop: {e}")
+            
+            # Sleep before next check (default 30 seconds for crash recovery)
+            await asyncio.sleep(30)  # Check more frequently for crashes
+    
+    async def _recover_crashed_containers(self) -> None:
+        """Recover containers that have crashed (stopped unexpectedly).
+        
+        This method:
+        1. Finds all stopped containers
+        2. Checks if they're part of an active deployment
+        3. Only restarts containers that crashed (not part of deployment)
+        """
+        try:
+            import docker
+            from docker.errors import DockerException
+            
+            client = docker.from_env()
+            
+            # Get all registered agents
+            agents = self.agent_registry.list_agents()
+            
+            for agent_info in agents:
+                agent_id = agent_info.agent_id
+                container_name = f"ciris-{agent_id}"
+                
+                try:
+                    # Check container status
+                    container = client.containers.get(container_name)
+                    
+                    # CRITICAL: Only act on stopped containers
+                    # Never touch running containers (maintains autonomy)
+                    if container.status != "exited":
+                        continue
+                    
+                    # Check exit code to determine if it was a crash or consensual shutdown
+                    exit_code = container.attrs.get("State", {}).get("ExitCode", -1)
+                    
+                    # Exit code 0 = consensual shutdown (deployment or user request)
+                    # Non-zero = crash or error
+                    if exit_code == 0:
+                        logger.debug(f"Container {container_name} exited cleanly (code 0), not restarting")
+                        continue
+                    
+                    # Check if this agent is part of an active deployment
+                    # by looking for recent deployment activity
+                    if await self._is_agent_in_deployment(agent_id):
+                        logger.debug(f"Container {container_name} is part of active deployment, skipping recovery")
+                        continue
+                    
+                    # This is a crashed container not part of deployment - restart it
+                    logger.warning(f"Container {container_name} crashed (exit code {exit_code}), attempting recovery")
+                    
+                    # Use docker-compose to restart (maintains configuration)
+                    compose_path = Path(agent_info.compose_file)
+                    if compose_path.exists():
+                        await self._restart_crashed_container(agent_id, compose_path)
+                    else:
+                        logger.error(f"Compose file not found for {agent_id}: {compose_path}")
+                        
+                except docker.errors.NotFound:
+                    # Container doesn't exist - might be newly created or deleted
+                    logger.debug(f"Container {container_name} not found, may be new or deleted")
+                except Exception as e:
+                    logger.error(f"Error checking container {container_name}: {e}")
+                    
+        except DockerException as e:
+            logger.error(f"Docker error in crash recovery: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in crash recovery: {e}")
+    
+    async def _is_agent_in_deployment(self, agent_id: str) -> bool:
+        """Check if an agent is part of an active deployment.
+        
+        Returns True if the agent has been part of a deployment in the last 5 minutes.
+        This prevents us from interfering with deployment-related shutdowns.
+        """
+        # Check deployment orchestrator state
+        # For now, we'll use a simple time-based check
+        # In the future, this could query the deployment orchestrator directly
+        
+        # Simple implementation: assume any container that stopped in the last 5 minutes
+        # might be part of a deployment
+        try:
+            import docker
+            client = docker.from_env()
+            container_name = f"ciris-{agent_id}"
+            
+            container = client.containers.get(container_name)
+            finished_at = container.attrs.get("State", {}).get("FinishedAt")
+            
+            if finished_at:
+                finished_time = dateutil.parser.parse(finished_at)
+                now = datetime.now(timezone.utc)
+                time_since_stop = (now - finished_time).total_seconds()
+                
+                # If stopped less than 5 minutes ago, might be deployment
+                if time_since_stop < 300:
+                    return True
+                    
+        except Exception as e:
+            logger.debug(f"Error checking deployment status for {agent_id}: {e}")
+            
+        return False
+    
+    async def _restart_crashed_container(self, agent_id: str, compose_path: Path) -> None:
+        """Restart a crashed container using docker-compose.
+        
+        This uses 'docker-compose up -d' which will:
+        - Start the container if stopped
+        - Do nothing if already running (safe operation)
+        - Use the existing image (no pull)
+        """
+        try:
+            logger.info(f"Restarting crashed container for agent {agent_id}")
+            
+            # Use docker-compose up -d (safe - won't affect running containers)
+            cmd = ["docker-compose", "-f", str(compose_path), "up", "-d"]
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode == 0:
+                logger.info(f"Successfully restarted crashed container for agent {agent_id}")
+            else:
+                logger.error(f"Failed to restart container for {agent_id}: {stderr.decode()}")
+                
+        except Exception as e:
+            logger.error(f"Error restarting container for {agent_id}: {e}")
 
     async def _pull_agent_images(self, compose_path: Path) -> None:
         """Pull latest images for an agent."""
