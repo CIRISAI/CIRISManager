@@ -5,18 +5,23 @@ Provides configurable rate limiting to prevent abuse and ensure fair usage.
 """
 
 import logging
+import os
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
+# Check if we're in test mode
+DISABLE_RATE_LIMIT = os.environ.get("DISABLE_RATE_LIMIT", "false").lower() == "true"
+
 # Try to import slowapi, but make it optional
+
 try:
     from slowapi import Limiter
     from slowapi.util import get_remote_address
     from slowapi.errors import RateLimitExceeded
 
-    SLOWAPI_AVAILABLE = True
+    SLOWAPI_AVAILABLE = True and not DISABLE_RATE_LIMIT
 except ImportError:
     logger.warning("slowapi not installed - rate limiting disabled")
     SLOWAPI_AVAILABLE = False
