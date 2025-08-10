@@ -14,6 +14,7 @@ from pathlib import Path
 from .auth import get_current_user_dependency as get_current_user
 from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from .rate_limit import limiter, auth_limit, create_limit, read_limit, deploy_limit
 
 logger = logging.getLogger(__name__)
 
@@ -362,8 +363,9 @@ def create_routes(manager: Any) -> APIRouter:
         )
 
     @router.post("/agents", response_model=AgentResponse)
+    @create_limit
     async def create_agent(
-        request: CreateAgentRequest, user: dict = auth_dependency
+        request: Request, agent_request: CreateAgentRequest, user: dict = auth_dependency
     ) -> AgentResponse:
         """Create a new agent."""
         try:
@@ -373,7 +375,7 @@ def create_routes(manager: Any) -> APIRouter:
 
             try:
                 templates_dir = Path(manager.config.manager.templates_directory)
-                template_file = templates_dir / f"{request.template}.yaml"
+                template_file = templates_dir / f"{agent_request.template}.yaml"
 
                 if template_file.exists():
                     with open(template_file, "r") as f:
@@ -384,15 +386,15 @@ def create_routes(manager: Any) -> APIRouter:
 
                     # Validate WA review for Tier 4/5 agents
                     if stewardship_tier >= 4:
-                        if not request.wa_review_completed:
+                        if not agent_request.wa_review_completed:
                             raise HTTPException(
                                 status_code=400,
                                 detail=f"WA review confirmation required for Tier {stewardship_tier} agent",
                             )
                         # Log the WA review confirmation for audit
                         logger.info(
-                            f"WA review confirmed for Tier {stewardship_tier} agent '{request.name}' "
-                            f"(template: {request.template}) by {user['email']}"
+                            f"WA review confirmed for Tier {stewardship_tier} agent '{agent_request.name}' "
+                            f"(template: {agent_request.template}) by {user['email']}"
                         )
             except (TypeError, AttributeError) as e:
                 # In test environment or when templates_directory is not properly configured
@@ -400,23 +402,23 @@ def create_routes(manager: Any) -> APIRouter:
                 pass
 
             result = await manager.create_agent(
-                template=request.template,
-                name=request.name,
-                environment=request.environment,
-                wa_signature=request.wa_signature,
-                use_mock_llm=request.use_mock_llm,
-                enable_discord=request.enable_discord,
+                template=agent_request.template,
+                name=agent_request.name,
+                environment=agent_request.environment,
+                wa_signature=agent_request.wa_signature,
+                use_mock_llm=agent_request.use_mock_llm,
+                enable_discord=agent_request.enable_discord,
             )
 
             logger.info(f"Agent {result['agent_id']} created by {user['email']}")
 
             return AgentResponse(
                 agent_id=result["agent_id"],
-                name=request.name,
+                name=agent_request.name,
                 container=result["container"],
                 port=result["port"],
                 api_endpoint=result["api_endpoint"],
-                template=request.template,
+                template=agent_request.template,
                 status=result["status"],
             )
 
@@ -559,10 +561,26 @@ def create_routes(manager: Any) -> APIRouter:
         """Get agent configuration from docker-compose.yml."""
         import yaml
         from pathlib import Path
+        import re
 
         try:
-            # Path to agent's docker-compose file
-            compose_path = Path(f"/opt/ciris/agents/{agent_id}/docker-compose.yml")
+            # Validate agent_id to prevent directory traversal
+            if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-_]{0,63}$', agent_id):
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Invalid agent ID format"
+                )
+            
+            # Path to agent's docker-compose file - use Path to safely join
+            base_path = Path("/opt/ciris/agents")
+            compose_path = (base_path / agent_id / "docker-compose.yml").resolve()
+            
+            # Ensure the resolved path is still within the agents directory
+            if not str(compose_path).startswith(str(base_path)):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid agent path"
+                )
 
             if not compose_path.exists():
                 raise HTTPException(
@@ -628,10 +646,26 @@ def create_routes(manager: Any) -> APIRouter:
         import yaml
         import subprocess
         from pathlib import Path
+        import re
 
         try:
-            # Path to agent's docker-compose file
-            compose_path = Path(f"/opt/ciris/agents/{agent_id}/docker-compose.yml")
+            # Validate agent_id to prevent directory traversal
+            if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-_]{0,63}$', agent_id):
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Invalid agent ID format"
+                )
+            
+            # Path to agent's docker-compose file - use Path to safely join
+            base_path = Path("/opt/ciris/agents")
+            compose_path = (base_path / agent_id / "docker-compose.yml").resolve()
+            
+            # Ensure the resolved path is still within the agents directory
+            if not str(compose_path).startswith(str(base_path)):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid agent path"
+                )
 
             if not compose_path.exists():
                 raise HTTPException(
@@ -676,16 +710,17 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Backup current config
             backup_path = compose_path.with_suffix(".yml.bak")
-            subprocess.run(f"cp {compose_path} {backup_path}", shell=True, check=True)
+            subprocess.run(["cp", str(compose_path), str(backup_path)], check=True)
 
             # Write updated docker-compose.yml
             with open(compose_path, "w") as f:
                 yaml.dump(compose_data, f, default_flow_style=False, sort_keys=False)
 
             # Recreate container with new config
+            agent_dir = Path("/opt/ciris/agents") / agent_id
             subprocess.run(
-                f"cd /opt/ciris/agents/{agent_id} && docker-compose up -d",
-                shell=True,
+                ["docker-compose", "up", "-d"],
+                cwd=str(agent_dir),
                 check=True,
                 capture_output=True,
             )

@@ -526,7 +526,15 @@ class DeploymentOrchestrator:
                 from ciris_manager.agent_auth import get_agent_auth
 
                 auth = get_agent_auth(self.manager.agent_registry if self.manager else None)
-                headers = auth.get_auth_headers(agent.agent_id)
+                try:
+                    headers = auth.get_auth_headers(agent.agent_id)
+                except ValueError as e:
+                    logger.error(f"Failed to authenticate with agent {agent.agent_id}: {e}")
+                    return UpdateResponse(
+                        status="error",
+                        message=f"Authentication failed: {str(e)}",
+                        agent_id=agent.agent_id,
+                    )
 
                 # Audit token use if using service token
                 if "service:" in headers.get("Authorization", ""):

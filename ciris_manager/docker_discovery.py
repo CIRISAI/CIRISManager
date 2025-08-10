@@ -156,7 +156,11 @@ class DockerAgentDiscovery:
 
             # Get authentication headers
             auth = get_agent_auth()
-            headers = auth.get_auth_headers(agent_id)
+            try:
+                headers = auth.get_auth_headers(agent_id)
+            except ValueError as e:
+                logger.warning(f"Cannot authenticate with agent {agent_id}: {e}")
+                return None
 
             url = f"http://localhost:{port}/v1/agent/status"
             with httpx.Client(timeout=2.0) as client:

@@ -32,6 +32,9 @@ class AgentAuth:
 
         Returns:
             Dictionary with Authorization header
+        
+        Raises:
+            ValueError: If no service token exists for the agent
         """
         # Try to get service token
         service_token = self._get_service_token(agent_id)
@@ -40,9 +43,10 @@ class AgentAuth:
             logger.debug(f"Using service token auth for {agent_id}")
             return {"Authorization": f"Bearer service:{service_token}"}
         else:
-            # Fallback to default credentials for legacy agents
-            logger.debug(f"Using default auth for {agent_id}")
-            return {"Authorization": "Bearer admin:ciris_admin_password"}
+            # No fallback - agents MUST have service tokens
+            error_msg = f"No service token found for agent {agent_id}. Cannot authenticate."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     def _get_service_token(self, agent_id: str) -> Optional[str]:
         """

@@ -43,16 +43,31 @@ class TokenEncryption:
                 logger.error(f"Invalid encryption key: {e}")
 
         # Generate key from password if no direct key
-        password = os.getenv("MANAGER_JWT_SECRET", "default-dev-secret").encode()
-        salt = os.getenv("CIRIS_ENCRYPTION_SALT", "ciris-salt-v1").encode()
+        password = os.getenv("MANAGER_JWT_SECRET")
+        if not password:
+            error_msg = "MANAGER_JWT_SECRET environment variable is required for encryption"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        salt = os.getenv("CIRIS_ENCRYPTION_SALT")
+        if not salt:
+            error_msg = "CIRIS_ENCRYPTION_SALT environment variable is required for encryption"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Ensure salt is at least 16 bytes
+        if len(salt) < 16:
+            error_msg = "CIRIS_ENCRYPTION_SALT must be at least 16 characters long"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=salt,
+            salt=salt.encode(),
             iterations=100000,
         )
-        key = base64.urlsafe_b64encode(kdf.derive(password))
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
 
         logger.warning("Using derived encryption key. Set CIRIS_ENCRYPTION_KEY for production.")
         return Fernet(key)

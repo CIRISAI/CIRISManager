@@ -403,8 +403,14 @@ class CIRISManager:
             from .api.routes import create_routes
             from .api.auth import create_auth_routes, load_oauth_config
             from .api.device_auth_routes import create_device_auth_routes
+            from .api.rate_limit import limiter, rate_limit_exceeded_handler
+            from slowapi.errors import RateLimitExceeded
 
             app = FastAPI(title="CIRISManager API", version="1.0.0")
+            
+            # Add rate limiting
+            app.state.limiter = limiter
+            app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
             # Add exception handler for 401 errors to redirect browsers to login
             from fastapi import Request, HTTPException
