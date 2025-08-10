@@ -443,9 +443,9 @@ def create_device_auth_routes() -> APIRouter:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
         # Sanitize email for logging to prevent log injection
-        email = user.get('email', 'unknown')
+        email = user.get("email", "unknown")
         # Replace any control characters that could affect log parsing
-        safe_email = ''.join(c if c.isprintable() and c not in '\r\n' else '?' for c in email)
+        safe_email = "".join(c if c.isprintable() and c not in "\r\n" else "?" for c in email)
         logger.info(f"User {safe_email} attempting to verify device code")
 
         # Verify user is from @ciris.ai domain in production

@@ -49,11 +49,12 @@ class CIRISManagerClient:
         self.session = requests.Session()
         if self.token:
             self.session.headers["Authorization"] = f"Bearer {self.token}"
-    
+
     def _validate_agent_id(self, agent_id: str) -> None:
         """Validate agent ID format to prevent injection attacks."""
         import re
-        if not re.match(r'^[a-zA-Z0-9_-]+$', agent_id):
+
+        if not re.match(r"^[a-zA-Z0-9_-]+$", agent_id):
             raise ValueError(f"Invalid agent ID format: {agent_id}")
 
     def _load_token(self) -> Optional[str]:
@@ -79,14 +80,15 @@ class CIRISManagerClient:
         # Validate endpoint to prevent injection attacks
         # Endpoint should start with / and only contain safe characters
         import re
-        if not endpoint.startswith('/'):
+
+        if not endpoint.startswith("/"):
             raise ValueError("Endpoint must start with /")
-        
+
         # Allow only safe characters in endpoint: alphanumeric, -, _, /, {}
         # The {} is for path parameters that will be validated separately
-        if not re.match(r'^/[a-zA-Z0-9/_\-{}]+$', endpoint):
+        if not re.match(r"^/[a-zA-Z0-9/_\-{}]+$", endpoint):
             raise ValueError("Invalid endpoint format")
-        
+
         url = f"{self.base_url}{endpoint}"
         response = self.session.request(method, url, **kwargs)
 

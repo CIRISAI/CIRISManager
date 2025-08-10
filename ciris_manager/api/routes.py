@@ -822,16 +822,16 @@ def create_routes(manager: Any) -> APIRouter:
         import re
 
         # Validate template name to prevent path traversal
-        if not re.match(r'^[a-zA-Z0-9_-]+$', template_name):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", template_name):
             raise HTTPException(status_code=400, detail="Invalid template name")
-        
+
         # Additional check for path traversal attempts
         if ".." in template_name or "/" in template_name or "\\" in template_name:
             raise HTTPException(status_code=400, detail="Invalid template name")
 
         templates_dir = Path(manager.config.manager.templates_directory)
         template_file = templates_dir / f"{template_name}.yaml"
-        
+
         # Ensure the resolved path is within the templates directory
         try:
             template_file = template_file.resolve()
