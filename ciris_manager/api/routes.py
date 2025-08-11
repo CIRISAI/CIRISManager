@@ -1147,6 +1147,8 @@ def create_routes(manager: Any) -> APIRouter:
                 "total_cost_24h": 0,
                 "total_incidents": 0,
                 "total_messages": 0,
+                "total_open_breakers": 0,
+                "agents_with_open_breakers": 0,
             },
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
@@ -1164,6 +1166,7 @@ def create_routes(manager: Any) -> APIRouter:
                 "channels": [],
                 "services": [],
                 "incidents": [],
+                "circuit_breakers": None,
                 "error": None,
             }
 
@@ -1201,6 +1204,8 @@ def create_routes(manager: Any) -> APIRouter:
                     tasks.append(client.get(f"{api_url}/v1/system/adapters"))
                     # Agent status (for channels)
                     tasks.append(client.get(f"{api_url}/v1/agent/status"))
+                    # Service health with circuit breaker states
+                    tasks.append(client.get(f"{api_url}/v1/system/services/health"))
 
                     responses = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1209,8 +1214,8 @@ def create_routes(manager: Any) -> APIRouter:
                         raise TypeError(
                             f"Expected list/tuple of responses, got {type(responses)}: {responses}"
                         )
-                    if len(responses) != 5:
-                        raise ValueError(f"Expected 5 responses, got {len(responses)}")
+                    if len(responses) != 6:
+                        raise ValueError(f"Expected 6 responses, got {len(responses)}")
 
                     logger.debug(f"Got {len(responses)} responses for {agent.agent_id}")
                     for i, resp in enumerate(responses):
@@ -1363,6 +1368,88 @@ def create_routes(manager: Any) -> APIRouter:
                         except Exception as e:
                             logger.error(
                                 f"Failed to parse status for {agent.agent_id}: {e}", exc_info=True
+                            )
+
+                    # Process service health with circuit breakers (index 5)
+                    if (
+                        len(responses) > 5
+                        and not isinstance(responses[5], Exception)
+                        and hasattr(responses[5], "status_code")
+                        and responses[5].status_code == 200
+                    ):
+                        try:
+                            service_health_response = responses[5].json()
+                            # Handle wrapped response format
+                            service_health = service_health_response.get(
+                                "data", service_health_response
+                            )
+
+                            # Extract circuit breaker information
+                            circuit_breakers = {
+                                "overall_health": service_health.get("overall_health", "unknown"),
+                                "unhealthy_services": service_health.get("unhealthy_services", 0),
+                                "llm_providers": [],
+                                "critical_services": {},
+                                "open_breakers": [],
+                            }
+
+                            # Process service details to extract circuit breaker states
+                            service_details = service_health.get("service_details", {})
+                            for service_name, details in service_details.items():
+                                breaker_state = details.get("circuit_breaker_state", "unknown")
+
+                                # Track LLM services specifically
+                                if "llm" in service_name.lower():
+                                    # Parse provider info
+                                    provider_info = {
+                                        "name": service_name.split(".")[-1]
+                                        if "." in service_name
+                                        else service_name,
+                                        "state": breaker_state,
+                                        "healthy": details.get("healthy", False),
+                                        "priority": details.get("priority", "UNKNOWN"),
+                                    }
+                                    # Skip the direct LLM service, focus on actual providers
+                                    if "OpenAI" in service_name or "registry" in service_name:
+                                        circuit_breakers["llm_providers"].append(provider_info)
+
+                                # Track critical service states
+                                if any(
+                                    critical in service_name.lower()
+                                    for critical in ["memory", "telemetry", "wise", "audit"]
+                                ):
+                                    service_type = (
+                                        service_name.split(".")[-1].replace("Service", "").lower()
+                                    )
+                                    circuit_breakers["critical_services"][
+                                        service_type
+                                    ] = breaker_state
+
+                                # Track all open circuit breakers
+                                if breaker_state in ["open", "half_open"]:
+                                    circuit_breakers["open_breakers"].append(
+                                        {"service": service_name, "state": breaker_state}
+                                    )
+
+                            # Add recommendations if there are issues
+                            if circuit_breakers["open_breakers"]:
+                                circuit_breakers["recommendations"] = service_health.get(
+                                    "recommendations", []
+                                )
+
+                            agent_data["circuit_breakers"] = circuit_breakers
+
+                            # Update summary if circuit breakers are open
+                            if circuit_breakers["open_breakers"]:
+                                dashboard_data["summary"]["total_open_breakers"] += len(
+                                    circuit_breakers["open_breakers"]
+                                )
+                                dashboard_data["summary"]["agents_with_open_breakers"] += 1
+
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to parse service health for {agent.agent_id}: {e}",
+                                exc_info=True,
                             )
 
             except Exception as e:
