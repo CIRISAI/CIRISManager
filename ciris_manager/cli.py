@@ -86,6 +86,18 @@ Examples:
     # Auth token
     auth_subparsers.add_parser("token", help="Print current token (for use in scripts)")
 
+    # Agent API command
+    agent_api_parser = subparsers.add_parser("agent-api", help="Call agent API endpoints")
+    agent_api_parser.add_argument("agent_id", help="Agent ID (e.g., 'datum')")
+    agent_api_parser.add_argument("endpoint", help="API endpoint (e.g., '/v1/system/health')")
+    agent_api_parser.add_argument("--method", default="GET", help="HTTP method (default: GET)")
+    agent_api_parser.add_argument("--data", help="JSON data for POST/PUT requests")
+    agent_api_parser.add_argument(
+        "--config",
+        default="/etc/ciris-manager/config.yml",
+        help="Path to configuration file",
+    )
+
     # Add SDK-based CLI commands
     add_cli_commands(subparsers)
 
@@ -109,6 +121,58 @@ Examples:
             auth_parser.print_help()
             sys.exit(1)
         sys.exit(handle_auth_command(args))
+
+    # Handle agent-api subcommand
+    elif args.command == "agent-api":
+        import json
+        import httpx
+        from ciris_manager.config.settings import CIRISManagerConfig
+        from ciris_manager.agent_registry import AgentRegistry
+        from ciris_manager.agent_auth import get_agent_auth
+
+        # Load config and registry
+        config = CIRISManagerConfig.from_file(args.config)
+        metadata_path = Path(config.manager.agent_directory) / "metadata.json"
+        registry = AgentRegistry(metadata_path)
+
+        # Get agent
+        agent = registry.get_agent(args.agent_id)
+        if not agent:
+            print(f"Error: Agent '{args.agent_id}' not found")
+            sys.exit(1)
+
+        # Get auth headers
+        try:
+            auth = get_agent_auth(registry)
+            headers = auth.get_auth_headers(args.agent_id)
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+        # Make API call
+        url = f"http://localhost:{agent.port}{args.endpoint}"
+
+        try:
+            if args.method.upper() == "GET":
+                response = httpx.get(url, headers=headers)
+            elif args.method.upper() == "POST":
+                data = json.loads(args.data) if args.data else {}
+                response = httpx.post(url, json=data, headers=headers)
+            else:
+                print(f"Error: Unsupported method {args.method}")
+                sys.exit(1)
+
+            # Print response
+            if response.status_code == 200:
+                print(json.dumps(response.json(), indent=2))
+            else:
+                print(f"Error: {response.status_code}")
+                print(response.text)
+                sys.exit(1)
+
+        except Exception as e:
+            print(f"Error calling agent API: {e}")
+            sys.exit(1)
 
     # Handle agent subcommand
     elif args.command == "agent":
