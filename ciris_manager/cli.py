@@ -174,6 +174,8 @@ Examples:
             print(f"Error calling agent API: {e}")
             sys.exit(1)
 
+        sys.exit(0)  # Exit after handling agent-api command
+
     # Handle agent subcommand
     elif args.command == "agent":
         if not args.agent_command:
