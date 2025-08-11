@@ -1801,6 +1801,114 @@ function renderDashboard() {
         statusGrid.appendChild(card);
     });
     
+    // Render Resource Usage Chart
+    const resourceChart = document.getElementById('resource-chart');
+    if (resourceChart) {
+        resourceChart.innerHTML = '';
+        dashboardData.agents.forEach(agent => {
+            if (agent.resources) {
+                const cpuPercent = agent.resources.cpu?.percent || 0;
+                const memPercent = agent.resources.memory?.percent || 0;
+                const memMB = agent.resources.memory?.current || 0;
+                
+                const resourceBar = document.createElement('div');
+                resourceBar.className = 'mb-3';
+                resourceBar.innerHTML = `
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="font-medium">${agent.name || agent.agent_id}</span>
+                        <span class="text-gray-600">CPU: ${cpuPercent}% | Mem: ${memPercent}% (${memMB}MB)</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-600 h-2 rounded-full" style="width: ${cpuPercent}%"></div>
+                    </div>
+                `;
+                resourceChart.appendChild(resourceBar);
+            }
+        });
+    }
+    
+    // Render Adapter Status (Circuit Breakers)
+    const adapterStatus = document.getElementById('adapter-status');
+    if (adapterStatus) {
+        adapterStatus.innerHTML = '';
+        dashboardData.agents.forEach(agent => {
+            if (agent.circuit_breakers && agent.circuit_breakers.llm_providers) {
+                const agentSection = document.createElement('div');
+                agentSection.className = 'mb-4';
+                agentSection.innerHTML = `
+                    <h4 class="font-medium text-sm mb-2">${agent.name || agent.agent_id}</h4>
+                    <div class="space-y-1">
+                        ${agent.circuit_breakers.llm_providers.map(provider => `
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="flex items-center">
+                                    <span class="w-2 h-2 rounded-full mr-2 ${
+                                        provider.state === 'closed' ? 'bg-green-500' : 
+                                        provider.state === 'open' ? 'bg-red-500' : 'bg-yellow-500'
+                                    }"></span>
+                                    <span>${provider.name.replace('OpenAICompatibleClient_', 'LLM-')}</span>
+                                </span>
+                                <span class="text-gray-600">${provider.priority} | ${provider.state}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                adapterStatus.appendChild(agentSection);
+            }
+        });
+        
+        if (adapterStatus.innerHTML === '') {
+            adapterStatus.innerHTML = '<p class="text-gray-500 text-sm">No adapter status available</p>';
+        }
+    }
+    
+    // Render Recent Incidents
+    const incidentsTimeline = document.getElementById('incidents-timeline');
+    if (incidentsTimeline) {
+        incidentsTimeline.innerHTML = '';
+        const allIncidents = [];
+        
+        dashboardData.agents.forEach(agent => {
+            if (agent.incidents && Array.isArray(agent.incidents)) {
+                agent.incidents.forEach(incident => {
+                    allIncidents.push({
+                        ...incident,
+                        agent_name: agent.name || agent.agent_id
+                    });
+                });
+            }
+        });
+        
+        // Sort by timestamp (most recent first)
+        allIncidents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Display up to 10 most recent incidents
+        allIncidents.slice(0, 10).forEach(incident => {
+            const incidentDiv = document.createElement('div');
+            incidentDiv.className = `p-2 rounded border-l-4 ${
+                incident.severity === 'critical' ? 'border-red-500 bg-red-50' :
+                incident.severity === 'high' ? 'border-orange-500 bg-orange-50' :
+                incident.severity === 'medium' ? 'border-yellow-500 bg-yellow-50' :
+                'border-blue-500 bg-blue-50'
+            }`;
+            
+            const time = new Date(incident.timestamp).toLocaleString();
+            incidentDiv.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="text-sm font-medium">${incident.agent_name}</div>
+                        <div class="text-xs text-gray-600">${incident.message || incident.description}</div>
+                    </div>
+                    <div class="text-xs text-gray-500 ml-2">${time}</div>
+                </div>
+            `;
+            incidentsTimeline.appendChild(incidentDiv);
+        });
+        
+        if (allIncidents.length === 0) {
+            incidentsTimeline.innerHTML = '<p class="text-gray-500 text-sm">No recent incidents</p>';
+        }
+    }
+    
     // Update last refresh time
     const lastUpdate = document.getElementById('last-update');
     if (lastUpdate) {
