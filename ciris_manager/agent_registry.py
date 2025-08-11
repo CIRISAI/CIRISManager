@@ -290,19 +290,21 @@ class AgentRegistry:
                     "to_version": version,
                     "timestamp": now,
                     "initial_state": cognitive_state,
-                    "reached_work": False,
+                    "reached_work": cognitive_state in ["WORK", "work"],
                 }
+                if cognitive_state in ["WORK", "work"]:
+                    transition["work_state_at"] = now
                 agent.version_transitions.append(transition)
                 agent.current_version = version
 
-            # Track when agent reaches WORK state
-            if cognitive_state == "WORK":
+            # Track when agent reaches WORK state (handle lowercase from API)
+            if cognitive_state in ["WORK", "work"]:
                 agent.last_work_state_at = now
 
                 # Mark if this is the first WORK state after version change
                 if agent.version_transitions:
                     last_transition = agent.version_transitions[-1]
-                    if not last_transition.get("reached_work", True):
+                    if not last_transition.get("reached_work", False):
                         last_transition["reached_work"] = True
                         last_transition["work_state_at"] = now
 
