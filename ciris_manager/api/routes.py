@@ -1176,13 +1176,17 @@ def create_routes(manager: Any) -> APIRouter:
             try:
                 auth = get_agent_auth(manager.agent_registry)
                 headers = auth.get_auth_headers(agent.agent_id)
+                logger.debug(f"Got auth headers for {agent.agent_id}")
             except ValueError as e:
                 # No service token available for this agent
                 agent_data["error"] = f"Authentication not available: {e}"
-                logger.warning(f"No service token for {agent.agent_id}: {e}")
+                logger.error(f"No service token for {agent.agent_id}: {e}")
                 return agent_data
 
             try:
+                logger.debug(
+                    f"Fetching dashboard data for {agent.agent_id} at port {agent.api_port}"
+                )
                 async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
                     # Fetch multiple endpoints in parallel
                     tasks = []
@@ -1199,6 +1203,15 @@ def create_routes(manager: Any) -> APIRouter:
                     tasks.append(client.get(f"{api_url}/v1/agent/status"))
 
                     responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    logger.debug(f"Got {len(responses)} responses for {agent.agent_id}")
+                    for i, resp in enumerate(responses):
+                        if isinstance(resp, Exception):
+                            logger.error(f"Response {i} for {agent.agent_id} is exception: {resp}")
+                        elif hasattr(resp, "status_code"):
+                            logger.debug(
+                                f"Response {i} for {agent.agent_id}: status={resp.status_code}"
+                            )
 
                     # Process health
                     if not isinstance(responses[0], Exception) and responses[0].status_code == 200:
@@ -1277,11 +1290,14 @@ def create_routes(manager: Any) -> APIRouter:
                                     "warnings": resources.get("warnings", []),
                                 }
                             else:
-                                logger.warning(
-                                    f"Unexpected current_usage type for {agent.agent_id}: {type(current)}"
+                                logger.error(
+                                    f"Unexpected current_usage type for {agent.agent_id}: {type(current)}, value: {current}"
                                 )
                         except Exception as e:
-                            logger.warning(f"Failed to parse resources for {agent.agent_id}: {e}")
+                            logger.error(
+                                f"Failed to parse resources for {agent.agent_id}: {e}",
+                                exc_info=True,
+                            )
 
                     # Process adapters
                     if not isinstance(responses[3], Exception) and responses[3].status_code == 200:
@@ -1291,7 +1307,9 @@ def create_routes(manager: Any) -> APIRouter:
                             adapters = adapters_response.get("data", adapters_response)
                             agent_data["adapters"] = adapters.get("adapters", [])
                         except Exception as e:
-                            logger.warning(f"Failed to parse adapters for {agent.agent_id}: {e}")
+                            logger.error(
+                                f"Failed to parse adapters for {agent.agent_id}: {e}", exc_info=True
+                            )
 
                     # Process agent status (channels)
                     if not isinstance(responses[4], Exception) and responses[4].status_code == 200:
@@ -1308,11 +1326,15 @@ def create_routes(manager: Any) -> APIRouter:
                             # Get service health from status
                             agent_data["services"] = status.get("services", [])
                         except Exception as e:
-                            logger.warning(f"Failed to parse status for {agent.agent_id}: {e}")
+                            logger.error(
+                                f"Failed to parse status for {agent.agent_id}: {e}", exc_info=True
+                            )
 
             except Exception as e:
                 agent_data["error"] = str(e)
-                logger.warning(f"Failed to fetch dashboard data for {agent.agent_id}: {e}")
+                logger.error(
+                    f"Failed to fetch dashboard data for {agent.agent_id}: {e}", exc_info=True
+                )
 
             return agent_data
 
