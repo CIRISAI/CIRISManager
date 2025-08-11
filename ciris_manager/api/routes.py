@@ -1164,7 +1164,8 @@ def create_routes(manager: Any) -> APIRouter:
                 "resources": None,
                 "adapters": [],
                 "channels": [],
-                "services": [],
+                "services_active": 0,
+                "multi_provider_services": {},
                 "incidents": [],
                 "circuit_breakers": None,
                 "error": None,
@@ -1265,7 +1266,9 @@ def create_routes(manager: Any) -> APIRouter:
                         telemetry = telemetry_response.get("data", telemetry_response)
                         agent_data["cost"] = {
                             "last_hour_cents": telemetry.get("cost_last_hour_cents", 0),
-                            "last_24_hours_cents": telemetry.get("cost_last_24_hours_cents", 0),
+                            "last_24_hours_cents": telemetry.get(
+                                "cost_24h_cents", 0
+                            ),  # Fixed field name
                             "budget_cents": telemetry.get("budget_cents"),
                             "projected_daily_cents": telemetry.get("projected_daily_cents"),
                         }
@@ -1275,7 +1278,8 @@ def create_routes(manager: Any) -> APIRouter:
                             "cost_last_hour_cents", 0
                         )
                         dashboard_data["summary"]["total_cost_24h"] += telemetry.get(
-                            "cost_last_24_hours_cents", 0
+                            "cost_24h_cents",
+                            0,  # Fixed field name
                         )
 
                         # Get recent incidents
@@ -1363,8 +1367,11 @@ def create_routes(manager: Any) -> APIRouter:
                             messages = status.get("statistics", {}).get("total_messages", 0)
                             dashboard_data["summary"]["total_messages"] += messages
 
-                            # Get service health from status
-                            agent_data["services"] = status.get("services", [])
+                            # Get service count and provider info from status
+                            agent_data["services_active"] = status.get("services_active", 0)
+                            agent_data["multi_provider_services"] = status.get(
+                                "multi_provider_services", {}
+                            )
                         except Exception as e:
                             logger.error(
                                 f"Failed to parse status for {agent.agent_id}: {e}", exc_info=True
@@ -1421,9 +1428,9 @@ def create_routes(manager: Any) -> APIRouter:
                                     service_type = (
                                         service_name.split(".")[-1].replace("Service", "").lower()
                                     )
-                                    circuit_breakers["critical_services"][service_type] = (
-                                        breaker_state
-                                    )
+                                    circuit_breakers["critical_services"][
+                                        service_type
+                                    ] = breaker_state
 
                                 # Track all open circuit breakers
                                 if breaker_state in ["open", "half_open"]:

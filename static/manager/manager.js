@@ -1839,9 +1839,8 @@ function createAgentStatusCard(agent) {
     let resourcesHtml = '';
     if (agent.resources) {
         const cpu = agent.resources.cpu?.current || 0;
-        const memory = agent.resources.memory?.current || 0;
-        const memoryLimit = agent.resources.memory?.limit || 1;
-        const memoryPercent = (memory / memoryLimit * 100).toFixed(0);
+        const memoryPercent = agent.resources.memory?.percent || 0;
+        const memoryMB = agent.resources.memory?.current || 0;
         
         resourcesHtml = `
             <div class="mt-2 space-y-1">
@@ -1857,7 +1856,7 @@ function createAgentStatusCard(agent) {
                     <div class="flex-1 bg-gray-200 rounded-full h-2">
                         <div class="bg-purple-500 h-2 rounded-full" style="width: ${memoryPercent}%"></div>
                     </div>
-                    <span class="text-xs text-gray-600 ml-2">${memoryPercent}%</span>
+                    <span class="text-xs text-gray-600 ml-2">${memoryPercent}% (${memoryMB}MB)</span>
                 </div>
             </div>
         `;
