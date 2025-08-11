@@ -1170,8 +1170,14 @@ def create_routes(manager: Any) -> APIRouter:
             # Use the agent's API port
             api_url = f"http://localhost:{agent.api_port}"
 
+            # Get auth headers for this agent
+            from ciris_manager.agent_auth import get_agent_auth
+
+            auth = get_agent_auth()
+            headers = auth.get_auth_headers(agent.agent_id)
+
             try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
+                async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
                     # Fetch multiple endpoints in parallel
                     tasks = []
 
@@ -1190,11 +1196,13 @@ def create_routes(manager: Any) -> APIRouter:
 
                     # Process health
                     if not isinstance(responses[0], Exception) and responses[0].status_code == 200:
-                        health = responses[0].json()
+                        health_response = responses[0].json()
+                        # Handle wrapped response format
+                        health = health_response.get("data", health_response)
                         agent_data["health"] = {
                             "status": health.get("status", "unknown"),
                             "version": health.get("version", "unknown"),
-                            "uptime": health.get("uptime", 0),
+                            "uptime": health.get("uptime_seconds", 0),
                             "cognitive_state": health.get("cognitive_state"),
                             "initialization_complete": health.get("initialization_complete", False),
                         }
