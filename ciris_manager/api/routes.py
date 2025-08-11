@@ -1117,6 +1117,162 @@ def create_routes(manager: Any) -> APIRouter:
         else:
             raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
+    @router.get("/dashboard/agents", response_model=None)
+    async def get_agents_dashboard(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
+        """
+        Get aggregated dashboard data for all agents.
+
+        Queries each agent's API endpoints server-side and returns
+        combined dashboard information without exposing manager token.
+        """
+        import httpx
+        import asyncio
+        from datetime import datetime, timezone
+
+        # Get all agents
+        from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+        discovery = DockerAgentDiscovery(manager.agent_registry)
+        agents = discovery.discover_agents()
+
+        dashboard_data = {
+            "agents": [],
+            "summary": {
+                "total": len(agents),
+                "healthy": 0,
+                "degraded": 0,
+                "critical": 0,
+                "initializing": 0,
+                "total_cost_1h": 0,
+                "total_cost_24h": 0,
+                "total_incidents": 0,
+                "total_messages": 0,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        async def fetch_agent_data(agent):
+            """Fetch dashboard data for a single agent."""
+            agent_data = {
+                "agent_id": agent.agent_id,
+                "agent_name": agent.agent_name,
+                "status": agent.status,
+                "health": None,
+                "cost": None,
+                "resources": None,
+                "adapters": [],
+                "channels": [],
+                "services": [],
+                "incidents": [],
+                "error": None,
+            }
+
+            # Use the agent's API port
+            api_url = f"http://localhost:{agent.api_port}"
+
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    # Fetch multiple endpoints in parallel
+                    tasks = []
+
+                    # Health endpoint
+                    tasks.append(client.get(f"{api_url}/v1/system/health"))
+                    # Telemetry overview (costs and incidents)
+                    tasks.append(client.get(f"{api_url}/v1/telemetry/overview"))
+                    # System resources
+                    tasks.append(client.get(f"{api_url}/v1/system/resources"))
+                    # Adapters
+                    tasks.append(client.get(f"{api_url}/v1/system/adapters"))
+                    # Agent status (for channels)
+                    tasks.append(client.get(f"{api_url}/v1/agent/status"))
+
+                    responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    # Process health
+                    if not isinstance(responses[0], Exception) and responses[0].status_code == 200:
+                        health = responses[0].json()
+                        agent_data["health"] = {
+                            "status": health.get("status", "unknown"),
+                            "version": health.get("version", "unknown"),
+                            "uptime": health.get("uptime", 0),
+                            "cognitive_state": health.get("cognitive_state"),
+                            "initialization_complete": health.get("initialization_complete", False),
+                        }
+
+                        # Update summary counts
+                        status = health.get("status", "unknown")
+                        if status == "healthy":
+                            dashboard_data["summary"]["healthy"] += 1
+                        elif status == "degraded":
+                            dashboard_data["summary"]["degraded"] += 1
+                        elif status == "critical":
+                            dashboard_data["summary"]["critical"] += 1
+                        elif status == "initializing":
+                            dashboard_data["summary"]["initializing"] += 1
+
+                    # Process telemetry (costs and incidents)
+                    if not isinstance(responses[1], Exception) and responses[1].status_code == 200:
+                        telemetry = responses[1].json()
+                        agent_data["cost"] = {
+                            "last_hour_cents": telemetry.get("cost_last_hour_cents", 0),
+                            "last_24_hours_cents": telemetry.get("cost_last_24_hours_cents", 0),
+                            "budget_cents": telemetry.get("budget_cents"),
+                            "projected_daily_cents": telemetry.get("projected_daily_cents"),
+                        }
+
+                        # Add to totals
+                        dashboard_data["summary"]["total_cost_1h"] += telemetry.get(
+                            "cost_last_hour_cents", 0
+                        )
+                        dashboard_data["summary"]["total_cost_24h"] += telemetry.get(
+                            "cost_last_24_hours_cents", 0
+                        )
+
+                        # Get recent incidents
+                        incidents = telemetry.get("recent_incidents", [])
+                        agent_data["incidents"] = incidents[:5]  # Last 5 incidents
+                        dashboard_data["summary"]["total_incidents"] += len(incidents)
+
+                    # Process resources
+                    if not isinstance(responses[2], Exception) and responses[2].status_code == 200:
+                        resources = responses[2].json()
+                        agent_data["resources"] = {
+                            "cpu": resources.get("cpu", {}),
+                            "memory": resources.get("memory", {}),
+                            "disk": resources.get("disk", {}),
+                            "health_status": resources.get("health_status", "unknown"),
+                            "warnings": resources.get("warnings", []),
+                        }
+
+                    # Process adapters
+                    if not isinstance(responses[3], Exception) and responses[3].status_code == 200:
+                        adapters = responses[3].json()
+                        agent_data["adapters"] = adapters.get("adapters", [])
+
+                    # Process agent status (channels)
+                    if not isinstance(responses[4], Exception) and responses[4].status_code == 200:
+                        status = responses[4].json()
+                        agent_data["channels"] = status.get("channels", [])
+
+                        # Get message count
+                        messages = status.get("statistics", {}).get("total_messages", 0)
+                        dashboard_data["summary"]["total_messages"] += messages
+
+                        # Get service health from status
+                        agent_data["services"] = status.get("services", [])
+
+            except Exception as e:
+                agent_data["error"] = str(e)
+                logger.warning(f"Failed to fetch dashboard data for {agent.agent_id}: {e}")
+
+            return agent_data
+
+        # Fetch data for all agents in parallel
+        agent_tasks = [fetch_agent_data(agent) for agent in agents]
+        dashboard_data["agents"] = await asyncio.gather(*agent_tasks)
+
+        return dashboard_data
+
     @router.get("/versions/adoption")
     async def get_version_adoption(
         _user: Dict[str, str] = Depends(get_current_user),

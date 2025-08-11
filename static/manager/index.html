@@ -82,6 +82,10 @@
                         <button onclick="switchTab('canary')" id="canary-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
                             Canary Groups
                         </button>
+                        <button onclick="switchTab('dashboard')" id="dashboard-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-chart-line mr-1"></i>
+                            Agent Dashboard
+                        </button>
                     </nav>
                 </div>
 
@@ -223,6 +227,84 @@
                                 <div id="deployment-history" class="space-y-2">
                                     <!-- Deployment history will be populated here -->
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Dashboard Tab -->
+                    <div id="dashboard-content" class="hidden">
+                        <!-- Summary Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div class="bg-blue-50 p-4 rounded-lg">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-blue-600 font-medium">Total Agents</p>
+                                        <p class="text-2xl font-bold text-blue-900" id="dash-total-agents">0</p>
+                                    </div>
+                                    <i class="fas fa-server text-blue-500 text-2xl"></i>
+                                </div>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded-lg">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-green-600 font-medium">Healthy</p>
+                                        <p class="text-2xl font-bold text-green-900" id="dash-healthy-agents">0</p>
+                                    </div>
+                                    <i class="fas fa-check-circle text-green-500 text-2xl"></i>
+                                </div>
+                            </div>
+                            <div class="bg-yellow-50 p-4 rounded-lg">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-yellow-600 font-medium">Total Cost (24h)</p>
+                                        <p class="text-2xl font-bold text-yellow-900" id="dash-total-cost">$0.00</p>
+                                    </div>
+                                    <i class="fas fa-dollar-sign text-yellow-500 text-2xl"></i>
+                                </div>
+                            </div>
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-purple-600 font-medium">Active Channels</p>
+                                        <p class="text-2xl font-bold text-purple-900" id="dash-total-channels">0</p>
+                                    </div>
+                                    <i class="fas fa-comments text-purple-500 text-2xl"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Agent Status Grid -->
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-4">Agent Status Overview</h3>
+                            <div id="agent-status-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <!-- Agent status cards will be populated here -->
+                            </div>
+                        </div>
+
+                        <!-- Resource Usage Chart -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-white rounded-lg shadow p-4">
+                                <h3 class="text-lg font-semibold mb-4">Resource Usage by Agent</h3>
+                                <div id="resource-chart" class="space-y-3">
+                                    <!-- Resource bars will be populated here -->
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-lg shadow p-4">
+                                <h3 class="text-lg font-semibold mb-4">Adapter Status</h3>
+                                <div id="adapter-status" class="space-y-3">
+                                    <!-- Adapter status will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Incidents -->
+                        <div class="bg-white rounded-lg shadow p-4">
+                            <h3 class="text-lg font-semibold mb-4">
+                                <i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>
+                                Recent Incidents (All Agents)
+                            </h3>
+                            <div id="incidents-timeline" class="space-y-2 max-h-64 overflow-y-auto">
+                                <!-- Incidents will be populated here -->
                             </div>
                         </div>
                     </div>

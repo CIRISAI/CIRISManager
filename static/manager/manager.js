@@ -234,6 +234,14 @@ function switchTab(tab) {
     if (tab === 'canary') {
         fetchCanaryData();
     }
+    
+    // Fetch dashboard data when switching to dashboard tab
+    if (tab === 'dashboard') {
+        updateDashboard();
+        startDashboardRefresh();
+    } else {
+        stopDashboardRefresh();
+    }
 }
 
 // Refresh data
@@ -1728,5 +1736,247 @@ async function saveAgentSettings(event) {
     } catch (error) {
         console.error('Failed to save agent settings:', error);
         alert('Failed to save agent settings: ' + error.message);
+    }
+}
+
+// Dashboard Functions
+let dashboardData = null;
+let dashboardUpdateInterval = null;
+
+async function updateDashboard() {
+    try {
+        const response = await fetch('/manager/v1/dashboard/agents', {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch dashboard data');
+        }
+        
+        dashboardData = await response.json();
+        renderDashboard();
+    } catch (error) {
+        console.error('Failed to update dashboard:', error);
+        document.getElementById('dashboard-content').innerHTML = `
+            <div class="text-red-600 text-center p-4">
+                Failed to load dashboard data: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function renderDashboard() {
+    if (!dashboardData) return;
+    
+    const summary = dashboardData.summary;
+    
+    // Update summary cards (using existing dashboard IDs)
+    const totalAgentsElem = document.getElementById('dash-total-agents');
+    const healthyAgentsElem = document.getElementById('dash-healthy-agents');
+    const totalCostElem = document.getElementById('dash-total-cost');
+    const totalChannelsElem = document.getElementById('dash-total-channels');
+    
+    if (totalAgentsElem) totalAgentsElem.textContent = summary.total;
+    if (healthyAgentsElem) healthyAgentsElem.textContent = summary.healthy;
+    if (totalCostElem) totalCostElem.textContent = `$${(summary.total_cost_24h / 100).toFixed(2)}`;
+    
+    // Count total channels across all agents
+    let totalChannels = 0;
+    dashboardData.agents.forEach(agent => {
+        if (agent.channels) {
+            totalChannels += agent.channels.length;
+        }
+    });
+    if (totalChannelsElem) totalChannelsElem.textContent = totalChannels;
+    
+    // Render agent status grid
+    const statusGrid = document.getElementById('agent-status-grid');
+    statusGrid.innerHTML = '';
+    
+    dashboardData.agents.forEach(agent => {
+        const card = createAgentStatusCard(agent);
+        statusGrid.appendChild(card);
+    });
+    
+    // Update last refresh time
+    const lastUpdate = document.getElementById('last-update');
+    if (lastUpdate) {
+        lastUpdate.textContent = `Last updated: ${new Date(dashboardData.timestamp).toLocaleTimeString()}`;
+    }
+}
+
+function createAgentStatusCard(agent) {
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-lg p-4 border border-gray-200 shadow-sm';
+    
+    const healthStatus = agent.health?.status || 'unknown';
+    const healthColor = getHealthColorLight(healthStatus);
+    
+    let adaptersHtml = '';
+    if (agent.adapters && agent.adapters.length > 0) {
+        adaptersHtml = agent.adapters.map(adapter => `
+            <span class="inline-block px-2 py-1 text-xs rounded ${adapter.isRunning ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                ${adapter.adapterType}
+            </span>
+        `).join(' ');
+    }
+    
+    let channelsHtml = '';
+    if (agent.channels && agent.channels.length > 0) {
+        channelsHtml = `<div class="text-xs text-gray-600">Channels: ${agent.channels.length}</div>`;
+    }
+    
+    let costHtml = '';
+    if (agent.cost) {
+        costHtml = `
+            <div class="text-xs text-gray-600">
+                1h: $${(agent.cost.last_hour_cents / 100).toFixed(2)} | 
+                24h: $${(agent.cost.last_24_hours_cents / 100).toFixed(2)}
+            </div>
+        `;
+    }
+    
+    let resourcesHtml = '';
+    if (agent.resources) {
+        const cpu = agent.resources.cpu?.current || 0;
+        const memory = agent.resources.memory?.current || 0;
+        const memoryLimit = agent.resources.memory?.limit || 1;
+        const memoryPercent = (memory / memoryLimit * 100).toFixed(0);
+        
+        resourcesHtml = `
+            <div class="mt-2 space-y-1">
+                <div class="flex items-center">
+                    <span class="text-xs text-gray-600 w-12">CPU:</span>
+                    <div class="flex-1 bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-500 h-2 rounded-full" style="width: ${cpu}%"></div>
+                    </div>
+                    <span class="text-xs text-gray-600 ml-2">${cpu}%</span>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-xs text-gray-600 w-12">Mem:</span>
+                    <div class="flex-1 bg-gray-200 rounded-full h-2">
+                        <div class="bg-purple-500 h-2 rounded-full" style="width: ${memoryPercent}%"></div>
+                    </div>
+                    <span class="text-xs text-gray-600 ml-2">${memoryPercent}%</span>
+                </div>
+            </div>
+        `;
+    }
+    
+    let incidentsHtml = '';
+    if (agent.incidents && agent.incidents.length > 0) {
+        const latestIncident = agent.incidents[0];
+        const incidentColor = getIncidentColorLight(latestIncident.severity);
+        incidentsHtml = `
+            <div class="mt-2 p-2 rounded ${incidentColor} text-xs">
+                <i class="fas fa-exclamation-triangle mr-1"></i>
+                ${latestIncident.description}
+            </div>
+        `;
+    }
+    
+    card.innerHTML = `
+        <div class="flex justify-between items-start mb-2">
+            <h3 class="font-semibold text-gray-900">${agent.agent_name}</h3>
+            <span class="px-2 py-1 text-xs rounded ${healthColor}">
+                ${healthStatus}
+            </span>
+        </div>
+        
+        ${adaptersHtml ? `<div class="mb-2">${adaptersHtml}</div>` : ''}
+        ${channelsHtml}
+        ${costHtml}
+        ${resourcesHtml}
+        ${incidentsHtml}
+        
+        ${agent.error ? `<div class="text-red-600 text-xs mt-2">Error: ${agent.error}</div>` : ''}
+    `;
+    
+    return card;
+}
+
+function getHealthColor(status) {
+    switch (status) {
+        case 'healthy':
+            return 'bg-green-900 text-green-200';
+        case 'degraded':
+            return 'bg-yellow-900 text-yellow-200';
+        case 'critical':
+            return 'bg-red-900 text-red-200';
+        case 'initializing':
+            return 'bg-blue-900 text-blue-200';
+        default:
+            return 'bg-gray-700 text-gray-300';
+    }
+}
+
+function getHealthColorLight(status) {
+    switch (status) {
+        case 'healthy':
+            return 'bg-green-100 text-green-700';
+        case 'degraded':
+            return 'bg-yellow-100 text-yellow-700';
+        case 'critical':
+            return 'bg-red-100 text-red-700';
+        case 'initializing':
+            return 'bg-blue-100 text-blue-700';
+        default:
+            return 'bg-gray-100 text-gray-700';
+    }
+}
+
+function getIncidentColor(severity) {
+    switch (severity) {
+        case 'critical':
+            return 'bg-red-900 text-red-200';
+        case 'high':
+            return 'bg-orange-900 text-orange-200';
+        case 'medium':
+            return 'bg-yellow-900 text-yellow-200';
+        case 'low':
+            return 'bg-blue-900 text-blue-200';
+        default:
+            return 'bg-gray-700 text-gray-300';
+    }
+}
+
+function getIncidentColorLight(severity) {
+    switch (severity) {
+        case 'critical':
+            return 'bg-red-100 text-red-700';
+        case 'high':
+            return 'bg-orange-100 text-orange-700';
+        case 'medium':
+            return 'bg-yellow-100 text-yellow-700';
+        case 'low':
+            return 'bg-blue-100 text-blue-700';
+        default:
+            return 'bg-gray-100 text-gray-700';
+    }
+}
+
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+
+// Auto-refresh dashboard every 30 seconds when on dashboard tab
+function startDashboardRefresh() {
+    stopDashboardRefresh();
+    dashboardUpdateInterval = setInterval(() => {
+        if (document.getElementById('dashboard-tab').classList.contains('border-blue-500')) {
+            updateDashboard();
+        }
+    }, 30000);
+}
+
+function stopDashboardRefresh() {
+    if (dashboardUpdateInterval) {
+        clearInterval(dashboardUpdateInterval);
+        dashboardUpdateInterval = null;
     }
 }
