@@ -1204,6 +1204,14 @@ def create_routes(manager: Any) -> APIRouter:
 
                     responses = await asyncio.gather(*tasks, return_exceptions=True)
 
+                    # Validate responses is what we expect
+                    if not isinstance(responses, (list, tuple)):
+                        raise TypeError(
+                            f"Expected list/tuple of responses, got {type(responses)}: {responses}"
+                        )
+                    if len(responses) != 5:
+                        raise ValueError(f"Expected 5 responses, got {len(responses)}")
+
                     logger.debug(f"Got {len(responses)} responses for {agent.agent_id}")
                     for i, resp in enumerate(responses):
                         if isinstance(resp, Exception):
@@ -1213,8 +1221,12 @@ def create_routes(manager: Any) -> APIRouter:
                                 f"Response {i} for {agent.agent_id}: status={resp.status_code}"
                             )
 
-                    # Process health
-                    if not isinstance(responses[0], Exception) and responses[0].status_code == 200:
+                    # Process health (index 0)
+                    if (
+                        not isinstance(responses[0], Exception)
+                        and hasattr(responses[0], "status_code")
+                        and responses[0].status_code == 200
+                    ):
                         health_response = responses[0].json()
                         # Handle wrapped response format
                         health = health_response.get("data", health_response)
@@ -1237,8 +1249,12 @@ def create_routes(manager: Any) -> APIRouter:
                         elif status == "initializing":
                             dashboard_data["summary"]["initializing"] += 1
 
-                    # Process telemetry (costs and incidents)
-                    if not isinstance(responses[1], Exception) and responses[1].status_code == 200:
+                    # Process telemetry (costs and incidents) (index 1)
+                    if (
+                        not isinstance(responses[1], Exception)
+                        and hasattr(responses[1], "status_code")
+                        and responses[1].status_code == 200
+                    ):
                         telemetry_response = responses[1].json()
                         # Handle wrapped response format
                         telemetry = telemetry_response.get("data", telemetry_response)
@@ -1262,8 +1278,12 @@ def create_routes(manager: Any) -> APIRouter:
                         agent_data["incidents"] = incidents[:5]  # Last 5 incidents
                         dashboard_data["summary"]["total_incidents"] += len(incidents)
 
-                    # Process resources
-                    if not isinstance(responses[2], Exception) and responses[2].status_code == 200:
+                    # Process resources (index 2)
+                    if (
+                        not isinstance(responses[2], Exception)
+                        and hasattr(responses[2], "status_code")
+                        and responses[2].status_code == 200
+                    ):
                         try:
                             resources_response = responses[2].json()
                             # Handle wrapped response format
@@ -1299,8 +1319,12 @@ def create_routes(manager: Any) -> APIRouter:
                                 exc_info=True,
                             )
 
-                    # Process adapters
-                    if not isinstance(responses[3], Exception) and responses[3].status_code == 200:
+                    # Process adapters (index 3)
+                    if (
+                        not isinstance(responses[3], Exception)
+                        and hasattr(responses[3], "status_code")
+                        and responses[3].status_code == 200
+                    ):
                         try:
                             adapters_response = responses[3].json()
                             # Handle wrapped response format
@@ -1311,8 +1335,12 @@ def create_routes(manager: Any) -> APIRouter:
                                 f"Failed to parse adapters for {agent.agent_id}: {e}", exc_info=True
                             )
 
-                    # Process agent status (channels)
-                    if not isinstance(responses[4], Exception) and responses[4].status_code == 200:
+                    # Process agent status (channels) (index 4)
+                    if (
+                        not isinstance(responses[4], Exception)
+                        and hasattr(responses[4], "status_code")
+                        and responses[4].status_code == 200
+                    ):
                         try:
                             status_response = responses[4].json()
                             # Handle wrapped response format
