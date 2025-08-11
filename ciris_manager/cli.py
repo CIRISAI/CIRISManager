@@ -132,7 +132,7 @@ Examples:
 
         # Load config and registry
         config = CIRISManagerConfig.from_file(args.config)
-        metadata_path = Path(config.manager.agent_directory) / "metadata.json"
+        metadata_path = Path(config.manager.agents_directory) / "metadata.json"
         registry = AgentRegistry(metadata_path)
 
         # Get agent
