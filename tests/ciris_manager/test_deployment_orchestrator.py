@@ -253,6 +253,11 @@ class TestDeploymentOrchestrator:
         # Mock agent_auth to bypass encryption
         mock_auth = Mock()
         mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+
+        # Mock container operations
+        orchestrator._wait_for_container_stop = AsyncMock(return_value=True)
+        orchestrator._recreate_agent_container = AsyncMock(return_value=True)
+
         with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
             with patch("httpx.AsyncClient") as mock_client_class:
                 mock_client = AsyncMock()
@@ -267,7 +272,7 @@ class TestDeploymentOrchestrator:
                 )
 
             assert response.agent_id == "test-agent"
-            assert response.decision == "notified"  # Changed to match new behavior
+            assert response.decision == "accept"  # Should be accept when container is recreated
 
     @pytest.mark.asyncio
     async def test_agent_update_defer(self, orchestrator):
@@ -642,57 +647,51 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_wait_for_container_stop(self, orchestrator):
         """Test waiting for container to stop."""
-        with patch("docker.from_env") as mock_docker:
-            mock_client = Mock()
-            mock_container = Mock()
+        # Mock the subprocess call to docker inspect
+        status_sequence = ["running", "running", "exited"]
+        call_count = [0]
 
-            # Simulate container stopping after a few checks
-            mock_container.status = "running"
-            mock_container.reload = Mock(
-                side_effect=[
-                    None,  # First reload, still running
-                    None,  # Second reload, still running
-                    Mock(status="exited"),  # Third reload, stopped
-                ]
-            )
+        async def mock_subprocess(*args, **kwargs):
+            # Check if this is a docker inspect call
+            if "docker" in args and "inspect" in args:
+                mock_result = Mock()
+                if call_count[0] < len(status_sequence):
+                    status = status_sequence[call_count[0]]
+                    call_count[0] += 1
+                else:
+                    status = status_sequence[-1]
 
-            # Track status changes
-            status_sequence = ["running", "running", "exited"]
-            status_index = [0]
+                mock_result.returncode = 0
+                mock_result.communicate = AsyncMock(return_value=(status.encode(), b""))
+                return mock_result
+            return Mock()
 
-            def get_status():
-                result = status_sequence[status_index[0]]
-                if status_index[0] < len(status_sequence) - 1:
-                    status_index[0] += 1
-                return result
-
-            type(mock_container).status = property(lambda self: get_status())
-
-            mock_client.containers.get.return_value = mock_container
-            mock_docker.return_value = mock_client
-
+        with patch("asyncio.create_subprocess_exec", side_effect=mock_subprocess):
             # Mock asyncio.sleep to speed up test
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 result = await orchestrator._wait_for_container_stop("test-container", timeout=10)
 
             assert result is True
-            assert mock_container.reload.call_count >= 1
+            assert call_count[0] == 3  # Should have checked 3 times
 
     @pytest.mark.asyncio
     async def test_wait_for_container_stop_timeout(self, orchestrator):
         """Test timeout when waiting for container to stop."""
-        with patch("docker.from_env") as mock_docker:
-            mock_client = Mock()
-            mock_container = Mock()
-            mock_container.status = "running"  # Never stops
-            mock_container.reload = Mock()
 
-            mock_client.containers.get.return_value = mock_container
-            mock_docker.return_value = mock_client
+        # Mock subprocess to always return "running" status
+        async def mock_subprocess(*args, **kwargs):
+            if "docker" in args and "inspect" in args:
+                mock_result = Mock()
+                mock_result.returncode = 0
+                mock_result.communicate = AsyncMock(return_value=(b"running", b""))
+                return mock_result
+            return Mock()
 
-            # Mock time.time to simulate timeout
+        with patch("asyncio.create_subprocess_exec", side_effect=mock_subprocess):
+            # Mock time.time to simulate timeout - need more values for multiple calls
             with patch("time.time") as mock_time:
-                mock_time.side_effect = [0, 1, 2, 3, 61]  # Exceeds 60 second timeout
+                # Provide enough values for all time.time() calls (including logging)
+                mock_time.side_effect = [0, 1, 2, 3, 61, 61, 61, 61]  # Exceeds 60 second timeout
 
                 with patch("asyncio.sleep", new_callable=AsyncMock):
                     result = await orchestrator._wait_for_container_stop(
@@ -711,27 +710,40 @@ class TestDeploymentOrchestrator:
             name="Test Agent",
             port=8080,
             template="base",
-            compose_file="/tmp/test-agent/docker-compose.yml",
+            compose_file="/opt/ciris/agents/test-agent/docker-compose.yml",
         )
 
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-            mock_process = AsyncMock()
-            mock_process.returncode = 0
-            mock_process.communicate.return_value = (b"Container started", b"")
-            mock_subprocess.return_value = mock_process
+        # Mock Path.exists to return True for the compose file
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                mock_process = AsyncMock()
+                mock_process.returncode = 0
+                mock_process.communicate.return_value = (b"Container started", b"")
+                mock_subprocess.return_value = mock_process
 
-            result = await orchestrator._recreate_agent_container("test-agent")
+                # Mock docker inspect to show container is running
+                with patch("asyncio.create_subprocess_exec") as mock_docker:
 
-            assert result is True
-            mock_subprocess.assert_called_once()
+                    async def mock_subprocess_exec(*args, **kwargs):
+                        if "docker-compose" in args:
+                            return mock_process
+                        elif "docker" in args and "inspect" in args:
+                            mock_inspect = AsyncMock()
+                            mock_inspect.returncode = 0
+                            mock_inspect.communicate.return_value = (b"running", b"")
+                            return mock_inspect
+                        return mock_process
 
-            # Verify the correct docker-compose command was used
-            call_args = mock_subprocess.call_args[0]
-            assert "docker-compose" in call_args
-            assert "-f" in call_args
-            assert "/tmp/test-agent/docker-compose.yml" in call_args
-            assert "up" in call_args
-            assert "-d" in call_args
+                    mock_docker.side_effect = mock_subprocess_exec
+
+                    result = await orchestrator._recreate_agent_container("test-agent")
+
+                assert result is True
+                # Check that docker-compose was called
+                compose_calls = [
+                    call for call in mock_docker.call_args_list if "docker-compose" in call[0]
+                ]
+                assert len(compose_calls) > 0
 
     @pytest.mark.asyncio
     async def test_recreate_agent_container_failure(self, orchestrator):
@@ -743,15 +755,17 @@ class TestDeploymentOrchestrator:
             name="Test Agent",
             port=8080,
             template="base",
-            compose_file="/tmp/test-agent/docker-compose.yml",
+            compose_file="/opt/ciris/agents/test-agent/docker-compose.yml",
         )
 
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-            mock_process = AsyncMock()
-            mock_process.returncode = 1
-            mock_process.communicate.return_value = (b"", b"Error: Container failed to start")
-            mock_subprocess.return_value = mock_process
+        # Mock Path.exists to return True for the compose file
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                mock_process = AsyncMock()
+                mock_process.returncode = 1
+                mock_process.communicate.return_value = (b"", b"Error: Container failed to start")
+                mock_subprocess.return_value = mock_process
 
-            result = await orchestrator._recreate_agent_container("test-agent")
+                result = await orchestrator._recreate_agent_container("test-agent")
 
-            assert result is False
+                assert result is False

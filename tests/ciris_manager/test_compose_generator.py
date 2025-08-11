@@ -55,7 +55,7 @@ class TestComposeGenerator:
         assert service["image"] == "ghcr.io/cirisai/ciris-agent:latest"
         assert service["platform"] == "linux/amd64"
         assert service["ports"] == ["8081:8080"]
-        assert service["restart"] == "unless-stopped"
+        assert service["restart"] == "no"
 
         # Check environment
         env = service["environment"]
