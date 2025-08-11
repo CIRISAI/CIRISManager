@@ -539,7 +539,7 @@ class TestCIRISManager:
         # Create a temporary compose file
         compose_file = tmp_path / "docker-compose.yml"
         compose_file.write_text("version: '3.8'\n")
-        
+
         # Register test agents
         manager.agent_registry.register_agent(
             agent_id="crashed-agent",
@@ -553,11 +553,11 @@ class TestCIRISManager:
         with patch("docker.from_env") as mock_docker:
             mock_client = MagicMock()
             mock_container = MagicMock()
-            
+
             # Container has crashed (non-zero exit code)
             mock_container.status = "exited"
             mock_container.attrs = {"State": {"ExitCode": 1}}  # Non-zero = crash
-            
+
             mock_client.containers.get.return_value = mock_container
             mock_docker.return_value = mock_client
 
@@ -584,7 +584,7 @@ class TestCIRISManager:
         # Create a temporary compose file
         compose_file = tmp_path / "docker-compose.yml"
         compose_file.write_text("version: '3.8'\n")
-        
+
         # Register test agent
         manager.agent_registry.register_agent(
             agent_id="shutdown-agent",
@@ -598,11 +598,11 @@ class TestCIRISManager:
         with patch("docker.from_env") as mock_docker:
             mock_client = MagicMock()
             mock_container = MagicMock()
-            
+
             # Container exited cleanly (exit code 0)
             mock_container.status = "exited"
             mock_container.attrs = {"State": {"ExitCode": 0}}  # Zero = consensual shutdown
-            
+
             mock_client.containers.get.return_value = mock_container
             mock_docker.return_value = mock_client
 
@@ -620,7 +620,7 @@ class TestCIRISManager:
         # Create a temporary compose file
         compose_file = tmp_path / "docker-compose.yml"
         compose_file.write_text("version: '3.8'\n")
-        
+
         # Register test agent
         manager.agent_registry.register_agent(
             agent_id="running-agent",
@@ -634,10 +634,10 @@ class TestCIRISManager:
         with patch("docker.from_env") as mock_docker:
             mock_client = MagicMock()
             mock_container = MagicMock()
-            
+
             # Container is running
             mock_container.status = "running"
-            
+
             mock_client.containers.get.return_value = mock_container
             mock_docker.return_value = mock_client
 
@@ -655,7 +655,7 @@ class TestCIRISManager:
         # Create a temporary compose file
         compose_file = tmp_path / "docker-compose.yml"
         compose_file.write_text("version: '3.8'\n")
-        
+
         # Register test agent
         manager.agent_registry.register_agent(
             agent_id="recent-stop",
@@ -669,29 +669,32 @@ class TestCIRISManager:
         with patch("docker.from_env") as mock_docker:
             mock_client = MagicMock()
             mock_container = MagicMock()
-            
+
             # Container crashed but very recently (might be deployment)
             mock_container.status = "exited"
             mock_container.attrs = {
                 "State": {
                     "ExitCode": 1,
-                    "FinishedAt": "2024-01-01T12:00:00.000000000Z"  # Recent timestamp
+                    "FinishedAt": "2024-01-01T12:00:00.000000000Z",  # Recent timestamp
                 }
             }
-            
+
             mock_client.containers.get.return_value = mock_container
             mock_docker.return_value = mock_client
 
             # Mock time to make it look like container just stopped
             with patch("ciris_manager.manager.datetime") as mock_datetime:
                 from datetime import datetime, timezone
-                mock_datetime.now.return_value = datetime(2024, 1, 1, 12, 0, 30, tzinfo=timezone.utc)
+
+                mock_datetime.now.return_value = datetime(
+                    2024, 1, 1, 12, 0, 30, tzinfo=timezone.utc
+                )
                 mock_datetime.timezone = timezone
 
                 # Mock dateutil.parser
                 with patch("ciris_manager.manager.dateutil.parser.parse") as mock_parse:
                     mock_parse.return_value = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-                    
+
                     # Mock subprocess
                     with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                         # Run recovery
@@ -706,7 +709,7 @@ class TestCIRISManager:
         # Create a temporary compose file
         compose_file = tmp_path / "docker-compose.yml"
         compose_file.write_text("version: '3.8'\n")
-        
+
         # Register test agent
         manager.agent_registry.register_agent(
             agent_id="old-crash",
@@ -720,16 +723,16 @@ class TestCIRISManager:
         with patch("docker.from_env") as mock_docker:
             mock_client = MagicMock()
             mock_container = MagicMock()
-            
+
             # Container crashed a while ago (not deployment)
             mock_container.status = "exited"
             mock_container.attrs = {
                 "State": {
                     "ExitCode": 1,
-                    "FinishedAt": "2024-01-01T11:00:00.000000000Z"  # Old timestamp
+                    "FinishedAt": "2024-01-01T11:00:00.000000000Z",  # Old timestamp
                 }
             }
-            
+
             # First call for main check, second for deployment check
             mock_client.containers.get.return_value = mock_container
             mock_docker.return_value = mock_client
@@ -737,13 +740,16 @@ class TestCIRISManager:
             # Mock time to show crash was > 5 minutes ago
             with patch("ciris_manager.manager.datetime") as mock_datetime:
                 from datetime import datetime, timezone
-                mock_datetime.now.return_value = datetime(2024, 1, 1, 12, 10, 0, tzinfo=timezone.utc)
+
+                mock_datetime.now.return_value = datetime(
+                    2024, 1, 1, 12, 10, 0, tzinfo=timezone.utc
+                )
                 mock_datetime.timezone = timezone
 
                 # Mock dateutil.parser
                 with patch("ciris_manager.manager.dateutil.parser.parse") as mock_parse:
                     mock_parse.return_value = datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc)
-                    
+
                     # Mock subprocess for restart
                     with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                         mock_process = AsyncMock()
@@ -763,7 +769,7 @@ class TestCIRISManager:
         # Create a temporary compose file
         compose_file = tmp_path / "docker-compose.yml"
         compose_file.write_text("version: '3.8'\n")
-        
+
         # Register test agent
         manager.agent_registry.register_agent(
             agent_id="error-agent",
@@ -784,16 +790,16 @@ class TestCIRISManager:
     async def test_container_management_loop_crash_recovery(self, manager):
         """Test that container management loop calls crash recovery."""
         manager._running = True
-        
+
         # Mock the recovery method
         manager._recover_crashed_containers = AsyncMock()
 
         # Run the loop for a short time
         loop_task = asyncio.create_task(manager.container_management_loop())
-        
+
         # Let it run for one iteration
         await asyncio.sleep(0.1)
-        
+
         # Stop the loop
         manager._running = False
         loop_task.cancel()

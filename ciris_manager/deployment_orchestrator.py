@@ -795,13 +795,17 @@ class DeploymentOrchestrator:
                     # Wait for container to stop and recreate it with new image
                     logger.info(f"Waiting for container {agent.container_name} to stop...")
                     stopped = await self._wait_for_container_stop(agent.container_name, timeout=60)
-                    
+
                     if stopped:
-                        logger.info(f"Container {agent.container_name} stopped, recreating with new image...")
+                        logger.info(
+                            f"Container {agent.container_name} stopped, recreating with new image..."
+                        )
                         recreated = await self._recreate_agent_container(agent.agent_id)
-                        
+
                         if recreated:
-                            logger.info(f"Successfully recreated container for agent {agent.agent_id}")
+                            logger.info(
+                                f"Successfully recreated container for agent {agent.agent_id}"
+                            )
                             return AgentUpdateResponse(
                                 agent_id=agent.agent_id,
                                 decision="accept",
@@ -884,54 +888,58 @@ class DeploymentOrchestrator:
     async def _wait_for_container_stop(self, container_name: str, timeout: int = 60) -> bool:
         """
         Wait for a container to stop.
-        
+
         Args:
             container_name: Name of the container to monitor
             timeout: Maximum time to wait in seconds
-            
+
         Returns:
             True if container stopped, False if timeout reached
         """
         import time
-        
+
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
                 # Check container status
                 result = await asyncio.create_subprocess_exec(
-                    "docker", "inspect", container_name, "--format", "{{.State.Status}}",
+                    "docker",
+                    "inspect",
+                    container_name,
+                    "--format",
+                    "{{.State.Status}}",
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await result.communicate()
-                
+
                 if result.returncode != 0:
                     # Container doesn't exist or error
                     logger.debug(f"Container {container_name} not found or error")
                     return True
-                    
+
                 status = stdout.decode().strip()
                 if status in ["exited", "dead", "removing", "removed"]:
                     logger.info(f"Container {container_name} has stopped (status: {status})")
                     return True
-                    
+
                 logger.debug(f"Container {container_name} status: {status}, waiting...")
                 await asyncio.sleep(2)
-                
+
             except Exception as e:
                 logger.error(f"Error checking container status: {e}")
                 await asyncio.sleep(2)
-                
+
         logger.warning(f"Timeout waiting for container {container_name} to stop")
         return False
-    
+
     async def _recreate_agent_container(self, agent_id: str) -> bool:
         """
         Recreate an agent container using docker-compose.
-        
+
         Args:
             agent_id: ID of the agent to recreate
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -939,40 +947,48 @@ class DeploymentOrchestrator:
             # Find the agent's docker-compose file
             agent_dir = Path("/opt/ciris/agents") / agent_id
             compose_file = agent_dir / "docker-compose.yml"
-            
+
             if not compose_file.exists():
                 logger.error(f"Docker compose file not found: {compose_file}")
                 return False
-                
+
             logger.info(f"Recreating container for agent {agent_id} using docker-compose...")
-            
+
             # Run docker-compose up -d to recreate the container
             result = await asyncio.create_subprocess_exec(
-                "docker-compose", "-f", str(compose_file), "up", "-d",
+                "docker-compose",
+                "-f",
+                str(compose_file),
+                "up",
+                "-d",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=str(agent_dir)
+                cwd=str(agent_dir),
             )
             stdout, stderr = await result.communicate()
-            
+
             if result.returncode != 0:
                 logger.error(f"Failed to recreate container: {stderr.decode()}")
                 return False
-                
+
             logger.info(f"Successfully ran docker-compose up for agent {agent_id}")
-            
+
             # Wait a moment for container to start
             await asyncio.sleep(5)
-            
+
             # Verify container is running
             container_name = f"ciris-agent-{agent_id}"
             check_result = await asyncio.create_subprocess_exec(
-                "docker", "inspect", container_name, "--format", "{{.State.Status}}",
+                "docker",
+                "inspect",
+                container_name,
+                "--format",
+                "{{.State.Status}}",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             check_stdout, _ = await check_result.communicate()
-            
+
             if check_result.returncode == 0:
                 status = check_stdout.decode().strip()
                 if status == "running":
@@ -980,13 +996,13 @@ class DeploymentOrchestrator:
                     return True
                 else:
                     logger.warning(f"Container {container_name} status: {status}")
-                    
+
             return False
-            
+
         except Exception as e:
             logger.error(f"Error recreating container for agent {agent_id}: {e}")
             return False
-    
+
     async def _update_nginx_container(self, gui_image: str) -> bool:
         """
         Update the nginx/GUI container with a new image.

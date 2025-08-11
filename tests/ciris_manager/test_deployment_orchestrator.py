@@ -645,27 +645,29 @@ class TestDeploymentOrchestrator:
         with patch("docker.from_env") as mock_docker:
             mock_client = Mock()
             mock_container = Mock()
-            
+
             # Simulate container stopping after a few checks
             mock_container.status = "running"
-            mock_container.reload = Mock(side_effect=[
-                None,  # First reload, still running
-                None,  # Second reload, still running  
-                Mock(status="exited"),  # Third reload, stopped
-            ])
-            
+            mock_container.reload = Mock(
+                side_effect=[
+                    None,  # First reload, still running
+                    None,  # Second reload, still running
+                    Mock(status="exited"),  # Third reload, stopped
+                ]
+            )
+
             # Track status changes
             status_sequence = ["running", "running", "exited"]
             status_index = [0]
-            
+
             def get_status():
                 result = status_sequence[status_index[0]]
                 if status_index[0] < len(status_sequence) - 1:
                     status_index[0] += 1
                 return result
-            
+
             type(mock_container).status = property(lambda self: get_status())
-            
+
             mock_client.containers.get.return_value = mock_container
             mock_docker.return_value = mock_client
 
@@ -684,16 +686,18 @@ class TestDeploymentOrchestrator:
             mock_container = Mock()
             mock_container.status = "running"  # Never stops
             mock_container.reload = Mock()
-            
+
             mock_client.containers.get.return_value = mock_container
             mock_docker.return_value = mock_client
 
             # Mock time.time to simulate timeout
             with patch("time.time") as mock_time:
                 mock_time.side_effect = [0, 1, 2, 3, 61]  # Exceeds 60 second timeout
-                
+
                 with patch("asyncio.sleep", new_callable=AsyncMock):
-                    result = await orchestrator._wait_for_container_stop("test-container", timeout=60)
+                    result = await orchestrator._wait_for_container_stop(
+                        "test-container", timeout=60
+                    )
 
             assert result is False
 
@@ -720,7 +724,7 @@ class TestDeploymentOrchestrator:
 
             assert result is True
             mock_subprocess.assert_called_once()
-            
+
             # Verify the correct docker-compose command was used
             call_args = mock_subprocess.call_args[0]
             assert "docker-compose" in call_args
