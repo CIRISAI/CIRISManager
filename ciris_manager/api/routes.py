@@ -1173,8 +1173,14 @@ def create_routes(manager: Any) -> APIRouter:
             # Get auth headers for this agent
             from ciris_manager.agent_auth import get_agent_auth
 
-            auth = get_agent_auth()
-            headers = auth.get_auth_headers(agent.agent_id)
+            try:
+                auth = get_agent_auth(manager.agent_registry)
+                headers = auth.get_auth_headers(agent.agent_id)
+            except ValueError as e:
+                # No service token available for this agent
+                agent_data["error"] = f"Authentication not available: {e}"
+                logger.warning(f"No service token for {agent.agent_id}: {e}")
+                return agent_data
 
             try:
                 async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
@@ -1220,7 +1226,9 @@ def create_routes(manager: Any) -> APIRouter:
 
                     # Process telemetry (costs and incidents)
                     if not isinstance(responses[1], Exception) and responses[1].status_code == 200:
-                        telemetry = responses[1].json()
+                        telemetry_response = responses[1].json()
+                        # Handle wrapped response format
+                        telemetry = telemetry_response.get("data", telemetry_response)
                         agent_data["cost"] = {
                             "last_hour_cents": telemetry.get("cost_last_hour_cents", 0),
                             "last_24_hours_cents": telemetry.get("cost_last_24_hours_cents", 0),
@@ -1243,23 +1251,41 @@ def create_routes(manager: Any) -> APIRouter:
 
                     # Process resources
                     if not isinstance(responses[2], Exception) and responses[2].status_code == 200:
-                        resources = responses[2].json()
+                        resources_response = responses[2].json()
+                        # Handle wrapped response format
+                        resources = resources_response.get("data", resources_response)
+
+                        # Extract current usage if available
+                        current = resources.get("current_usage", {})
                         agent_data["resources"] = {
-                            "cpu": resources.get("cpu", {}),
-                            "memory": resources.get("memory", {}),
-                            "disk": resources.get("disk", {}),
+                            "cpu": {
+                                "current": current.get("cpu_percent", 0),
+                                "average_1m": current.get("cpu_average_1m", 0),
+                            },
+                            "memory": {
+                                "current": current.get("memory_mb", 0),
+                                "percent": current.get("memory_percent", 0),
+                            },
+                            "disk": {
+                                "used_mb": current.get("disk_used_mb", 0),
+                                "free_mb": current.get("disk_free_mb", 0),
+                            },
                             "health_status": resources.get("health_status", "unknown"),
                             "warnings": resources.get("warnings", []),
                         }
 
                     # Process adapters
                     if not isinstance(responses[3], Exception) and responses[3].status_code == 200:
-                        adapters = responses[3].json()
+                        adapters_response = responses[3].json()
+                        # Handle wrapped response format
+                        adapters = adapters_response.get("data", adapters_response)
                         agent_data["adapters"] = adapters.get("adapters", [])
 
                     # Process agent status (channels)
                     if not isinstance(responses[4], Exception) and responses[4].status_code == 200:
-                        status = responses[4].json()
+                        status_response = responses[4].json()
+                        # Handle wrapped response format
+                        status = status_response.get("data", status_response)
                         agent_data["channels"] = status.get("channels", [])
 
                         # Get message count
