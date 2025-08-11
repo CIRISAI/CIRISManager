@@ -1746,6 +1746,9 @@ let dashboardUpdateInterval = null;
 async function updateDashboard() {
     try {
         const response = await fetch('/manager/v1/dashboard/agents', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            },
             credentials: 'include'
         });
         
