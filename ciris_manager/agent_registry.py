@@ -28,6 +28,9 @@ class AgentInfo:
         metadata: Optional[Dict[str, Any]] = None,
         oauth_status: Optional[str] = None,
         service_token: Optional[str] = None,
+        current_version: Optional[str] = None,
+        last_work_state_at: Optional[str] = None,
+        version_transitions: Optional[List[Dict[str, Any]]] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -38,6 +41,9 @@ class AgentInfo:
         self.metadata = metadata or {}
         self.oauth_status = oauth_status
         self.service_token = service_token
+        self.current_version = current_version
+        self.last_work_state_at = last_work_state_at
+        self.version_transitions = version_transitions or []
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -50,6 +56,9 @@ class AgentInfo:
             "metadata": self.metadata,
             "oauth_status": self.oauth_status,
             "service_token": self.service_token,
+            "current_version": self.current_version,
+            "last_work_state_at": self.last_work_state_at,
+            "version_transitions": self.version_transitions,
         }
 
     @classmethod
@@ -65,6 +74,9 @@ class AgentInfo:
             metadata=data.get("metadata", {}),
             oauth_status=data.get("oauth_status"),
             service_token=data.get("service_token"),
+            current_version=data.get("current_version"),
+            last_work_state_at=data.get("last_work_state_at"),
+            version_transitions=data.get("version_transitions", []),
         )
 
 
@@ -250,3 +262,49 @@ class AgentRegistry:
     def get_allocated_ports(self) -> Dict[str, int]:
         """Get mapping of agent IDs to allocated ports."""
         return {agent_id: agent.port for agent_id, agent in self.agents.items()}
+
+    def update_agent_state(self, agent_id: str, version: str, cognitive_state: str) -> bool:
+        """
+        Update agent version and cognitive state tracking.
+
+        Args:
+            agent_id: Agent identifier
+            version: Current agent version
+            cognitive_state: Current cognitive state (WAKEUP, WORK, etc.)
+
+        Returns:
+            True if updated successfully
+        """
+        with self._lock:
+            if agent_id not in self.agents:
+                return False
+
+            agent = self.agents[agent_id]
+            now = datetime.now(timezone.utc).isoformat()
+
+            # Check for version change
+            if agent.current_version != version:
+                # Record version transition
+                transition = {
+                    "from_version": agent.current_version,
+                    "to_version": version,
+                    "timestamp": now,
+                    "initial_state": cognitive_state,
+                    "reached_work": False,
+                }
+                agent.version_transitions.append(transition)
+                agent.current_version = version
+
+            # Track when agent reaches WORK state
+            if cognitive_state == "WORK":
+                agent.last_work_state_at = now
+
+                # Mark if this is the first WORK state after version change
+                if agent.version_transitions:
+                    last_transition = agent.version_transitions[-1]
+                    if not last_transition.get("reached_work", True):
+                        last_transition["reached_work"] = True
+                        last_transition["work_state_at"] = now
+
+            self._save_metadata()
+            return True

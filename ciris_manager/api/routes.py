@@ -1244,6 +1244,27 @@ def create_routes(manager: Any) -> APIRouter:
                             "initialization_complete": health.get("initialization_complete", False),
                         }
 
+                        # Update agent state tracking
+                        version = health.get("version", "unknown")
+                        cognitive_state = health.get("cognitive_state", "unknown")
+                        if version != "unknown" and cognitive_state != "unknown":
+                            manager.agent_registry.update_agent_state(
+                                agent.agent_id, version, cognitive_state
+                            )
+
+                        # Get version transition info from registry
+                        registry_agent = manager.agent_registry.agents.get(agent.agent_id)
+                        if registry_agent:
+                            agent_data["version_info"] = {
+                                "current_version": registry_agent.current_version,
+                                "last_work_state_at": registry_agent.last_work_state_at,
+                                "last_transition": (
+                                    registry_agent.version_transitions[-1]
+                                    if registry_agent.version_transitions
+                                    else None
+                                ),
+                            }
+
                         # Update summary counts
                         status = health.get("status", "unknown")
                         if status == "healthy":
@@ -1428,9 +1449,9 @@ def create_routes(manager: Any) -> APIRouter:
                                     service_type = (
                                         service_name.split(".")[-1].replace("Service", "").lower()
                                     )
-                                    circuit_breakers["critical_services"][service_type] = (
-                                        breaker_state
-                                    )
+                                    circuit_breakers["critical_services"][
+                                        service_type
+                                    ] = breaker_state
 
                                 # Track all open circuit breakers
                                 if breaker_state in ["open", "half_open"]:

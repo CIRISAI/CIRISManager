@@ -1792,6 +1792,50 @@ function renderDashboard() {
     });
     if (totalChannelsElem) totalChannelsElem.textContent = totalChannels;
     
+    // Check for agents with new versions not yet in WORK state
+    const pendingVersions = [];
+    dashboardData.agents.forEach(agent => {
+        if (agent.version_info && agent.version_info.last_transition) {
+            const transition = agent.version_info.last_transition;
+            if (!transition.reached_work) {
+                pendingVersions.push({
+                    name: agent.name || agent.agent_id,
+                    version: transition.to_version,
+                    state: agent.health?.cognitive_state || 'unknown',
+                    since: new Date(transition.timestamp).toLocaleString()
+                });
+            }
+        }
+    });
+    
+    // Add alert if there are pending version transitions
+    if (pendingVersions.length > 0) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'bg-orange-50 border-l-4 border-orange-400 p-4 mb-4';
+        alertDiv.innerHTML = `
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle text-orange-400"></i>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-orange-700 font-medium">
+                        ${pendingVersions.length} agent(s) with new versions not yet in WORK state
+                    </p>
+                    <ul class="mt-2 text-xs text-orange-600 space-y-1">
+                        ${pendingVersions.map(p => `
+                            <li>${p.name}: v${p.version} (currently ${p.state}) since ${p.since}</li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+        `;
+        const dashboardContent = document.getElementById('dashboard-content');
+        const statusGridSection = document.querySelector('#dashboard-content > div:nth-child(2)');
+        if (statusGridSection) {
+            dashboardContent.insertBefore(alertDiv, statusGridSection);
+        }
+    }
+    
     // Render agent status grid
     const statusGrid = document.getElementById('agent-status-grid');
     statusGrid.innerHTML = '';
@@ -1985,6 +2029,43 @@ function createAgentStatusCard(agent) {
         `;
     }
     
+    // Add version and state tracking display
+    let versionStateHtml = '';
+    if (agent.health) {
+        const cognitiveState = agent.health.cognitive_state || 'unknown';
+        const version = agent.health.version || 'unknown';
+        
+        // Determine state color
+        let stateColor = 'bg-gray-100 text-gray-700';
+        if (cognitiveState === 'WORK') {
+            stateColor = 'bg-green-100 text-green-700';
+        } else if (cognitiveState === 'WAKEUP') {
+            stateColor = 'bg-yellow-100 text-yellow-700';
+        } else if (cognitiveState === 'DREAM' || cognitiveState === 'PLAY' || cognitiveState === 'SOLITUDE') {
+            stateColor = 'bg-blue-100 text-blue-700';
+        } else if (cognitiveState === 'SHUTDOWN') {
+            stateColor = 'bg-red-100 text-red-700';
+        }
+        
+        // Check for version transition status
+        let versionStatus = '';
+        if (agent.version_info && agent.version_info.last_transition) {
+            const transition = agent.version_info.last_transition;
+            if (transition.to_version === version && !transition.reached_work) {
+                versionStatus = '<span class="ml-2 text-xs text-orange-600"><i class="fas fa-clock"></i> Awaiting WORK state</span>';
+            } else if (transition.to_version === version && transition.reached_work) {
+                versionStatus = '<span class="ml-2 text-xs text-green-600"><i class="fas fa-check-circle"></i> Reached WORK</span>';
+            }
+        }
+        
+        versionStateHtml = `
+            <div class="flex items-center justify-between text-xs mb-2">
+                <span class="px-2 py-1 rounded ${stateColor}">${cognitiveState}</span>
+                <span class="text-gray-600">v${version}${versionStatus}</span>
+            </div>
+        `;
+    }
+    
     card.innerHTML = `
         <div class="flex justify-between items-start mb-2">
             <h3 class="font-semibold text-gray-900">${agent.agent_name}</h3>
@@ -1992,6 +2073,7 @@ function createAgentStatusCard(agent) {
                 ${healthStatus}
             </span>
         </div>
+        ${versionStateHtml}
         
         ${adaptersHtml ? `<div class="mb-2">${adaptersHtml}</div>` : ''}
         ${channelsHtml}
