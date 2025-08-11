@@ -1332,9 +1332,18 @@ def create_routes(manager: Any) -> APIRouter:
 
             except Exception as e:
                 agent_data["error"] = str(e)
-                logger.error(
-                    f"Failed to fetch dashboard data for {agent.agent_id}: {e}", exc_info=True
-                )
+                import traceback
+                import sys
+
+                # Force error to stderr in case logger isn't working
+                print(f"ERROR in dashboard for {agent.agent_id}: {e}", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+                try:
+                    logger.error(
+                        f"Failed to fetch dashboard data for {agent.agent_id}: {e}", exc_info=True
+                    )
+                except Exception:
+                    print("Logger itself failed!", file=sys.stderr)
 
             return agent_data
 
