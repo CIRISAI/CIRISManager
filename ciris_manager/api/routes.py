@@ -1251,49 +1251,64 @@ def create_routes(manager: Any) -> APIRouter:
 
                     # Process resources
                     if not isinstance(responses[2], Exception) and responses[2].status_code == 200:
-                        resources_response = responses[2].json()
-                        # Handle wrapped response format
-                        resources = resources_response.get("data", resources_response)
+                        try:
+                            resources_response = responses[2].json()
+                            # Handle wrapped response format
+                            resources = resources_response.get("data", resources_response)
 
-                        # Extract current usage if available
-                        current = resources.get("current_usage", {})
-                        agent_data["resources"] = {
-                            "cpu": {
-                                "current": current.get("cpu_percent", 0),
-                                "average_1m": current.get("cpu_average_1m", 0),
-                            },
-                            "memory": {
-                                "current": current.get("memory_mb", 0),
-                                "percent": current.get("memory_percent", 0),
-                            },
-                            "disk": {
-                                "used_mb": current.get("disk_used_mb", 0),
-                                "free_mb": current.get("disk_free_mb", 0),
-                            },
-                            "health_status": resources.get("health_status", "unknown"),
-                            "warnings": resources.get("warnings", []),
-                        }
+                            # Extract current usage if available
+                            current = resources.get("current_usage", {})
+                            # Ensure current is a dict, not something else
+                            if isinstance(current, dict):
+                                agent_data["resources"] = {
+                                    "cpu": {
+                                        "current": current.get("cpu_percent", 0),
+                                        "average_1m": current.get("cpu_average_1m", 0),
+                                    },
+                                    "memory": {
+                                        "current": current.get("memory_mb", 0),
+                                        "percent": current.get("memory_percent", 0),
+                                    },
+                                    "disk": {
+                                        "used_mb": current.get("disk_used_mb", 0),
+                                        "free_mb": current.get("disk_free_mb", 0),
+                                    },
+                                    "health_status": resources.get("health_status", "unknown"),
+                                    "warnings": resources.get("warnings", []),
+                                }
+                            else:
+                                logger.warning(
+                                    f"Unexpected current_usage type for {agent.agent_id}: {type(current)}"
+                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to parse resources for {agent.agent_id}: {e}")
 
                     # Process adapters
                     if not isinstance(responses[3], Exception) and responses[3].status_code == 200:
-                        adapters_response = responses[3].json()
-                        # Handle wrapped response format
-                        adapters = adapters_response.get("data", adapters_response)
-                        agent_data["adapters"] = adapters.get("adapters", [])
+                        try:
+                            adapters_response = responses[3].json()
+                            # Handle wrapped response format
+                            adapters = adapters_response.get("data", adapters_response)
+                            agent_data["adapters"] = adapters.get("adapters", [])
+                        except Exception as e:
+                            logger.warning(f"Failed to parse adapters for {agent.agent_id}: {e}")
 
                     # Process agent status (channels)
                     if not isinstance(responses[4], Exception) and responses[4].status_code == 200:
-                        status_response = responses[4].json()
-                        # Handle wrapped response format
-                        status = status_response.get("data", status_response)
-                        agent_data["channels"] = status.get("channels", [])
+                        try:
+                            status_response = responses[4].json()
+                            # Handle wrapped response format
+                            status = status_response.get("data", status_response)
+                            agent_data["channels"] = status.get("channels", [])
 
-                        # Get message count
-                        messages = status.get("statistics", {}).get("total_messages", 0)
-                        dashboard_data["summary"]["total_messages"] += messages
+                            # Get message count
+                            messages = status.get("statistics", {}).get("total_messages", 0)
+                            dashboard_data["summary"]["total_messages"] += messages
 
-                        # Get service health from status
-                        agent_data["services"] = status.get("services", [])
+                            # Get service health from status
+                            agent_data["services"] = status.get("services", [])
+                        except Exception as e:
+                            logger.warning(f"Failed to parse status for {agent.agent_id}: {e}")
 
             except Exception as e:
                 agent_data["error"] = str(e)
