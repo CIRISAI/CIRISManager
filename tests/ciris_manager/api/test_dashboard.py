@@ -75,101 +75,113 @@ class TestDashboardEndpoint:
             mock_discovery_instance.discover_agents.return_value = mock_agents
             mock_discovery.return_value = mock_discovery_instance
 
-            # Mock httpx client responses
-            with patch("httpx.AsyncClient") as mock_client:
-                mock_async_client = AsyncMock()
-                mock_client.return_value.__aenter__.return_value = mock_async_client
-
-                # Mock successful responses for agent 1
-                health_response_1 = Mock()
-                health_response_1.status_code = 200
-                health_response_1.json.return_value = {
-                    "status": "healthy",
-                    "version": "1.0.0",
-                    "uptime": 3600,
-                    "initialization_complete": True,
+            # Mock agent auth
+            with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
+                mock_auth_instance = Mock()
+                mock_auth_instance.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test-token"
                 }
+                mock_auth.return_value = mock_auth_instance
 
-                telemetry_response_1 = Mock()
-                telemetry_response_1.status_code = 200
-                telemetry_response_1.json.return_value = {
-                    "cost_last_hour_cents": 150,
-                    "cost_last_24_hours_cents": 3600,
-                    "recent_incidents": [],
-                }
+                # Mock httpx client responses
+                with patch("httpx.AsyncClient") as mock_client:
+                    mock_async_client = AsyncMock()
+                    mock_client.return_value.__aenter__.return_value = mock_async_client
 
-                resources_response_1 = Mock()
-                resources_response_1.status_code = 200
-                resources_response_1.json.return_value = {
-                    "cpu": {"current": 25},
-                    "memory": {"current": 512, "limit": 1024},
-                    "health_status": "healthy",
-                }
+                    # Mock successful responses for agent 1
+                    health_response_1 = Mock()
+                    health_response_1.status_code = 200
+                    health_response_1.json.return_value = {
+                        "data": {
+                            "status": "healthy",
+                            "version": "1.0.0",
+                            "uptime_seconds": 3600,
+                            "initialization_complete": True,
+                        }
+                    }
 
-                adapters_response_1 = Mock()
-                adapters_response_1.status_code = 200
-                adapters_response_1.json.return_value = {
-                    "adapters": [
-                        {"adapterType": "api", "isRunning": True},
-                        {"adapterType": "discord", "isRunning": False},
+                    telemetry_response_1 = Mock()
+                    telemetry_response_1.status_code = 200
+                    telemetry_response_1.json.return_value = {
+                        "cost_last_hour_cents": 150,
+                        "cost_last_24_hours_cents": 3600,
+                        "recent_incidents": [],
+                    }
+
+                    resources_response_1 = Mock()
+                    resources_response_1.status_code = 200
+                    resources_response_1.json.return_value = {
+                        "cpu": {"current": 25},
+                        "memory": {"current": 512, "limit": 1024},
+                        "health_status": "healthy",
+                    }
+
+                    adapters_response_1 = Mock()
+                    adapters_response_1.status_code = 200
+                    adapters_response_1.json.return_value = {
+                        "adapters": [
+                            {"adapterType": "api", "isRunning": True},
+                            {"adapterType": "discord", "isRunning": False},
+                        ]
+                    }
+
+                    status_response_1 = Mock()
+                    status_response_1.status_code = 200
+                    status_response_1.json.return_value = {
+                        "channels": ["channel1", "channel2"],
+                        "statistics": {"total_messages": 1000},
+                    }
+
+                    # Mock responses for agent 2 (degraded)
+                    health_response_2 = Mock()
+                    health_response_2.status_code = 200
+                    health_response_2.json.return_value = {
+                        "data": {
+                            "status": "degraded",
+                            "version": "1.0.0",
+                            "uptime_seconds": 7200,
+                        }
+                    }
+
+                    telemetry_response_2 = Mock()
+                    telemetry_response_2.status_code = 200
+                    telemetry_response_2.json.return_value = {
+                        "cost_last_hour_cents": 200,
+                        "cost_last_24_hours_cents": 4800,
+                        "recent_incidents": [
+                            {"description": "High memory usage", "severity": "medium"}
+                        ],
+                    }
+
+                    # Set up mock to return different responses based on call order
+                    mock_async_client.get.side_effect = [
+                        health_response_1,
+                        telemetry_response_1,
+                        resources_response_1,
+                        adapters_response_1,
+                        status_response_1,
+                        health_response_2,
+                        telemetry_response_2,
+                        Exception("timeout"),
+                        Exception("timeout"),
+                        Exception("timeout"),
                     ]
-                }
 
-                status_response_1 = Mock()
-                status_response_1.status_code = 200
-                status_response_1.json.return_value = {
-                    "channels": ["channel1", "channel2"],
-                    "statistics": {"total_messages": 1000},
-                }
+                    # Make request
+                    response = client.get("/manager/v1/dashboard/agents")
 
-                # Mock responses for agent 2 (degraded)
-                health_response_2 = Mock()
-                health_response_2.status_code = 200
-                health_response_2.json.return_value = {
-                    "status": "degraded",
-                    "version": "1.0.0",
-                    "uptime": 7200,
-                }
+                    assert response.status_code == 200
+                    data = response.json()
 
-                telemetry_response_2 = Mock()
-                telemetry_response_2.status_code = 200
-                telemetry_response_2.json.return_value = {
-                    "cost_last_hour_cents": 200,
-                    "cost_last_24_hours_cents": 4800,
-                    "recent_incidents": [
-                        {"description": "High memory usage", "severity": "medium"}
-                    ],
-                }
+                    # Verify summary data
+                    # Note: Since we're using TestClient (sync), we can't properly test async gathering
+                    # The actual endpoint would aggregate these, but our test will show connection errors
+                    # This is a limitation of testing async code with TestClient
 
-                # Set up mock to return different responses based on call order
-                mock_async_client.get.side_effect = [
-                    health_response_1,
-                    telemetry_response_1,
-                    resources_response_1,
-                    adapters_response_1,
-                    status_response_1,
-                    health_response_2,
-                    telemetry_response_2,
-                    Exception("timeout"),
-                    Exception("timeout"),
-                    Exception("timeout"),
-                ]
-
-                # Make request
-                response = client.get("/manager/v1/dashboard/agents")
-
-                assert response.status_code == 200
-                data = response.json()
-
-                # Verify summary data
-                # Note: Since we're using TestClient (sync), we can't properly test async gathering
-                # The actual endpoint would aggregate these, but our test will show connection errors
-                # This is a limitation of testing async code with TestClient
-
-                # For now, just verify the endpoint returns a valid structure
-                assert "summary" in data
-                assert "agents" in data
-                assert data["summary"]["total"] == 2
+                    # For now, just verify the endpoint returns a valid structure
+                    assert "summary" in data
+                    assert "agents" in data
+                    assert data["summary"]["total"] == 2
 
     def test_dashboard_handles_agent_errors_gracefully(self, client, mock_manager):
         """Test that dashboard handles agent API errors gracefully."""
@@ -190,26 +202,34 @@ class TestDashboardEndpoint:
             mock_discovery_instance.discover_agents.return_value = mock_agents
             mock_discovery.return_value = mock_discovery_instance
 
-            with patch("httpx.AsyncClient") as mock_client:
-                mock_async_client = AsyncMock()
-                mock_client.return_value.__aenter__.return_value = mock_async_client
+            # Mock agent auth
+            with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
+                mock_auth_instance = Mock()
+                mock_auth_instance.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test-token"
+                }
+                mock_auth.return_value = mock_auth_instance
 
-                # Mock all requests to fail
-                mock_async_client.get.side_effect = Exception("Connection refused")
+                with patch("httpx.AsyncClient") as mock_client:
+                    mock_async_client = AsyncMock()
+                    mock_client.return_value.__aenter__.return_value = mock_async_client
 
-                response = client.get("/manager/v1/dashboard/agents")
+                    # Mock all requests to fail
+                    mock_async_client.get.side_effect = Exception("Connection refused")
 
-                assert response.status_code == 200
-                data = response.json()
+                    response = client.get("/manager/v1/dashboard/agents")
 
-                # Should still return data structure
-                assert data["summary"]["total"] == 1
-                assert len(data["agents"]) == 1
+                    assert response.status_code == 200
+                    data = response.json()
 
-                # Verify structure is valid even with errors
-                assert "summary" in data
-                assert "agents" in data
-                assert data["summary"]["total"] == 1
+                    # Should still return data structure
+                    assert data["summary"]["total"] == 1
+                    assert len(data["agents"]) == 1
+
+                    # Verify structure is valid even with errors
+                    assert "summary" in data
+                    assert "agents" in data
+                    assert data["summary"]["total"] == 1
 
     def test_dashboard_empty_agents(self, client, mock_manager):
         """Test dashboard with no agents."""
@@ -248,36 +268,44 @@ class TestDashboardEndpoint:
             mock_discovery_instance.discover_agents.return_value = mock_agents
             mock_discovery.return_value = mock_discovery_instance
 
-            with patch("httpx.AsyncClient") as mock_client:
-                mock_async_client = AsyncMock()
-                mock_client.return_value.__aenter__.return_value = mock_async_client
+            # Mock agent auth
+            with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
+                mock_auth_instance = Mock()
+                mock_auth_instance.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test-token"
+                }
+                mock_auth.return_value = mock_auth_instance
 
-                # Create responses for different health states
-                health_states = ["healthy", "degraded", "critical", "initializing"]
-                responses = []
+                with patch("httpx.AsyncClient") as mock_client:
+                    mock_async_client = AsyncMock()
+                    mock_client.return_value.__aenter__.return_value = mock_async_client
 
-                for state in health_states:
-                    health_resp = Mock()
-                    health_resp.status_code = 200
-                    health_resp.json.return_value = {"status": state}
+                    # Create responses for different health states
+                    health_states = ["healthy", "degraded", "critical", "initializing"]
+                    responses = []
 
-                    # Add 5 responses per agent (health, telemetry, resources, adapters, status)
-                    for _ in range(5):
-                        resp = Mock()
-                        resp.status_code = 200
-                        resp.json.return_value = {}
-                        responses.append(resp)
-                    responses[len(responses) - 5] = health_resp  # Replace first with health
+                    for state in health_states:
+                        health_resp = Mock()
+                        health_resp.status_code = 200
+                        health_resp.json.return_value = {"data": {"status": state}}
 
-                mock_async_client.get.side_effect = responses
+                        # Add 5 responses per agent (health, telemetry, resources, adapters, status)
+                        for _ in range(5):
+                            resp = Mock()
+                            resp.status_code = 200
+                            resp.json.return_value = {}
+                            responses.append(resp)
+                        responses[len(responses) - 5] = health_resp  # Replace first with health
 
-                response = client.get("/manager/v1/dashboard/agents")
+                    mock_async_client.get.side_effect = responses
 
-                assert response.status_code == 200
-                data = response.json()
+                    response = client.get("/manager/v1/dashboard/agents")
 
-                # Just verify the endpoint returns valid structure
-                # Actual health counting would require proper async testing
-                assert "summary" in data
-                assert "agents" in data
-                assert data["summary"]["total"] == 4
+                    assert response.status_code == 200
+                    data = response.json()
+
+                    # Just verify the endpoint returns valid structure
+                    # Actual health counting would require proper async testing
+                    assert "summary" in data
+                    assert "agents" in data
+                    assert data["summary"]["total"] == 4
