@@ -1275,8 +1275,15 @@ def create_routes(manager: Any) -> APIRouter:
 
                         # Get recent incidents
                         incidents = telemetry.get("recent_incidents", [])
-                        agent_data["incidents"] = incidents[:5]  # Last 5 incidents
-                        dashboard_data["summary"]["total_incidents"] += len(incidents)
+                        # Ensure incidents is a list, not something else
+                        if isinstance(incidents, list):
+                            agent_data["incidents"] = incidents[:5]  # Last 5 incidents
+                            dashboard_data["summary"]["total_incidents"] += len(incidents)
+                        else:
+                            logger.warning(
+                                f"Unexpected incidents type for {agent.agent_id}: {type(incidents)}, value: {incidents}"
+                            )
+                            agent_data["incidents"] = []
 
                     # Process resources (index 2)
                     if (
