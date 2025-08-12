@@ -114,7 +114,7 @@ class DeploymentOrchestrator:
                 # Update GUI/nginx containers
                 nginx_updated = await self._update_nginx_container(
                     notification.gui_image,  # type: ignore[arg-type]
-                    notification.nginx_image
+                    notification.nginx_image,
                 )
 
                 return DeploymentStatus(
@@ -508,29 +508,29 @@ class DeploymentOrchestrator:
             return
 
         deployment = self.deployments[deployment_id]
-        
+
         # Prepare rollback targets
         rollback_targets: Dict[str, Any] = {}
-        
+
         if affected_agents:
             rollback_targets["agents"] = [a.agent_id for a in affected_agents]
             rollback_targets["agent_versions"] = await self._get_previous_versions(affected_agents)
-        
+
         if include_gui:
             rollback_targets["gui"] = "n-1"  # Default to previous version
             # Check if GUI version history exists
             gui_versions_file = Path("/opt/ciris/metadata/gui_versions.json")
             if gui_versions_file.exists():
-                with open(gui_versions_file, 'r') as f:
+                with open(gui_versions_file, "r") as f:
                     gui_versions = json.load(f)
                     rollback_targets["gui_version"] = gui_versions.get("n-1", "unknown")
-        
+
         if include_nginx:
             rollback_targets["nginx"] = "n-1"  # Default to previous version
             # Check if nginx version history exists
             nginx_versions_file = Path("/opt/ciris/metadata/nginx_versions.json")
             if nginx_versions_file.exists():
-                with open(nginx_versions_file, 'r') as f:
+                with open(nginx_versions_file, "r") as f:
                     nginx_versions = json.load(f)
                     rollback_targets["nginx_version"] = nginx_versions.get("n-1", "unknown")
 
@@ -615,11 +615,11 @@ class DeploymentOrchestrator:
                 affected_agents = deployment.notification.metadata.get("affected_agents", [])
                 if affected_agents and not rollback_targets:
                     rollback_targets["agents"] = affected_agents
-            
+
             # Rollback GUI/nginx if needed
             if rollback_targets.get("gui"):
                 await self._rollback_gui_container(rollback_targets["gui"])
-            
+
             if rollback_targets.get("nginx"):
                 await self._rollback_nginx_container(rollback_targets["nginx"])
 
@@ -1745,7 +1745,9 @@ class DeploymentOrchestrator:
             logger.error(f"Error recreating container for agent {agent_id}: {e}")
             return False
 
-    async def _update_nginx_container(self, gui_image: str, nginx_image: Optional[str] = None) -> bool:
+    async def _update_nginx_container(
+        self, gui_image: str, nginx_image: Optional[str] = None
+    ) -> bool:
         """
         Update the GUI and optionally nginx containers with new images.
 
@@ -1758,7 +1760,7 @@ class DeploymentOrchestrator:
         """
         try:
             success = True
-            
+
             # Update GUI container
             if gui_image:
                 logger.info(f"Updating GUI container to {gui_image}")
@@ -1775,7 +1777,7 @@ class DeploymentOrchestrator:
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await pull_result.communicate()
-            
+
             if pull_result.returncode != 0:
                 logger.error(f"Failed to pull GUI image: {stderr.decode()}")
                 return False
@@ -1806,7 +1808,7 @@ class DeploymentOrchestrator:
             else:
                 for container_name in gui_containers:
                     logger.info(f"Updating GUI container: {container_name}")
-                    
+
                     # Use docker-compose up to update with new image
                     compose_result = await asyncio.create_subprocess_exec(
                         "docker-compose",
@@ -1857,7 +1859,7 @@ class DeploymentOrchestrator:
                 logger.info(f"Updating nginx container to {nginx_image}")
                 # Store previous image for rollback capability
                 await self._store_container_version("nginx", nginx_image)
-                
+
                 # Pull the nginx image
                 pull_result = await asyncio.create_subprocess_exec(
                     "docker",
@@ -1867,7 +1869,7 @@ class DeploymentOrchestrator:
                     stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await pull_result.communicate()
-                
+
                 if pull_result.returncode != 0:
                     logger.error(f"Failed to pull nginx image: {stderr.decode()}")
                     success = False
@@ -1887,11 +1889,11 @@ class DeploymentOrchestrator:
                         env={**os.environ, "NGINX_IMAGE": nginx_image},
                     )
                     stdout, stderr = await compose_result.communicate()
-                    
+
                     if compose_result.returncode != 0:
                         logger.error(f"Failed to update nginx container: {stderr.decode()}")
                         success = False
-            
+
             if success:
                 logger.info("Successfully updated container(s)")
             return success
@@ -1999,7 +2001,7 @@ class DeploymentOrchestrator:
     async def _store_container_version(self, container_type: str, new_image: str) -> None:
         """
         Store container version history for rollback capability.
-        
+
         Args:
             container_type: Type of container (gui, nginx, etc.)
             new_image: New image being deployed
@@ -2008,12 +2010,12 @@ class DeploymentOrchestrator:
             # Store in a metadata file for infrastructure containers
             metadata_file = Path(f"/opt/ciris/metadata/{container_type}_versions.json")
             metadata_file.parent.mkdir(parents=True, exist_ok=True)
-            
+
             versions = {}
             if metadata_file.exists():
-                with open(metadata_file, 'r') as f:
+                with open(metadata_file, "r") as f:
                     versions = json.load(f)
-            
+
             # Rotate versions
             current = versions.get("current")
             if current and current != new_image:  # Only rotate if actually different
@@ -2023,26 +2025,26 @@ class DeploymentOrchestrator:
                     versions["n-2"] = n1
                 # Then move current to n-1
                 versions["n-1"] = current
-            
+
             # Store new version
             versions["current"] = new_image
             versions["updated_at"] = datetime.now(timezone.utc).isoformat()
-            
-            with open(metadata_file, 'w') as f:
+
+            with open(metadata_file, "w") as f:
                 json.dump(versions, f, indent=2)
-                
+
             logger.info(f"Stored {container_type} version: {new_image}")
-            
+
         except Exception as e:
             logger.error(f"Failed to store {container_type} version: {e}")
 
     async def _rollback_gui_container(self, target_version: str) -> bool:
         """
         Rollback GUI container to a previous version.
-        
+
         Args:
             target_version: Version to rollback to (or "n-1" for previous)
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -2051,7 +2053,7 @@ class DeploymentOrchestrator:
             if target_version in ["n-1", "n-2"]:
                 metadata_file = Path("/opt/ciris/metadata/gui_versions.json")
                 if metadata_file.exists():
-                    with open(metadata_file, 'r') as f:
+                    with open(metadata_file, "r") as f:
                         versions = json.load(f)
                     target_image = versions.get(target_version)
                     if not target_image:
@@ -2062,9 +2064,9 @@ class DeploymentOrchestrator:
                     return False
             else:
                 target_image = target_version
-            
+
             logger.info(f"Rolling back GUI container to {target_image}")
-            
+
             # Update using docker-compose
             compose_result = await asyncio.create_subprocess_exec(
                 "docker-compose",
@@ -2079,14 +2081,14 @@ class DeploymentOrchestrator:
                 env={**os.environ, "CIRIS_GUI_IMAGE": target_image},
             )
             stdout, stderr = await compose_result.communicate()
-            
+
             if compose_result.returncode != 0:
                 logger.error(f"Failed to rollback GUI: {stderr.decode()}")
                 return False
-                
+
             logger.info("GUI container rolled back successfully")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to rollback GUI container: {e}")
             return False
@@ -2094,10 +2096,10 @@ class DeploymentOrchestrator:
     async def _rollback_nginx_container(self, target_version: str) -> bool:
         """
         Rollback nginx container to a previous version.
-        
+
         Args:
             target_version: Version to rollback to (or "n-1" for previous)
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -2106,7 +2108,7 @@ class DeploymentOrchestrator:
             if target_version in ["n-1", "n-2"]:
                 metadata_file = Path("/opt/ciris/metadata/nginx_versions.json")
                 if metadata_file.exists():
-                    with open(metadata_file, 'r') as f:
+                    with open(metadata_file, "r") as f:
                         versions = json.load(f)
                     target_image = versions.get(target_version)
                     if not target_image:
@@ -2117,13 +2119,13 @@ class DeploymentOrchestrator:
                     return False
             else:
                 target_image = target_version
-            
+
             logger.info(f"Rolling back nginx container to {target_image}")
-            
+
             # Update using docker-compose
             compose_result = await asyncio.create_subprocess_exec(
                 "docker-compose",
-                "-f", 
+                "-f",
                 "/opt/ciris/docker-compose.yml",
                 "up",
                 "-d",
@@ -2134,18 +2136,18 @@ class DeploymentOrchestrator:
                 env={**os.environ, "NGINX_IMAGE": target_image},
             )
             stdout, stderr = await compose_result.communicate()
-            
+
             if compose_result.returncode != 0:
                 logger.error(f"Failed to rollback nginx: {stderr.decode()}")
                 return False
-                
+
             # Regenerate nginx config after rollback
             if self.manager:
                 await self.manager.update_nginx_config()
-                
+
             logger.info("Nginx container rolled back successfully")
             return True
-            
+
         except Exception as e:
-            logger.error(f"Failed to rollback nginx container: {e}") 
+            logger.error(f"Failed to rollback nginx container: {e}")
             return False

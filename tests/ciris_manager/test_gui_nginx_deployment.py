@@ -6,10 +6,9 @@ import json
 import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from pathlib import Path
-from datetime import datetime, timezone
 
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
-from ciris_manager.models import UpdateNotification, AgentInfo
+from ciris_manager.models import UpdateNotification
 
 
 class TestGuiNginxDeployment:
@@ -21,11 +20,11 @@ class TestGuiNginxDeployment:
         mock_manager = Mock()
         mock_manager.agent_registry = Mock()
         mock_manager.update_nginx_config = AsyncMock(return_value=True)
-        
+
         orchestrator = DeploymentOrchestrator(manager=mock_manager)
         orchestrator.registry_client = Mock()
         orchestrator.registry_client.resolve_image_digest = AsyncMock(return_value="sha256:test123")
-        
+
         return orchestrator
 
     @pytest.mark.asyncio
@@ -34,7 +33,7 @@ class TestGuiNginxDeployment:
         notification = UpdateNotification(
             agent_image="ghcr.io/cirisai/ciris-agent:v1.0.0",
             gui_image="ghcr.io/cirisai/ciris-gui:v2.0.0",
-            message="GUI update only"
+            message="GUI update only",
         )
 
         # Mock subprocess calls
@@ -49,15 +48,13 @@ class TestGuiNginxDeployment:
                 with patch("pathlib.Path.mkdir"):
                     with patch("builtins.open", MagicMock()):
                         result = await orchestrator._update_nginx_container(
-                            gui_image=notification.gui_image,
-                            nginx_image=None
+                            gui_image=notification.gui_image, nginx_image=None
                         )
 
         assert result is True
         # Verify docker pull was called for GUI image
         mock_subprocess.assert_any_call(
-            "docker", "pull", "ghcr.io/cirisai/ciris-gui:v2.0.0",
-            stdout=-1, stderr=-1
+            "docker", "pull", "ghcr.io/cirisai/ciris-gui:v2.0.0", stdout=-1, stderr=-1
         )
 
     @pytest.mark.asyncio
@@ -67,7 +64,7 @@ class TestGuiNginxDeployment:
             agent_image="ghcr.io/cirisai/ciris-agent:v1.0.0",
             gui_image="ghcr.io/cirisai/ciris-gui:v2.0.0",
             nginx_image="nginx:1.25.0",
-            message="Full infrastructure update"
+            message="Full infrastructure update",
         )
 
         # Mock subprocess calls
@@ -82,60 +79,54 @@ class TestGuiNginxDeployment:
                 with patch("pathlib.Path.mkdir"):
                     with patch("builtins.open", MagicMock()):
                         result = await orchestrator._update_nginx_container(
-                            gui_image=notification.gui_image,
-                            nginx_image=notification.nginx_image
+                            gui_image=notification.gui_image, nginx_image=notification.nginx_image
                         )
 
         assert result is True
         # Verify docker pull was called for both images
         mock_subprocess.assert_any_call(
-            "docker", "pull", "ghcr.io/cirisai/ciris-gui:v2.0.0",
-            stdout=-1, stderr=-1
+            "docker", "pull", "ghcr.io/cirisai/ciris-gui:v2.0.0", stdout=-1, stderr=-1
         )
-        mock_subprocess.assert_any_call(
-            "docker", "pull", "nginx:1.25.0",
-            stdout=-1, stderr=-1
-        )
+        mock_subprocess.assert_any_call("docker", "pull", "nginx:1.25.0", stdout=-1, stderr=-1)
 
     @pytest.mark.asyncio
     async def test_version_storage(self, orchestrator, tmp_path):
         """Test that version history is properly stored."""
         # Use temp directory for testing
         version_file = tmp_path / "gui_versions.json"
-        
+
         # Mock the Path constructor to return our temp file
         original_path = Path
-        
+
         def mock_path_constructor(path_str):
             if "gui_versions.json" in str(path_str):
                 return version_file
             return original_path(path_str)
-        
+
         with patch("ciris_manager.deployment_orchestrator.Path", side_effect=mock_path_constructor):
-            
             # First deployment
             await orchestrator._store_container_version("gui", "gui:v1.0.0")
-            
+
             # Check file was created
             assert version_file.exists()
             with open(version_file) as f:
                 versions = json.load(f)
             assert versions["current"] == "gui:v1.0.0"
             assert "n-1" not in versions
-            
+
             # Second deployment
             await orchestrator._store_container_version("gui", "gui:v2.0.0")
-            
+
             # Check rotation happened
             with open(version_file) as f:
                 versions = json.load(f)
             assert versions["current"] == "gui:v2.0.0"
             assert versions["n-1"] == "gui:v1.0.0"
             assert "n-2" not in versions
-            
+
             # Third deployment
             await orchestrator._store_container_version("gui", "gui:v3.0.0")
-            
+
             # Check full rotation
             with open(version_file) as f:
                 versions = json.load(f)
@@ -148,13 +139,9 @@ class TestGuiNginxDeployment:
         """Test rolling back GUI container to previous version."""
         # Setup version history
         version_file = tmp_path / "gui_versions.json"
-        versions = {
-            "current": "gui:v3.0.0",
-            "n-1": "gui:v2.0.0",
-            "n-2": "gui:v1.0.0"
-        }
+        versions = {"current": "gui:v3.0.0", "n-1": "gui:v2.0.0", "n-2": "gui:v1.0.0"}
         version_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(version_file, 'w') as f:
+        with open(version_file, "w") as f:
             json.dump(versions, f)
 
         # Mock subprocess calls
@@ -166,13 +153,15 @@ class TestGuiNginxDeployment:
 
             # Mock Path to use our temp file
             original_path = Path
-            
+
             def mock_path_constructor(path_str):
                 if "gui_versions.json" in str(path_str):
                     return version_file
                 return original_path(path_str)
-            
-            with patch("ciris_manager.deployment_orchestrator.Path", side_effect=mock_path_constructor):
+
+            with patch(
+                "ciris_manager.deployment_orchestrator.Path", side_effect=mock_path_constructor
+            ):
                 result = await orchestrator._rollback_gui_container("n-1")
 
         assert result is True
@@ -187,7 +176,10 @@ class TestGuiNginxDeployment:
             "gui",
             stdout=-1,
             stderr=-1,
-            env={"CIRIS_GUI_IMAGE": "gui:v2.0.0", **orchestrator._rollback_gui_container.__globals__.get('os', Mock()).environ}
+            env={
+                "CIRIS_GUI_IMAGE": "gui:v2.0.0",
+                **orchestrator._rollback_gui_container.__globals__.get("os", Mock()).environ,
+            },
         )
 
     @pytest.mark.asyncio
@@ -195,13 +187,9 @@ class TestGuiNginxDeployment:
         """Test rolling back nginx container to previous version."""
         # Setup version history
         version_file = tmp_path / "nginx_versions.json"
-        versions = {
-            "current": "nginx:1.25.0",
-            "n-1": "nginx:1.24.0",
-            "n-2": "nginx:1.23.0"
-        }
+        versions = {"current": "nginx:1.25.0", "n-1": "nginx:1.24.0", "n-2": "nginx:1.23.0"}
         version_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(version_file, 'w') as f:
+        with open(version_file, "w") as f:
             json.dump(versions, f)
 
         # Mock subprocess calls
@@ -213,13 +201,15 @@ class TestGuiNginxDeployment:
 
             # Mock Path to use our temp file
             original_path = Path
-            
+
             def mock_path_constructor(path_str):
                 if "nginx_versions.json" in str(path_str):
                     return version_file
                 return original_path(path_str)
-            
-            with patch("ciris_manager.deployment_orchestrator.Path", side_effect=mock_path_constructor):
+
+            with patch(
+                "ciris_manager.deployment_orchestrator.Path", side_effect=mock_path_constructor
+            ):
                 result = await orchestrator._rollback_nginx_container("n-1")
 
         assert result is True
@@ -234,7 +224,10 @@ class TestGuiNginxDeployment:
             "nginx",
             stdout=-1,
             stderr=-1,
-            env={"NGINX_IMAGE": "nginx:1.24.0", **orchestrator._rollback_nginx_container.__globals__.get('os', Mock()).environ}
+            env={
+                "NGINX_IMAGE": "nginx:1.24.0",
+                **orchestrator._rollback_nginx_container.__globals__.get("os", Mock()).environ,
+            },
         )
 
     @pytest.mark.asyncio
@@ -243,14 +236,14 @@ class TestGuiNginxDeployment:
         # Setup version files
         gui_file = tmp_path / "gui_versions.json"
         nginx_file = tmp_path / "nginx_versions.json"
-        
+
         gui_versions = {"current": "gui:v2.0.0", "n-1": "gui:v1.0.0"}
         nginx_versions = {"current": "nginx:1.25.0", "n-1": "nginx:1.24.0"}
-        
+
         gui_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(gui_file, 'w') as f:
+        with open(gui_file, "w") as f:
             json.dump(gui_versions, f)
-        with open(nginx_file, 'w') as f:
+        with open(nginx_file, "w") as f:
             json.dump(nginx_versions, f)
 
         # Create a deployment
@@ -260,11 +253,12 @@ class TestGuiNginxDeployment:
         # Mock agent list
         agents = [
             Mock(agent_id="agent-1", agent_name="Agent 1"),
-            Mock(agent_id="agent-2", agent_name="Agent 2")
+            Mock(agent_id="agent-2", agent_name="Agent 2"),
         ]
 
         # Mock file paths
         with patch("pathlib.Path") as mock_path:
+
             def path_side_effect(path_str):
                 if "gui_versions" in path_str:
                     return gui_file
@@ -274,7 +268,7 @@ class TestGuiNginxDeployment:
                     mock = Mock()
                     mock.exists.return_value = False
                     return mock
-            
+
             mock_path.side_effect = path_side_effect
 
             # Mock audit
@@ -284,17 +278,17 @@ class TestGuiNginxDeployment:
                     reason="Test rollback",
                     affected_agents=agents,
                     include_gui=True,
-                    include_nginx=True
+                    include_nginx=True,
                 )
 
         # Check rollback proposal was created
         assert hasattr(orchestrator, "rollback_proposals")
         assert deployment_id in orchestrator.rollback_proposals
-        
+
         proposal = orchestrator.rollback_proposals[deployment_id]
         assert proposal["reason"] == "Test rollback"
         assert "rollback_targets" in proposal
-        
+
         targets = proposal["rollback_targets"]
         assert "agents" in targets
         assert len(targets["agents"]) == 2
