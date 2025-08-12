@@ -2567,6 +2567,275 @@ async function updateDeploymentTab() {
         updateDeploymentStatus(),
         updateDeploymentHistory(),
         updateAgentVersions(),
-        checkPendingDeployment() // Check for pending deployments
+        checkPendingDeployment(), // Check for pending deployments
+        updateRollbackOptions() // Update rollback options
     ]);
+}
+
+// Update rollback options
+async function updateRollbackOptions() {
+    try {
+        // Fetch rollback options from the new endpoint
+        const response = await fetch('/manager/v1/updates/rollback-options', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (!response.ok) {
+            document.getElementById('rollback-options').innerHTML = 
+                '<p class="text-sm text-gray-600">Failed to load rollback options</p>';
+            return;
+        }
+        
+        const data = await response.json();
+        
+        // Extract options for each container type
+        const agentOptions = data.agents || {};
+        const guiOptions = data.gui || {};
+        const nginxOptions = data.nginx || {};
+        const rollbackDiv = document.getElementById('rollback-options');
+        
+        // Check if we have any rollback options
+        const hasOptions = (agentOptions.n_minus_1 || agentOptions.n_minus_2 ||
+                           guiOptions.n_minus_1 || guiOptions.n_minus_2 ||
+                           nginxOptions.n_minus_1 || nginxOptions.n_minus_2);
+        
+        if (!hasOptions) {
+            rollbackDiv.innerHTML = '<p class="text-sm text-gray-600">No rollback options available yet</p>';
+            return;
+        }
+        
+        let html = '';
+        
+        // N-1 rollback option (previous version)
+        if (agentOptions.n_minus_1 || guiOptions.n_minus_1 || nginxOptions.n_minus_1) {
+            html += `
+                <div class="p-3 bg-white rounded-lg border border-gray-200 mb-2">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h5 class="font-medium text-sm text-gray-700 mb-2">Previous Version (n-1)</h5>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                                <div>
+                                    <span class="font-medium text-gray-700">Agents:</span>
+                                    <p class="text-gray-600 truncate">${agentOptions.n_minus_1?.image || 'No previous'}</p>
+                                </div>
+                                <div>
+                                    <span class="font-medium text-gray-700">GUI:</span>
+                                    <p class="text-gray-600 truncate">${guiOptions.n_minus_1?.image || 'No previous'}</p>
+                                </div>
+                                <div>
+                                    <span class="font-medium text-gray-700">Nginx:</span>
+                                    <p class="text-gray-600 truncate">${nginxOptions.n_minus_1?.image || 'No previous'}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="initiateRollback('n-1', {
+                            agents: ${JSON.stringify(agentOptions.n_minus_1).replace(/"/g, '&quot;')},
+                            gui: ${JSON.stringify(guiOptions.n_minus_1).replace(/"/g, '&quot;')},
+                            nginx: ${JSON.stringify(nginxOptions.n_minus_1).replace(/"/g, '&quot;')}
+                        })" 
+                                class="px-3 py-1 bg-orange-600 text-white text-sm rounded hover:bg-orange-700">
+                            <i class="fas fa-undo mr-1"></i>Rollback
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // N-2 rollback option (older version)
+        if (agentOptions.n_minus_2 || guiOptions.n_minus_2 || nginxOptions.n_minus_2) {
+            html += `
+                <div class="p-3 bg-white rounded-lg border border-gray-200">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <h5 class="font-medium text-sm text-gray-700 mb-2">Older Version (n-2)</h5>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                                <div>
+                                    <span class="font-medium text-gray-700">Agents:</span>
+                                    <p class="text-gray-600 truncate">${agentOptions.n_minus_2?.image || 'No older'}</p>
+                                </div>
+                                <div>
+                                    <span class="font-medium text-gray-700">GUI:</span>
+                                    <p class="text-gray-600 truncate">${guiOptions.n_minus_2?.image || 'No older'}</p>
+                                </div>
+                                <div>
+                                    <span class="font-medium text-gray-700">Nginx:</span>
+                                    <p class="text-gray-600 truncate">${nginxOptions.n_minus_2?.image || 'No older'}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="initiateRollback('n-2', {
+                            agents: ${JSON.stringify(agentOptions.n_minus_2).replace(/"/g, '&quot;')},
+                            gui: ${JSON.stringify(guiOptions.n_minus_2).replace(/"/g, '&quot;')},
+                            nginx: ${JSON.stringify(nginxOptions.n_minus_2).replace(/"/g, '&quot;')}
+                        })" 
+                                class="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700">
+                            <i class="fas fa-history mr-1"></i>Rollback
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        rollbackDiv.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error fetching rollback options:', error);
+        document.getElementById('rollback-options').innerHTML = 
+            '<p class="text-sm text-red-600">Failed to load rollback options</p>';
+    }
+}
+
+// Initiate rollback with confirmation
+let pendingRollback = null;
+
+function initiateRollback(targetVersion, versionDetails) {
+    pendingRollback = { targetVersion, versionDetails };
+    
+    // Update modal with details for all container types
+    const detailsDiv = document.getElementById('rollback-details');
+    
+    // Handle new multi-container format
+    let detailsHtml = `<div class="space-y-2">`;
+    
+    detailsHtml += `
+        <div class="flex justify-between">
+            <span class="text-sm font-medium">Rollback Target:</span>
+            <span class="text-sm font-semibold">${targetVersion}</span>
+        </div>
+    `;
+    
+    // Agent version
+    if (versionDetails.agents) {
+        detailsHtml += `
+            <div class="border-t pt-2">
+                <span class="text-sm font-medium">Agents:</span>
+                <p class="text-xs font-mono text-gray-600 truncate">${versionDetails.agents?.image || 'No change'}</p>
+            </div>
+        `;
+    }
+    
+    // GUI version
+    if (versionDetails.gui) {
+        detailsHtml += `
+            <div>
+                <span class="text-sm font-medium">GUI:</span>
+                <p class="text-xs font-mono text-gray-600 truncate">${versionDetails.gui?.image || 'No change'}</p>
+            </div>
+        `;
+    }
+    
+    // Nginx version
+    if (versionDetails.nginx) {
+        detailsHtml += `
+            <div>
+                <span class="text-sm font-medium">Nginx:</span>
+                <p class="text-xs font-mono text-gray-600 truncate">${versionDetails.nginx?.image || 'No change'}</p>
+            </div>
+        `;
+    }
+    
+    detailsHtml += `</div>`;
+    detailsDiv.innerHTML = detailsHtml;
+    
+    // Show modal
+    document.getElementById('rollback-confirmation-modal').classList.remove('hidden');
+}
+
+function cancelRollback() {
+    pendingRollback = null;
+    document.getElementById('rollback-confirmation-modal').classList.add('hidden');
+}
+
+async function confirmRollback() {
+    if (!pendingRollback) return;
+    
+    const button = event.currentTarget;
+    const originalHTML = button.innerHTML;
+    
+    try {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Rolling back...';
+        
+        // Get the latest deployment ID first
+        const statusResponse = await fetch('/manager/v1/updates/status', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (!statusResponse.ok) throw new Error('Failed to get deployment status');
+        
+        const status = await statusResponse.json();
+        const deploymentId = status.deployment_id || 'latest';
+        
+        // Build target versions for each container type
+        const targetVersions = {};
+        
+        if (pendingRollback.versionDetails.agents?.image) {
+            targetVersions.agent_image = pendingRollback.versionDetails.agents.image;
+        }
+        if (pendingRollback.versionDetails.gui?.image) {
+            targetVersions.gui_image = pendingRollback.versionDetails.gui.image;
+        }
+        if (pendingRollback.versionDetails.nginx?.image) {
+            targetVersions.nginx_image = pendingRollback.versionDetails.nginx.image;
+        }
+        
+        // Perform rollback
+        const response = await fetch(`/manager/v1/updates/rollback`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                deployment_id: deploymentId,
+                target_version: pendingRollback.targetVersion,
+                target_versions: targetVersions
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Rollback failed');
+        }
+        
+        const result = await response.json();
+        
+        // Show success
+        showNotification('Rollback initiated successfully', 'success');
+        
+        // Close modal
+        cancelRollback();
+        
+        // Refresh the deployment tab
+        await updateDeploymentTab();
+        
+    } catch (error) {
+        console.error('Rollback error:', error);
+        showNotification(`Rollback failed: ${error.message}`, 'error');
+        button.disabled = false;
+        button.innerHTML = originalHTML;
+    }
+}
+
+// Show notification helper
+function showNotification(message, type = 'info') {
+    const alertDiv = document.getElementById('error-alert');
+    const messageSpan = document.getElementById('error-message');
+    
+    messageSpan.textContent = message;
+    alertDiv.className = `mb-6 px-4 py-3 rounded border ${
+        type === 'success' ? 'bg-green-50 border-green-200 text-green-700' :
+        type === 'error' ? 'bg-red-50 border-red-200 text-red-700' :
+        'bg-blue-50 border-blue-200 text-blue-700'
+    }`;
+    alertDiv.classList.remove('hidden');
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        alertDiv.classList.add('hidden');
+    }, 5000);
 }

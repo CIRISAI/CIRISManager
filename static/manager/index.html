@@ -40,11 +40,6 @@
                     <div>
                         <h1 class="text-3xl font-bold">CIRIS Manager</h1>
                         <p class="text-gray-600 mt-1">Manage your CIRIS agents and infrastructure</p>
-                        <div class="mt-2">
-                            <a href="/deployments.html" class="text-blue-600 hover:text-blue-800 font-medium">
-                                <i class="fas fa-rocket mr-1"></i> View Deployments & Rollbacks
-                            </a>
-                        </div>
                     </div>
                     <div class="flex gap-2">
                         <button onclick="refreshData()" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
@@ -82,7 +77,7 @@
                             Manager Status
                         </button>
                         <button onclick="switchTab('versions')" id="versions-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
-                            Versions
+                            Deployments & Rollbacks
                         </button>
                         <button onclick="switchTab('canary')" id="canary-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
                             Canary Groups
@@ -145,7 +140,7 @@
                     <!-- Versions Tab -->
                     <div id="versions-content" class="hidden">
                         <div class="space-y-6">
-                            <!-- Current Versions -->
+                            <!-- Current Versions with Rollback Options -->
                             <div>
                                 <h3 class="text-lg font-semibold mb-4">Current Container Versions</h3>
                                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -170,6 +165,17 @@
                                             <span class="hidden sm:inline">Digest: </span>
                                             <span id="current-gui-digest" class="font-mono">Loading...</span>
                                         </p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Rollback Options -->
+                                <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <h4 class="font-medium text-gray-700 mb-3 flex items-center">
+                                        <i class="fas fa-history mr-2 text-blue-600"></i>
+                                        Rollback Options
+                                    </h4>
+                                    <div id="rollback-options" class="space-y-2">
+                                        <!-- Rollback options will be populated here -->
                                     </div>
                                 </div>
                             </div>
@@ -292,13 +298,6 @@
                                 </div>
                             </div>
 
-                            <!-- Version History -->
-                            <div>
-                                <h3 class="text-lg font-semibold mb-4">Recent Deployments</h3>
-                                <div id="deployment-history" class="space-y-2">
-                                    <!-- Deployment history will be populated here -->
-                                </div>
-                            </div>
                         </div>
                     </div>
 
@@ -679,6 +678,33 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rollback Confirmation Modal -->
+    <div id="rollback-confirmation-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 class="text-xl font-bold mb-4">Confirm Rollback</h2>
+            <div class="mb-6">
+                <p class="text-gray-600 mb-4">Are you sure you want to rollback to these versions?</p>
+                <div id="rollback-details" class="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <!-- Rollback details will be shown here -->
+                </div>
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-4">
+                    <p class="text-sm text-yellow-800">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        This will restart all affected containers with the selected versions.
+                    </p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button onclick="cancelRollback()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                    Cancel
+                </button>
+                <button onclick="confirmRollback()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+                    <i class="fas fa-undo mr-2"></i>Confirm Rollback
+                </button>
             </div>
         </div>
     </div>

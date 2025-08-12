@@ -1356,6 +1356,26 @@ def create_routes(manager: Any) -> APIRouter:
         history = await deployment_orchestrator.get_deployment_history(limit)
         return {"deployments": history}
 
+    @router.get("/updates/rollback-options")
+    async def get_rollback_options(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
+        """
+        Get available rollback options for all container types.
+        Returns n-1 and n-2 versions for agents, GUI, and nginx containers.
+        """
+        from ciris_manager.version_tracker import get_version_tracker
+
+        tracker = get_version_tracker()
+        options = await tracker.get_rollback_options()
+
+        # Format response for UI consumption
+        result = {
+            "agents": options.get("agents", {}),
+            "gui": options.get("gui", {}),
+            "nginx": options.get("nginx", {}),
+        }
+
+        return result
+
     @router.get("/updates/rollback/{deployment_id}/versions")
     async def get_rollback_versions(
         deployment_id: str, _user: Dict[str, str] = auth_dependency

@@ -21,6 +21,7 @@ from ciris_manager.models import (
     AgentUpdateResponse,
 )
 from ciris_manager.docker_registry import DockerRegistryClient
+from ciris_manager.version_tracker import get_version_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +199,42 @@ class DeploymentOrchestrator:
         )
 
         self.pending_deployments[deployment_id] = status
-        logger.info(f"Staged deployment {deployment_id} for review")
+
+        # Track staged versions as n+1
+        tracker = get_version_tracker()
+
+        # Stage agent version if provided
+        if notification.agent_image:
+            await tracker.stage_version(
+                "agents",
+                notification.agent_image,
+                digest=None,  # Could get from registry
+                deployment_id=deployment_id,
+                deployed_by="CD Pipeline",
+            )
+
+        # Stage GUI version if provided
+        if notification.gui_image:
+            await tracker.stage_version(
+                "gui",
+                notification.gui_image,
+                digest=None,
+                deployment_id=deployment_id,
+                deployed_by="CD Pipeline",
+            )
+
+        # Stage nginx version if we have one
+        # Note: nginx image rarely changes, but we should track it
+        if hasattr(notification, "nginx_image") and notification.nginx_image:
+            await tracker.stage_version(
+                "nginx",
+                notification.nginx_image,
+                digest=None,
+                deployment_id=deployment_id,
+                deployed_by="CD Pipeline",
+            )
+
+        logger.info(f"Staged deployment {deployment_id} for review with version tracking")
 
         return deployment_id
 
@@ -1081,6 +1117,25 @@ class DeploymentOrchestrator:
             if deployment_status and deployment_status.status == "in_progress":
                 deployment_status.status = "completed"
                 deployment_status.completed_at = datetime.now(timezone.utc).isoformat()
+
+                # Promote staged versions to current (n+1 → n, n → n-1, n-1 → n-2)
+                tracker = get_version_tracker()
+                notification = deployment_status.notification
+
+                if notification:
+                    # Promote agent version
+                    if notification.agent_image:
+                        await tracker.promote_staged_version("agents", deployment_id)
+
+                    # Promote GUI version
+                    if notification.gui_image:
+                        await tracker.promote_staged_version("gui", deployment_id)
+
+                    # Promote nginx version if we have one
+                    if hasattr(notification, "nginx_image") and notification.nginx_image:
+                        await tracker.promote_staged_version("nginx", deployment_id)
+
+                logger.info(f"Promoted staged versions to current for deployment {deployment_id}")
 
                 # Log deployment completion with summary
                 logger.info(
