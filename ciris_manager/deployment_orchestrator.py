@@ -517,7 +517,7 @@ class DeploymentOrchestrator:
                         headers = auth.get_auth_headers(agent.agent_id)
 
                         # Check health endpoint
-                        health_url = f"http://localhost:{agent.port}/v1/health"
+                        health_url = f"http://localhost:{agent.api_port}/v1/health"
                         response = await client.get(health_url, headers=headers)
 
                         if response.status_code == 200:
@@ -544,7 +544,7 @@ class DeploymentOrchestrator:
                                 if work_duration >= stability_minutes:
                                     # Check for recent incidents
                                     telemetry_url = (
-                                        f"http://localhost:{agent.port}/v1/telemetry/overview"
+                                        f"http://localhost:{agent.api_port}/v1/telemetry/overview"
                                     )
                                     telemetry_response = await client.get(
                                         telemetry_url, headers=headers
