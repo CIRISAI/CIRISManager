@@ -256,20 +256,21 @@ class TestGuiNginxDeployment:
             Mock(agent_id="agent-2", agent_name="Agent 2"),
         ]
 
-        # Mock file paths
-        with patch("pathlib.Path") as mock_path:
+        # Mock file paths using the deployment_orchestrator's Path
+        original_path = Path
+        
+        def path_side_effect(path_str):
+            if "gui_versions" in str(path_str):
+                return gui_file
+            elif "nginx_versions" in str(path_str):
+                return nginx_file
+            else:
+                # Return a mock that behaves like a non-existent path
+                mock_path = Mock()
+                mock_path.exists.return_value = False
+                return mock_path
 
-            def path_side_effect(path_str):
-                if "gui_versions" in path_str:
-                    return gui_file
-                elif "nginx_versions" in path_str:
-                    return nginx_file
-                else:
-                    mock = Mock()
-                    mock.exists.return_value = False
-                    return mock
-
-            mock_path.side_effect = path_side_effect
+        with patch("ciris_manager.deployment_orchestrator.Path", side_effect=path_side_effect):
 
             # Mock audit
             with patch("ciris_manager.audit.audit_deployment_action"):
