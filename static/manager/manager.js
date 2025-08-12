@@ -99,8 +99,8 @@ function renderAgents() {
                         ${agent.codename ? `<div>Codename: ${escapeHtml(agent.codename)}</div>` : ''}
                         ${agent.code_hash ? `<div class="font-mono text-xs">Hash: ${escapeHtml(agent.code_hash).substring(0, 8)}...</div>` : ''}
                         <div class="flex items-center gap-1">
-                            <span class="inline-block w-2 h-2 ${agent.is_running ? 'bg-green-500' : 'bg-gray-400'} rounded-full"></span>
-                            ${agent.is_running ? 'running' : 'stopped'}
+                            <span class="inline-block w-2 h-2 ${agent.status === 'running' ? 'bg-green-500' : 'bg-gray-400'} rounded-full"></span>
+                            ${agent.status || 'unknown'}
                         </div>
                     </div>
                 </div>
@@ -117,7 +117,7 @@ function renderAgents() {
                         </button>
                     </div>
                     <div>
-                        ${agent.is_running ? `
+                        ${agent.status === 'running' ? `
                             <button onclick="requestStopAgent('${agent.agent_id}')" class="px-3 py-1 text-yellow-600 hover:bg-yellow-50 rounded">
                                 <i class="fas fa-hand-paper"></i> Request Stop
                             </button>
