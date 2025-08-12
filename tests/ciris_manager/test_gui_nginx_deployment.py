@@ -257,8 +257,6 @@ class TestGuiNginxDeployment:
         ]
 
         # Mock file paths using the deployment_orchestrator's Path
-        original_path = Path
-        
         def path_side_effect(path_str):
             if "gui_versions" in str(path_str):
                 return gui_file
@@ -271,7 +269,6 @@ class TestGuiNginxDeployment:
                 return mock_path
 
         with patch("ciris_manager.deployment_orchestrator.Path", side_effect=path_side_effect):
-
             # Mock audit
             with patch("ciris_manager.audit.audit_deployment_action"):
                 await orchestrator._propose_rollback(
