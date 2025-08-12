@@ -30,8 +30,10 @@ class DeploymentOrchestrator:
     def __init__(self, manager: Optional[Any] = None) -> None:
         """Initialize deployment orchestrator."""
         self.deployments: Dict[str, DeploymentStatus] = {}
+        self.pending_deployments: Dict[str, DeploymentStatus] = {}  # Staged deployments awaiting approval
         self.current_deployment: Optional[str] = None
         self._deployment_lock = asyncio.Lock()
+        self.deployment_paused: Dict[str, bool] = {}  # Track paused deployments
         self.manager = manager
 
         # Initialize Docker registry client with GitHub token if available
@@ -143,6 +145,359 @@ class DeploymentOrchestrator:
             )
 
             return status
+
+    async def stage_deployment(
+        self,
+        notification: UpdateNotification, 
+        agents: List[AgentInfo],
+    ) -> str:
+        """
+        Stage a deployment for human review (Wisdom-Based Deferral).
+        
+        Args:
+            notification: Update notification from CD
+            agents: List of all agents
+            
+        Returns:
+            Deployment ID of staged deployment
+        """
+        deployment_id = str(uuid4())
+        
+        # Determine affected agents count
+        agents_needing_update, nginx_needs_update = await self._check_agents_need_update(
+            notification, agents
+        )
+        
+        status = DeploymentStatus(
+            deployment_id=deployment_id,
+            notification=notification,
+            agents_total=len(agents_needing_update),
+            agents_updated=0,
+            agents_deferred=0,
+            agents_failed=0,
+            started_at=None,  # Not started yet
+            completed_at=None,
+            status="pending",
+            message=f"Staged: {notification.message}",
+            staged_at=datetime.now(timezone.utc).isoformat(),
+            canary_phase=None,
+        )
+        
+        self.pending_deployments[deployment_id] = status
+        logger.info(f"Staged deployment {deployment_id} for review")
+        
+        return deployment_id
+    
+    async def get_pending_deployment(self) -> Optional[DeploymentStatus]:
+        """Get the currently pending deployment if any."""
+        if not self.pending_deployments:
+            return None
+        # Return the most recent pending deployment
+        return next(iter(self.pending_deployments.values()))
+    
+    async def launch_staged_deployment(self, deployment_id: str) -> bool:
+        """
+        Launch a previously staged deployment.
+        
+        Args:
+            deployment_id: ID of staged deployment
+            
+        Returns:
+            True if deployment was launched, False if not found
+        """
+        if deployment_id not in self.pending_deployments:
+            return False
+            
+        async with self._deployment_lock:
+            if self.current_deployment:
+                raise ValueError(f"Deployment {self.current_deployment} already in progress")
+            
+            deployment = self.pending_deployments.pop(deployment_id)
+            deployment.status = "in_progress"
+            deployment.started_at = datetime.now(timezone.utc).isoformat()
+            
+            # Determine canary phase if applicable
+            if deployment.notification.strategy == "canary":
+                deployment.canary_phase = "explorers"
+            
+            self.deployments[deployment_id] = deployment
+            self.current_deployment = deployment_id
+            
+            # Get agents needing update
+            from ciris_manager.docker_discovery import DockerAgentDiscovery
+            discovery = DockerAgentDiscovery(self.manager.agent_registry)
+            agents = discovery.discover_agents()
+            
+            agents_needing_update, _ = await self._check_agents_need_update(
+                deployment.notification, agents
+            )
+            
+            # Start deployment in background
+            asyncio.create_task(
+                self._run_deployment(deployment_id, deployment.notification, agents_needing_update)
+            )
+            
+            logger.info(f"Launched staged deployment {deployment_id}")
+            return True
+    
+    async def reject_staged_deployment(self, deployment_id: str, reason: str = "Rejected by operator") -> bool:
+        """
+        Reject a staged deployment.
+        
+        Args:
+            deployment_id: ID of staged deployment
+            reason: Reason for rejection
+            
+        Returns:
+            True if deployment was rejected, False if not found
+        """
+        if deployment_id not in self.pending_deployments:
+            return False
+            
+        deployment = self.pending_deployments.pop(deployment_id)
+        deployment.status = "rejected"
+        deployment.completed_at = datetime.now(timezone.utc).isoformat()
+        deployment.message = reason
+        
+        self.deployments[deployment_id] = deployment
+        
+        # Audit the rejection
+        from ciris_manager.audit import audit_deployment_action
+        audit_deployment_action("reject", deployment_id, {"reason": reason})
+        
+        logger.info(f"Rejected staged deployment {deployment_id}: {reason}")
+        return True
+    
+    async def pause_deployment(self, deployment_id: str) -> bool:
+        """
+        Pause an active deployment.
+        
+        Args:
+            deployment_id: ID of active deployment
+            
+        Returns:
+            True if deployment was paused, False if not found/not active
+        """
+        if deployment_id not in self.deployments:
+            return False
+            
+        deployment = self.deployments[deployment_id]
+        if deployment.status != "in_progress":
+            return False
+            
+        self.deployment_paused[deployment_id] = True
+        deployment.status = "paused"
+        
+        logger.info(f"Paused deployment {deployment_id}")
+        return True
+    
+    async def rollback_deployment(self, deployment_id: str) -> bool:
+        """
+        Initiate rollback of a deployment.
+        
+        Args:
+            deployment_id: ID of deployment to rollback
+            
+        Returns:
+            True if rollback initiated, False if not found
+        """
+        if deployment_id not in self.deployments:
+            return False
+            
+        deployment = self.deployments[deployment_id]
+        deployment.status = "rolling_back"
+        
+        # Start rollback process
+        asyncio.create_task(self._rollback_agents(deployment))
+        
+        logger.info(f"Initiated rollback for deployment {deployment_id}")
+        return True
+    
+    async def get_current_images(self) -> Dict[str, Any]:
+        """Get current running container images."""
+        import json
+        
+        result = {}
+        
+        try:
+            # Get agent image from running containers
+            process = await asyncio.create_subprocess_exec(
+                "docker", "ps", "--format", "json",
+                "--filter", "label=ciris.agent=true",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await process.communicate()
+            
+            if stdout:
+                for line in stdout.decode().strip().split('\n'):
+                    if line:
+                        container = json.loads(line)
+                        if "Image" in container:
+                            result["agent_image"] = container["Image"]
+                            break
+            
+            # Get GUI image
+            process = await asyncio.create_subprocess_exec(
+                "docker", "ps", "--format", "json",
+                "--filter", "name=ciris-gui",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await process.communicate()
+            
+            if stdout:
+                for line in stdout.decode().strip().split('\n'):
+                    if line:
+                        container = json.loads(line)
+                        if "Image" in container:
+                            result["gui_image"] = container["Image"]
+                            break
+                            
+        except Exception as e:
+            logger.error(f"Failed to get current images: {e}")
+            
+        return result
+    
+    async def get_deployment_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get deployment history."""
+        deployments = sorted(
+            self.deployments.values(),
+            key=lambda d: d.started_at or "",
+            reverse=True
+        )[:limit]
+        
+        return [
+            {
+                "deployment_id": d.deployment_id,
+                "started_at": d.started_at,
+                "completed_at": d.completed_at,
+                "status": d.status,
+                "message": d.message,
+                "agents_total": d.agents_total,
+                "agents_updated": d.agents_updated,
+                "agents_failed": d.agents_failed,
+            }
+            for d in deployments
+        ]
+    
+    async def evaluate_and_stage(
+        self,
+        notification: UpdateNotification,
+        agents: List[AgentInfo],
+    ) -> str:
+        """
+        Evaluate update and stage if it requires human review.
+        
+        Args:
+            notification: Update notification
+            agents: List of agents
+            
+        Returns:
+            Deployment ID
+        """
+        # Check if this is a high-risk update requiring staging
+        requires_staging = await self._requires_wisdom_based_deferral(notification, agents)
+        
+        if requires_staging:
+            return await self.stage_deployment(notification, agents)
+        else:
+            # Low-risk update, proceed immediately
+            status = await self.start_deployment(notification, agents)
+            return status.deployment_id
+    
+    async def _requires_wisdom_based_deferral(
+        self,
+        notification: UpdateNotification,
+        agents: List[AgentInfo],
+    ) -> bool:
+        """
+        Determine if update requires human review (Wisdom-Based Deferral).
+        
+        Criteria for staging:
+        - Major version updates
+        - Updates affecting many agents (>5)
+        - Updates with "breaking" or "major" in message
+        - Manual strategy requested
+        
+        Args:
+            notification: Update notification
+            agents: List of agents
+            
+        Returns:
+            True if staging required
+        """
+        # Manual strategy always requires approval
+        if notification.strategy == "manual":
+            return True
+            
+        # Check for major version bump
+        if notification.agent_image:
+            # Extract version from image tag
+            parts = notification.agent_image.split(":")
+            if len(parts) > 1:
+                version = parts[-1]
+                if version.startswith("v2") or version.startswith("2"):
+                    logger.info("Major version update detected - requiring review")
+                    return True
+        
+        # Check message for high-risk keywords
+        if notification.message:
+            risk_keywords = ["breaking", "major", "critical", "emergency"]
+            message_lower = notification.message.lower()
+            if any(keyword in message_lower for keyword in risk_keywords):
+                logger.info(f"High-risk keywords in message - requiring review")
+                return True
+        
+        # Check number of affected agents
+        if len(agents) > 5:
+            logger.info(f"Large fleet update ({len(agents)} agents) - requiring review")
+            return True
+            
+        return False
+    
+    async def _rollback_agents(self, deployment: DeploymentStatus) -> None:
+        """
+        Rollback agents to previous versions.
+        
+        Args:
+            deployment: Deployment to rollback
+        """
+        logger.info(f"Starting rollback for deployment {deployment.deployment_id}")
+        
+        # Get list of updated agents from deployment
+        # This would need to track which agents were updated
+        # For now, we'll restart all agents to trigger image pull of stable version
+        
+        try:
+            # Stop all agent containers to force restart with previous image
+            process = await asyncio.create_subprocess_exec(
+                "docker", "ps", "--format", "{{.Names}}",
+                "--filter", "label=ciris.agent=true",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await process.communicate()
+            
+            if stdout:
+                container_names = stdout.decode().strip().split('\n')
+                for name in container_names:
+                    if name:
+                        logger.info(f"Restarting container {name} for rollback")
+                        await asyncio.create_subprocess_exec(
+                            "docker", "restart", name,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+            
+            deployment.status = "rolled_back"
+            deployment.completed_at = datetime.now(timezone.utc).isoformat()
+            logger.info(f"Rollback completed for deployment {deployment.deployment_id}")
+            
+        except Exception as e:
+            logger.error(f"Rollback failed: {e}")
+            deployment.status = "rollback_failed"
+            deployment.completed_at = datetime.now(timezone.utc).isoformat()
 
     async def _pull_images(self, notification: UpdateNotification) -> Dict[str, Any]:
         """

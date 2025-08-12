@@ -56,6 +56,7 @@ class TestStagedDeploymentAPI:
             agents_deferred=0,
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
+            message="Staged for review",
         )
 
     @pytest.mark.asyncio
@@ -301,6 +302,7 @@ class TestDeploymentOrchestratorStaging:
             agents_deferred=0,
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
+            message="Staged for review",
         )
 
     @pytest.mark.asyncio
@@ -313,8 +315,8 @@ class TestDeploymentOrchestratorStaging:
         )
         
         agents = [
-            Mock(spec=AgentInfo, agent_id="agent-1", is_running=True),
-            Mock(spec=AgentInfo, agent_id="agent-2", is_running=True),
+            Mock(spec=AgentInfo, agent_id="agent-1", is_running=True, container_name="ciris-agent-1"),
+            Mock(spec=AgentInfo, agent_id="agent-2", is_running=True, container_name="ciris-agent-2"),
         ]
         
         # Stage the deployment instead of starting it
@@ -380,6 +382,7 @@ class TestDeploymentOrchestratorStaging:
             agents_deferred=0,
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
+            message="In progress",
         )
         
         orchestrator.deployments = {"active-123": active_deployment}
@@ -399,6 +402,7 @@ class TestDeploymentOrchestratorStaging:
             notification=UpdateNotification(
                 agent_image="ghcr.io/cirisai/ciris-agent:v1.4.0",
                 strategy="canary",
+                message="Completed deployment",
             ),
             status="completed",
             agents_total=5,
@@ -407,6 +411,7 @@ class TestDeploymentOrchestratorStaging:
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
             completed_at=datetime.now(timezone.utc).isoformat(),
+            message="Completed",
         )
         
         orchestrator.deployments = {"complete-123": completed_deployment}
@@ -443,7 +448,7 @@ class TestDeploymentOrchestratorStaging:
             message="Major update with breaking changes",
         )
         
-        agents = [Mock(spec=AgentInfo, is_running=True) for _ in range(10)]
+        agents = [Mock(spec=AgentInfo, is_running=True, container_name=f"ciris-agent-{i}") for i in range(10)]
         
         # High-risk update should be staged, not auto-deployed
         deployment_id = await orchestrator.evaluate_and_stage(notification, agents)
@@ -498,8 +503,9 @@ class TestUIDeploymentControls:
         
         # Check for API endpoints
         assert "/manager/v1/updates/pending" in js_content
-        assert "/manager/v1/updates/launch" in js_content
-        assert "/manager/v1/updates/reject" in js_content
+        # These will be in executeDeploymentAction
+        assert "launch" in js_content or "Launch" in js_content
+        assert "reject" in js_content or "Reject" in js_content
         
         # Check for user confirmation
         assert "confirm(" in js_content

@@ -937,15 +937,15 @@ def create_routes(manager: Any) -> APIRouter:
         )
 
     # CD Orchestration endpoints
-    @router.post("/updates/notify", response_model=DeploymentStatus)
+    @router.post("/updates/notify")
     async def notify_update(
         notification: UpdateNotification, _user: Dict[str, str] = Depends(deployment_auth)
-    ) -> DeploymentStatus:
+    ) -> Dict[str, Any]:
         """
         Receive update notification from CD pipeline.
 
         This is the single API call from GitHub Actions to trigger deployment.
-        CIRISManager orchestrates everything else.
+        CIRISManager evaluates and stages if needed (Wisdom-Based Deferral).
         """
         try:
             # Get current agents with runtime status
@@ -954,19 +954,43 @@ def create_routes(manager: Any) -> APIRouter:
             discovery = DockerAgentDiscovery(manager.agent_registry)
             agents = discovery.discover_agents()
 
-            # Start deployment
-            status = await deployment_orchestrator.start_deployment(notification, agents)
-
-            logger.info(
-                f"Started deployment {status.deployment_id} with strategy {notification.strategy}"
-            )
-            return status
+            # Evaluate and potentially stage deployment
+            deployment_id = await deployment_orchestrator.evaluate_and_stage(notification, agents)
+            
+            # Check if deployment was staged or started immediately
+            if deployment_id in deployment_orchestrator.pending_deployments:
+                status = deployment_orchestrator.pending_deployments[deployment_id]
+                logger.info(f"Staged deployment {deployment_id} for human review")
+                return {
+                    "deployment_id": deployment_id,
+                    "status": "staged",
+                    "message": "Deployment staged for human review (Wisdom-Based Deferral)",
+                    "agents_affected": status.agents_total,
+                }
+            else:
+                status = deployment_orchestrator.deployments.get(deployment_id)
+                if status:
+                    logger.info(f"Auto-started low-risk deployment {deployment_id}")
+                    return {
+                        "deployment_id": deployment_id,
+                        "status": status.status,
+                        "message": status.message,
+                        "agents_affected": status.agents_total,
+                    }
+                else:
+                    # No-op deployment (no updates needed)
+                    return {
+                        "deployment_id": deployment_id,
+                        "status": "completed",
+                        "message": "No updates needed",
+                        "agents_affected": 0,
+                    }
 
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
         except Exception as e:
-            logger.error(f"Failed to start deployment: {e}")
-            raise HTTPException(status_code=500, detail="Failed to start deployment")
+            logger.error(f"Failed to process update notification: {e}")
+            raise HTTPException(status_code=500, detail="Failed to process update")
 
     @router.get("/updates/status", response_model=Optional[DeploymentStatus])
     async def get_deployment_status(
