@@ -1841,9 +1841,9 @@ def create_routes(manager: Any) -> APIRouter:
                                     service_type = (
                                         service_name.split(".")[-1].replace("Service", "").lower()
                                     )
-                                    circuit_breakers["critical_services"][service_type] = (
-                                        breaker_state
-                                    )
+                                    # Store the breaker state for critical services
+                                    critical_services = circuit_breakers["critical_services"]
+                                    critical_services[service_type] = breaker_state
 
                                 # Track all open circuit breakers
                                 if breaker_state in ["open", "half_open"]:
