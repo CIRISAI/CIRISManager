@@ -81,8 +81,14 @@ class VersionTracker:
         # Lock for concurrent access
         self._lock = asyncio.Lock()
 
-        # Load existing state
-        asyncio.create_task(self._load_state())
+        # Flag to track if we've loaded state
+        self._loaded = False
+
+    async def _ensure_loaded(self) -> None:
+        """Ensure state has been loaded from disk."""
+        if not self._loaded:
+            await self._load_state()
+            self._loaded = True
 
     async def _load_state(self) -> None:
         """Load version state from disk."""
@@ -244,6 +250,7 @@ class VersionTracker:
         Returns:
             Dictionary with rollback options for each container type
         """
+        await self._ensure_loaded()
         async with self._lock:
             if container_type:
                 if container_type not in self.state:
