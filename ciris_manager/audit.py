@@ -36,7 +36,7 @@ def audit_deployment_action(
         # Ensure audit directory exists
         AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-        audit_entry = {
+        audit_entry: Dict[str, Any] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "action": action,
             "deployment_id": deployment_id,

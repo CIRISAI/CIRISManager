@@ -968,7 +968,9 @@ def create_routes(manager: Any) -> APIRouter:
                     "agents_affected": status.agents_total,
                 }
             else:
-                status = deployment_orchestrator.deployments.get(deployment_id)
+                status: Optional[DeploymentStatus] = deployment_orchestrator.deployments.get(
+                    deployment_id
+                )
                 if status:
                     logger.info(f"Auto-started low-risk deployment {deployment_id}")
                     return {
@@ -1015,16 +1017,22 @@ def create_routes(manager: Any) -> APIRouter:
         """
         pending = await deployment_orchestrator.get_pending_deployment()
         if pending:
-            return {
+            result = {
                 "pending": True,
                 "deployment_id": pending.deployment_id,
-                "agent_image": pending.notification.agent_image,
-                "gui_image": pending.notification.gui_image,
-                "strategy": pending.notification.strategy,
-                "message": pending.notification.message,
                 "staged_at": pending.staged_at,
                 "affected_agents": pending.agents_total,
             }
+            if pending.notification:
+                result.update(
+                    {
+                        "agent_image": pending.notification.agent_image,
+                        "gui_image": pending.notification.gui_image,
+                        "strategy": pending.notification.strategy,
+                        "message": pending.notification.message,
+                    }
+                )
+            return result
         return {"pending": False}
 
     @router.post("/updates/launch")

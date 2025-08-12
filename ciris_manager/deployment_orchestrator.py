@@ -69,11 +69,13 @@ class DeploymentOrchestrator:
                 logger.error(f"Failed to pull images: {pull_results.get('error', 'Unknown error')}")
                 return DeploymentStatus(
                     deployment_id=str(uuid4()),
+                    notification=notification,
                     agents_total=len(agents),
                     agents_updated=0,
                     agents_deferred=0,
                     agents_failed=0,
                     started_at=datetime.now(timezone.utc).isoformat(),
+                    staged_at=None,
                     completed_at=datetime.now(timezone.utc).isoformat(),
                     status="failed",
                     message=f"Failed to pull images: {pull_results.get('error', 'Unknown error')}",
@@ -90,11 +92,13 @@ class DeploymentOrchestrator:
                 logger.info("No agents or nginx need updating - images unchanged")
                 return DeploymentStatus(
                     deployment_id=str(uuid4()),
+                    notification=notification,
                     agents_total=len(agents),
                     agents_updated=0,
                     agents_deferred=0,
                     agents_failed=0,
                     started_at=datetime.now(timezone.utc).isoformat(),
+                    staged_at=None,
                     completed_at=datetime.now(timezone.utc).isoformat(),
                     status="completed",
                     message="No update needed - images unchanged",
@@ -111,11 +115,13 @@ class DeploymentOrchestrator:
 
                 return DeploymentStatus(
                     deployment_id=deployment_id,
+                    notification=notification,
                     agents_total=0,
                     agents_updated=0,
                     agents_deferred=0,
                     agents_failed=0,
                     started_at=datetime.now(timezone.utc).isoformat(),
+                    staged_at=None,
                     completed_at=datetime.now(timezone.utc).isoformat(),
                     status="completed" if nginx_updated else "failed",
                     message="Nginx/GUI container updated"
@@ -230,6 +236,9 @@ class DeploymentOrchestrator:
 
             discovery = DockerAgentDiscovery(self.manager.agent_registry)
             agents = discovery.discover_agents()
+
+            if not deployment.notification:
+                raise ValueError(f"Deployment {deployment_id} has no notification")
 
             agents_needing_update, _ = await self._check_agents_need_update(
                 deployment.notification, agents
@@ -562,7 +571,9 @@ class DeploymentOrchestrator:
 
         try:
             # Get affected agents from deployment
-            affected_agents = deployment.notification.metadata.get("affected_agents", [])
+            affected_agents = []
+            if deployment.notification and deployment.notification.metadata:
+                affected_agents = deployment.notification.metadata.get("affected_agents", [])
 
             if self.manager and hasattr(self.manager, "agent_registry"):
                 # Update docker-compose with n-1 versions
@@ -940,8 +951,12 @@ class DeploymentOrchestrator:
                             datetime.now(timezone.utc)
                             - datetime.fromisoformat(
                                 deployment_status.started_at.replace("Z", "+00:00")
+                                if deployment_status.started_at
+                                else datetime.now(timezone.utc).isoformat()
                             )
-                        ).total_seconds(),
+                        ).total_seconds()
+                        if deployment_status.started_at
+                        else 0,
                     },
                 )
 
@@ -1452,9 +1467,11 @@ class DeploymentOrchestrator:
                     audit_deployment_action(
                         deployment_id=deployment_id,
                         action="shutdown_notified",
-                        agent_id=agent.agent_id,
                         success=True,
-                        details={"note": "Agent notified but may not shutdown immediately"},
+                        details={
+                            "agent_id": agent.agent_id,
+                            "note": "Agent notified but may not shutdown immediately",
+                        },
                     )
 
                     # Update agent metadata with new image digests
@@ -1507,9 +1524,9 @@ class DeploymentOrchestrator:
                     audit_deployment_action(
                         deployment_id=deployment_id,
                         action="update_rejected",
-                        agent_id=agent.agent_id,
                         success=False,
                         details={
+                            "agent_id": agent.agent_id,
                             "http_status": response.status_code,
                             "response_body": response.text[:500],
                         },
@@ -1529,9 +1546,12 @@ class DeploymentOrchestrator:
             audit_deployment_action(
                 deployment_id=deployment_id,
                 action="connection_error",
-                agent_id=agent.agent_id,
                 success=True,  # We treat this as success since agent may be shutting down
-                details={"error": str(e), "note": "Agent unreachable, shutdown status unknown"},
+                details={
+                    "agent_id": agent.agent_id,
+                    "error": str(e),
+                    "note": "Agent unreachable, shutdown status unknown",
+                },
             )
             return AgentUpdateResponse(
                 agent_id=agent.agent_id,
