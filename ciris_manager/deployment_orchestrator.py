@@ -5,6 +5,7 @@ Handles canary deployments, graceful shutdowns, and agent update coordination.
 """
 
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -110,8 +111,11 @@ class DeploymentOrchestrator:
                 logger.info("Only nginx/GUI needs updating - deploying immediately")
                 deployment_id = str(uuid4())
 
-                # Update nginx container (gui_image is guaranteed to be non-None here)
-                nginx_updated = await self._update_nginx_container(notification.gui_image)  # type: ignore[arg-type]
+                # Update GUI/nginx containers
+                nginx_updated = await self._update_nginx_container(
+                    notification.gui_image,  # type: ignore[arg-type]
+                    notification.nginx_image
+                )
 
                 return DeploymentStatus(
                     deployment_id=deployment_id,
@@ -487,6 +491,8 @@ class DeploymentOrchestrator:
         deployment_id: str,
         reason: str,
         affected_agents: List[AgentInfo],
+        include_gui: bool = False,
+        include_nginx: bool = False,
     ) -> None:
         """
         Propose rollback to human operator.
@@ -495,19 +501,45 @@ class DeploymentOrchestrator:
             deployment_id: Deployment identifier
             reason: Why rollback is being proposed
             affected_agents: Agents that would be rolled back
+            include_gui: Whether GUI container should be rolled back
+            include_nginx: Whether nginx container should be rolled back
         """
         if deployment_id not in self.deployments:
             return
 
         deployment = self.deployments[deployment_id]
+        
+        # Prepare rollback targets
+        rollback_targets: Dict[str, Any] = {}
+        
+        if affected_agents:
+            rollback_targets["agents"] = [a.agent_id for a in affected_agents]
+            rollback_targets["agent_versions"] = await self._get_previous_versions(affected_agents)
+        
+        if include_gui:
+            rollback_targets["gui"] = "n-1"  # Default to previous version
+            # Check if GUI version history exists
+            gui_versions_file = Path("/opt/ciris/metadata/gui_versions.json")
+            if gui_versions_file.exists():
+                with open(gui_versions_file, 'r') as f:
+                    gui_versions = json.load(f)
+                    rollback_targets["gui_version"] = gui_versions.get("n-1", "unknown")
+        
+        if include_nginx:
+            rollback_targets["nginx"] = "n-1"  # Default to previous version
+            # Check if nginx version history exists
+            nginx_versions_file = Path("/opt/ciris/metadata/nginx_versions.json")
+            if nginx_versions_file.exists():
+                with open(nginx_versions_file, 'r') as f:
+                    nginx_versions = json.load(f)
+                    rollback_targets["nginx_version"] = nginx_versions.get("n-1", "unknown")
 
         # Create rollback proposal
         rollback_proposal = {
             "deployment_id": deployment_id,
             "proposed_at": datetime.now(timezone.utc).isoformat(),
             "reason": reason,
-            "affected_agents": [a.agent_id for a in affected_agents],
-            "previous_versions": await self._get_previous_versions(affected_agents),
+            "rollback_targets": rollback_targets,
         }
 
         # Store proposal for UI to display
@@ -575,14 +607,26 @@ class DeploymentOrchestrator:
         logger.info(f"Starting rollback for deployment {deployment.deployment_id}")
 
         try:
-            # Get affected agents from deployment
-            affected_agents = []
+            # Get rollback targets from deployment
+            rollback_targets = {}
             if deployment.notification and deployment.notification.metadata:
+                rollback_targets = deployment.notification.metadata.get("rollback_targets", {})
+                # Legacy support for affected_agents
                 affected_agents = deployment.notification.metadata.get("affected_agents", [])
+                if affected_agents and not rollback_targets:
+                    rollback_targets["agents"] = affected_agents
+            
+            # Rollback GUI/nginx if needed
+            if rollback_targets.get("gui"):
+                await self._rollback_gui_container(rollback_targets["gui"])
+            
+            if rollback_targets.get("nginx"):
+                await self._rollback_nginx_container(rollback_targets["nginx"])
 
+            # Rollback agents
             if self.manager and hasattr(self.manager, "agent_registry"):
-                # Update docker-compose with n-1 versions
-                for agent_id in affected_agents:
+                agent_list = rollback_targets.get("agents", [])
+                for agent_id in agent_list:
                     agent_info = self.manager.agent_registry.get_agent(agent_id)
                     if not agent_info:
                         continue
@@ -1701,20 +1745,42 @@ class DeploymentOrchestrator:
             logger.error(f"Error recreating container for agent {agent_id}: {e}")
             return False
 
-    async def _update_nginx_container(self, gui_image: str) -> bool:
+    async def _update_nginx_container(self, gui_image: str, nginx_image: Optional[str] = None) -> bool:
         """
-        Update the nginx/GUI container with a new image.
+        Update the GUI and optionally nginx containers with new images.
 
         Args:
             gui_image: New GUI image to deploy
+            nginx_image: Optional new nginx image to deploy
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            logger.info(f"Updating nginx/GUI container to {gui_image}")
+            success = True
+            
+            # Update GUI container
+            if gui_image:
+                logger.info(f"Updating GUI container to {gui_image}")
+                # Store previous image for rollback capability
+                await self._store_container_version("gui", gui_image)
 
-            # Find and restart the GUI container (usually named ciris-gui)
+            # Pull the new image first
+            logger.info(f"Pulling GUI image: {gui_image}")
+            pull_result = await asyncio.create_subprocess_exec(
+                "docker",
+                "pull",
+                gui_image,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await pull_result.communicate()
+            
+            if pull_result.returncode != 0:
+                logger.error(f"Failed to pull GUI image: {stderr.decode()}")
+                return False
+
+            # Find GUI container
             result = await asyncio.create_subprocess_exec(
                 "docker",
                 "ps",
@@ -1736,57 +1802,102 @@ class DeploymentOrchestrator:
 
             if not gui_containers:
                 logger.warning("No GUI container found to update")
-                # This might be OK if there's no separate GUI container
-                return True
+                # Don't return here - we might still need to update nginx
+            else:
+                for container_name in gui_containers:
+                    logger.info(f"Updating GUI container: {container_name}")
+                    
+                    # Use docker-compose up to update with new image
+                    compose_result = await asyncio.create_subprocess_exec(
+                        "docker-compose",
+                        "-f",
+                        "/opt/ciris/docker-compose.yml",
+                        "up",
+                        "-d",
+                        "--no-deps",
+                        "gui",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        env={**os.environ, "CIRIS_GUI_IMAGE": gui_image},
+                    )
+                    stdout, stderr = await compose_result.communicate()
 
-            for container_name in gui_containers:
-                logger.info(f"Restarting GUI container: {container_name}")
+                    # Remove the container
+                    rm_result = await asyncio.create_subprocess_exec(
+                        "docker",
+                        "rm",
+                        container_name,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    await rm_result.communicate()
 
-                # Stop the container
-                stop_result = await asyncio.create_subprocess_exec(
+                    # Docker compose or the container manager should recreate it with the new image
+                    # If using docker-compose, we need to recreate the service
+                    compose_result = await asyncio.create_subprocess_exec(
+                        "docker-compose",
+                        "-f",
+                        "/opt/ciris/docker-compose.yml",
+                        "up",
+                        "-d",
+                        "--force-recreate",
+                        container_name,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd="/opt/ciris",
+                    )
+                    stdout, stderr = await compose_result.communicate()
+
+                    if compose_result.returncode != 0:
+                        logger.error(f"Failed to recreate GUI container: {stderr.decode()}")
+                        success = False
+
+            # Update nginx container if specified
+            if nginx_image:
+                logger.info(f"Updating nginx container to {nginx_image}")
+                # Store previous image for rollback capability
+                await self._store_container_version("nginx", nginx_image)
+                
+                # Pull the nginx image
+                pull_result = await asyncio.create_subprocess_exec(
                     "docker",
-                    "stop",
-                    container_name,
+                    "pull",
+                    nginx_image,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                await stop_result.communicate()
-
-                # Remove the container
-                rm_result = await asyncio.create_subprocess_exec(
-                    "docker",
-                    "rm",
-                    container_name,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                await rm_result.communicate()
-
-                # Docker compose or the container manager should recreate it with the new image
-                # If using docker-compose, we need to recreate the service
-                compose_result = await asyncio.create_subprocess_exec(
-                    "docker-compose",
-                    "-f",
-                    "/opt/ciris/docker-compose.yml",
-                    "up",
-                    "-d",
-                    "--force-recreate",
-                    container_name,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd="/opt/ciris",
-                )
-                stdout, stderr = await compose_result.communicate()
-
-                if compose_result.returncode != 0:
-                    logger.error(f"Failed to recreate GUI container: {stderr.decode()}")
-                    return False
-
-            logger.info("Successfully updated nginx/GUI container")
-            return True
+                stdout, stderr = await pull_result.communicate()
+                
+                if pull_result.returncode != 0:
+                    logger.error(f"Failed to pull nginx image: {stderr.decode()}")
+                    success = False
+                else:
+                    # Update nginx container using docker-compose
+                    compose_result = await asyncio.create_subprocess_exec(
+                        "docker-compose",
+                        "-f",
+                        "/opt/ciris/docker-compose.yml",
+                        "up",
+                        "-d",
+                        "--no-deps",
+                        "--force-recreate",
+                        "nginx",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        env={**os.environ, "NGINX_IMAGE": nginx_image},
+                    )
+                    stdout, stderr = await compose_result.communicate()
+                    
+                    if compose_result.returncode != 0:
+                        logger.error(f"Failed to update nginx container: {stderr.decode()}")
+                        success = False
+            
+            if success:
+                logger.info("Successfully updated container(s)")
+            return success
 
         except Exception as e:
-            logger.error(f"Error updating nginx/GUI container: {e}")
+            logger.error(f"Error updating containers: {e}")
             return False
 
     async def _update_agent_metadata(self, agent_id: str, notification: UpdateNotification) -> None:
@@ -1884,3 +1995,157 @@ class DeploymentOrchestrator:
         except Exception as e:
             # Don't fail deployment if cleanup fails
             logger.warning(f"Image cleanup failed (non-critical): {e}")
+
+    async def _store_container_version(self, container_type: str, new_image: str) -> None:
+        """
+        Store container version history for rollback capability.
+        
+        Args:
+            container_type: Type of container (gui, nginx, etc.)
+            new_image: New image being deployed
+        """
+        try:
+            # Store in a metadata file for infrastructure containers
+            metadata_file = Path(f"/opt/ciris/metadata/{container_type}_versions.json")
+            metadata_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            versions = {}
+            if metadata_file.exists():
+                with open(metadata_file, 'r') as f:
+                    versions = json.load(f)
+            
+            # Rotate versions
+            current = versions.get("current")
+            if current and current != new_image:  # Only rotate if actually different
+                # Move n-1 to n-2 first
+                n1 = versions.get("n-1")
+                if n1:
+                    versions["n-2"] = n1
+                # Then move current to n-1
+                versions["n-1"] = current
+            
+            # Store new version
+            versions["current"] = new_image
+            versions["updated_at"] = datetime.now(timezone.utc).isoformat()
+            
+            with open(metadata_file, 'w') as f:
+                json.dump(versions, f, indent=2)
+                
+            logger.info(f"Stored {container_type} version: {new_image}")
+            
+        except Exception as e:
+            logger.error(f"Failed to store {container_type} version: {e}")
+
+    async def _rollback_gui_container(self, target_version: str) -> bool:
+        """
+        Rollback GUI container to a previous version.
+        
+        Args:
+            target_version: Version to rollback to (or "n-1" for previous)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get target image
+            if target_version in ["n-1", "n-2"]:
+                metadata_file = Path("/opt/ciris/metadata/gui_versions.json")
+                if metadata_file.exists():
+                    with open(metadata_file, 'r') as f:
+                        versions = json.load(f)
+                    target_image = versions.get(target_version)
+                    if not target_image:
+                        logger.error(f"No {target_version} version found for GUI")
+                        return False
+                else:
+                    logger.error("No GUI version history found")
+                    return False
+            else:
+                target_image = target_version
+            
+            logger.info(f"Rolling back GUI container to {target_image}")
+            
+            # Update using docker-compose
+            compose_result = await asyncio.create_subprocess_exec(
+                "docker-compose",
+                "-f",
+                "/opt/ciris/docker-compose.yml",
+                "up",
+                "-d",
+                "--no-deps",
+                "gui",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, "CIRIS_GUI_IMAGE": target_image},
+            )
+            stdout, stderr = await compose_result.communicate()
+            
+            if compose_result.returncode != 0:
+                logger.error(f"Failed to rollback GUI: {stderr.decode()}")
+                return False
+                
+            logger.info("GUI container rolled back successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to rollback GUI container: {e}")
+            return False
+
+    async def _rollback_nginx_container(self, target_version: str) -> bool:
+        """
+        Rollback nginx container to a previous version.
+        
+        Args:
+            target_version: Version to rollback to (or "n-1" for previous)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get target image
+            if target_version in ["n-1", "n-2"]:
+                metadata_file = Path("/opt/ciris/metadata/nginx_versions.json")
+                if metadata_file.exists():
+                    with open(metadata_file, 'r') as f:
+                        versions = json.load(f)
+                    target_image = versions.get(target_version)
+                    if not target_image:
+                        logger.error(f"No {target_version} version found for nginx")
+                        return False
+                else:
+                    logger.error("No nginx version history found")
+                    return False
+            else:
+                target_image = target_version
+            
+            logger.info(f"Rolling back nginx container to {target_image}")
+            
+            # Update using docker-compose
+            compose_result = await asyncio.create_subprocess_exec(
+                "docker-compose",
+                "-f", 
+                "/opt/ciris/docker-compose.yml",
+                "up",
+                "-d",
+                "--no-deps",
+                "nginx",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, "NGINX_IMAGE": target_image},
+            )
+            stdout, stderr = await compose_result.communicate()
+            
+            if compose_result.returncode != 0:
+                logger.error(f"Failed to rollback nginx: {stderr.decode()}")
+                return False
+                
+            # Regenerate nginx config after rollback
+            if self.manager:
+                await self.manager.update_nginx_config()
+                
+            logger.info("Nginx container rolled back successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to rollback nginx container: {e}") 
+            return False

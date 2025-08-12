@@ -127,6 +127,7 @@ class UpdateNotification(BaseModel):
         ..., description="New agent image (e.g., ghcr.io/cirisai/ciris-agent:latest)"
     )
     gui_image: Optional[str] = Field(None, description="New GUI image if updated")
+    nginx_image: Optional[str] = Field(None, description="New nginx image if updated")
     message: str = Field("Update available", description="Human-readable update message")
     strategy: str = Field("canary", description="Deployment strategy: canary, immediate, manual")
     metadata: dict = Field(default_factory=dict, description="Additional deployment metadata")
