@@ -315,12 +315,19 @@ class DeploymentOrchestrator:
         logger.info(f"Paused deployment {deployment_id}")
         return True
 
-    async def rollback_deployment(self, deployment_id: str) -> bool:
+    async def rollback_deployment(
+        self,
+        deployment_id: str,
+        target_version: str = "n-1",
+        target_versions: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """
         Initiate rollback of a deployment.
 
         Args:
             deployment_id: ID of deployment to rollback
+            target_version: Version to rollback to ("n-1", "n-2", or specific version)
+            target_versions: Granular version control per component
 
         Returns:
             True if rollback initiated, False if not found
@@ -331,10 +338,19 @@ class DeploymentOrchestrator:
         deployment = self.deployments[deployment_id]
         deployment.status = "rolling_back"
 
-        # Start rollback process
-        asyncio.create_task(self._rollback_agents(deployment))
+        # Store rollback target in deployment metadata
+        if deployment.notification:
+            if not deployment.notification.metadata:
+                deployment.notification.metadata = {}
 
-        logger.info(f"Initiated rollback for deployment {deployment_id}")
+            deployment.notification.metadata["rollback_target"] = target_version
+            if target_versions:
+                deployment.notification.metadata["rollback_targets"] = target_versions
+
+        # Start rollback process
+        asyncio.create_task(self._rollback_agents(deployment, target_version, target_versions))
+
+        logger.info(f"Initiated rollback for deployment {deployment_id} to {target_version}")
         return True
 
     async def get_current_images(self) -> Dict[str, Any]:
@@ -388,6 +404,60 @@ class DeploymentOrchestrator:
 
         except Exception as e:
             logger.error(f"Failed to get current images: {e}")
+
+        return result
+
+    async def get_rollback_versions(self, deployment_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get available rollback versions for a deployment.
+
+        Returns version history for all components that can be rolled back.
+        """
+        if deployment_id not in self.deployments:
+            return None
+
+        result: Dict[str, Any] = {
+            "deployment_id": deployment_id,
+            "agents": {},
+            "gui": {},
+            "nginx": {},
+        }
+
+        # Get agent versions
+        if self.manager and hasattr(self.manager, "agent_registry"):
+            for agent_id, agent_info in self.manager.agent_registry.agents.items():
+                if hasattr(agent_info, "metadata"):
+                    previous = agent_info.metadata.get("previous_images", {})
+                    current = agent_info.metadata.get("current_images", {})
+
+                    agent_versions = {
+                        "current": current.get("agent_tag", current.get("agent", "unknown")),
+                        "n-1": previous.get("n-1", "not available"),
+                        "n-2": previous.get("n-2", "not available"),
+                    }
+                    result["agents"][agent_id] = agent_versions
+
+        # Get GUI versions
+        gui_file = Path("/opt/ciris/metadata/gui_versions.json")
+        if gui_file.exists():
+            with open(gui_file, "r") as f:
+                gui_versions = json.load(f)
+                result["gui"] = {
+                    "current": gui_versions.get("current", "unknown"),
+                    "n-1": gui_versions.get("n-1", "not available"),
+                    "n-2": gui_versions.get("n-2", "not available"),
+                }
+
+        # Get nginx versions
+        nginx_file = Path("/opt/ciris/metadata/nginx_versions.json")
+        if nginx_file.exists():
+            with open(nginx_file, "r") as f:
+                nginx_versions = json.load(f)
+                result["nginx"] = {
+                    "current": nginx_versions.get("current", "unknown"),
+                    "n-1": nginx_versions.get("n-1", "not available"),
+                    "n-2": nginx_versions.get("n-2", "not available"),
+                }
 
         return result
 
@@ -587,9 +657,14 @@ class DeploymentOrchestrator:
 
         return previous_versions
 
-    async def _rollback_agents(self, deployment: DeploymentStatus) -> None:
+    async def _rollback_agents(
+        self,
+        deployment: DeploymentStatus,
+        target_version: str = "n-1",
+        target_versions: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
-        Rollback agents to previous versions (n-1).
+        Rollback agents to specified versions.
 
         This works by updating docker-compose.yml with previous image tags
         and restarting containers. Since agents cannot consent when failed,
@@ -597,6 +672,8 @@ class DeploymentOrchestrator:
 
         Args:
             deployment: Deployment to rollback
+            target_version: Default version to rollback to ("n-1", "n-2", or specific)
+            target_versions: Granular version control per component
         """
         logger.info(f"Starting rollback for deployment {deployment.deployment_id}")
 
@@ -611,11 +688,23 @@ class DeploymentOrchestrator:
                     rollback_targets["agents"] = affected_agents
 
             # Rollback GUI/nginx if needed
-            if rollback_targets.get("gui"):
-                await self._rollback_gui_container(rollback_targets["gui"])
+            gui_target = target_version  # Default
+            nginx_target = target_version  # Default
 
-            if rollback_targets.get("nginx"):
-                await self._rollback_nginx_container(rollback_targets["nginx"])
+            if target_versions:
+                gui_target = target_versions.get("gui", target_version)
+                nginx_target = target_versions.get("nginx", target_version)
+            elif rollback_targets:
+                gui_target = rollback_targets.get("gui", target_version)
+                nginx_target = rollback_targets.get("nginx", target_version)
+
+            # Rollback GUI if applicable
+            if gui_target:
+                await self._rollback_gui_container(gui_target)
+
+            # Rollback nginx if applicable
+            if nginx_target:
+                await self._rollback_nginx_container(nginx_target)
 
             # Rollback agents
             if self.manager and hasattr(self.manager, "agent_registry"):
@@ -625,13 +714,31 @@ class DeploymentOrchestrator:
                     if not agent_info:
                         continue
 
-                    # Get n-1 version from metadata
+                    # Get target version from metadata
                     if hasattr(agent_info, "metadata"):
                         previous_images = agent_info.metadata.get("previous_images", {})
-                        n1_image = previous_images.get("n-1")
 
-                        if n1_image:
-                            logger.info(f"Rolling back {agent_id} to {n1_image}")
+                        # Check for agent-specific target version
+                        agent_target = target_version
+                        if target_versions and "agents" in target_versions:
+                            agent_target = target_versions["agents"].get(agent_id, target_version)
+
+                        # Get the appropriate image based on target
+                        if agent_target in ["n-1", "n-2"]:
+                            rollback_image = previous_images.get(agent_target)
+                            if not rollback_image:
+                                logger.warning(
+                                    f"No {agent_target} version available for agent {agent_id}, skipping rollback"
+                                )
+                                continue
+                        else:
+                            # Specific version provided
+                            rollback_image = agent_target
+
+                        if rollback_image and rollback_image != "not available":
+                            logger.info(
+                                f"Rolling back {agent_id} to {rollback_image} (target: {agent_target})"
+                            )
 
                             # Update the agent's image in docker-compose
                             # This would involve updating the compose file
@@ -656,13 +763,13 @@ class DeploymentOrchestrator:
                                 container_name,
                                 "--restart",
                                 "unless-stopped",
-                                n1_image,
+                                rollback_image,
                                 stdout=asyncio.subprocess.PIPE,
                                 stderr=asyncio.subprocess.PIPE,
                             )
 
                             # Update metadata to reflect rollback
-                            agent_info.metadata["current_images"]["agent"] = n1_image
+                            agent_info.metadata["current_images"]["agent"] = rollback_image
                             self.manager.agent_registry.update_agent(agent_info)
 
             deployment.status = "rolled_back"

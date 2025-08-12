@@ -1305,20 +1305,40 @@ def create_routes(manager: Any) -> APIRouter:
 
     @router.post("/updates/rollback")
     async def rollback_deployment(
-        request: Dict[str, str], _user: Dict[str, str] = auth_dependency
+        request: Dict[str, Any], _user: Dict[str, str] = auth_dependency
     ) -> Dict[str, str]:
         """
         Rollback a deployment.
 
-        Reverts updated agents to previous version.
+        Reverts updated agents to specified or previous version.
+
+        Request body:
+        {
+            "deployment_id": "deploy-123",
+            "target_version": "n-1" | "n-2" | "specific-version",  # Optional, defaults to n-1
+            "target_versions": {  # Optional, for granular control
+                "agents": {"agent1": "n-1", "agent2": "n-2"},
+                "gui": "n-1",
+                "nginx": "n-2"
+            }
+        }
         """
         deployment_id = request.get("deployment_id")
         if not deployment_id:
             raise HTTPException(status_code=400, detail="deployment_id required")
 
-        success = await deployment_orchestrator.rollback_deployment(deployment_id)
+        target_version = request.get("target_version", "n-1")
+        target_versions = request.get("target_versions", None)
+
+        success = await deployment_orchestrator.rollback_deployment(
+            deployment_id, target_version=target_version, target_versions=target_versions
+        )
         if success:
-            return {"status": "rolling_back", "deployment_id": deployment_id}
+            return {
+                "status": "rolling_back",
+                "deployment_id": deployment_id,
+                "target_version": target_version,
+            }
         else:
             raise HTTPException(status_code=404, detail="Deployment not found")
 
@@ -1335,6 +1355,22 @@ def create_routes(manager: Any) -> APIRouter:
         """Get deployment history."""
         history = await deployment_orchestrator.get_deployment_history(limit)
         return {"deployments": history}
+
+    @router.get("/updates/rollback/{deployment_id}/versions")
+    async def get_rollback_versions(
+        deployment_id: str, _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """
+        Get available rollback versions for a deployment.
+
+        Returns version history for all components that can be rolled back.
+        """
+        versions = await deployment_orchestrator.get_rollback_versions(deployment_id)
+        if not versions:
+            raise HTTPException(
+                status_code=404, detail="Deployment not found or no versions available"
+            )
+        return versions
 
     @router.get("/updates/rollback-proposals")
     async def get_rollback_proposals(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
