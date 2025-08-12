@@ -227,10 +227,14 @@ class TestAuditLogging:
         from ciris_manager.audit import audit_service_token_use
         import tempfile
         import json
+        import os
+        from pathlib import Path
 
         # Use a temp file for audit log
-        with tempfile.NamedTemporaryFile(mode='w+', suffix='.jsonl', delete=False) as tmp:
-            with patch("ciris_manager.audit.AUDIT_LOG_PATH", tmp.name):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "audit.jsonl"
+            
+            with patch("ciris_manager.audit.AUDIT_LOG_PATH", log_path):
                 audit_service_token_use(
                     agent_id="test-agent", 
                     action="deployment",
@@ -239,11 +243,12 @@ class TestAuditLogging:
                 )
                 
                 # Read back the audit log
-                tmp.seek(0)
-                content = tmp.read()
+                assert log_path.exists(), "Audit log file was not created"
+                with open(log_path, 'r') as f:
+                    content = f.read()
                 
                 # Verify the log entry
-                assert len(content) > 0
+                assert len(content) > 0, "Audit log is empty"
                 log_entry = json.loads(content.strip())
                 assert log_entry["agent_id"] == "test-agent"
                 assert log_entry["action"] == "deployment"
