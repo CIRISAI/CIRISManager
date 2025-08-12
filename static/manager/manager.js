@@ -99,28 +99,40 @@ function renderAgents() {
                         ${agent.codename ? `<div>Codename: ${escapeHtml(agent.codename)}</div>` : ''}
                         ${agent.code_hash ? `<div class="font-mono text-xs">Hash: ${escapeHtml(agent.code_hash).substring(0, 8)}...</div>` : ''}
                         <div class="flex items-center gap-1">
-                            <span class="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
-                            ${agent.status || 'running'}
+                            <span class="inline-block w-2 h-2 ${agent.is_running ? 'bg-green-500' : 'bg-gray-400'} rounded-full"></span>
+                            ${agent.is_running ? 'running' : 'stopped'}
                         </div>
                     </div>
                 </div>
-                <div>
-                    <button onclick="openAgentUI('${agent.agent_id}')" class="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded">
-                        <i class="fas fa-book"></i> API Docs
-                    </button>
-                    <button onclick="showAgentSettings('${agent.agent_id}')" class="px-3 py-1 text-purple-600 hover:bg-purple-50 rounded">
-                        <i class="fas fa-cog"></i> Settings
-                    </button>
-                    <button onclick="showOAuthSetup('${agent.agent_id}')" class="px-3 py-1 text-indigo-600 hover:bg-indigo-50 rounded">
-                        <i class="fas fa-key"></i> OAuth
-                    </button>
-                    <button onclick="restartAgent('${agent.agent_id}')" class="px-3 py-1 text-orange-600 hover:bg-orange-50 rounded">
-                        <i class="fas fa-sync-alt"></i> Restart
-                    </button>
-                    <button onclick="deleteAgent('${agent.agent_id}')" class="px-3 py-1 text-red-600 hover:bg-red-50 rounded">
-                        <i class="fas fa-trash"></i> Delete
-                    </button>
-                </div>
+                <div class="space-y-2">
+                    <div>
+                        <button onclick="openAgentUI('${agent.agent_id}')" class="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded">
+                            <i class="fas fa-book"></i> API Docs
+                        </button>
+                        <button onclick="showAgentSettings('${agent.agent_id}')" class="px-3 py-1 text-purple-600 hover:bg-purple-50 rounded">
+                            <i class="fas fa-cog"></i> Settings
+                        </button>
+                        <button onclick="showOAuthSetup('${agent.agent_id}')" class="px-3 py-1 text-indigo-600 hover:bg-indigo-50 rounded">
+                            <i class="fas fa-key"></i> OAuth
+                        </button>
+                    </div>
+                    <div>
+                        ${agent.is_running ? `
+                            <button onclick="requestStopAgent('${agent.agent_id}')" class="px-3 py-1 text-yellow-600 hover:bg-yellow-50 rounded">
+                                <i class="fas fa-hand-paper"></i> Request Stop
+                            </button>
+                            <button onclick="forceStopAgent('${agent.agent_id}')" class="px-3 py-1 text-red-600 hover:bg-red-50 rounded">
+                                <i class="fas fa-stop"></i> Force Stop
+                            </button>
+                        ` : `
+                            <button onclick="startAgent('${agent.agent_id}')" class="px-3 py-1 text-green-600 hover:bg-green-50 rounded">
+                                <i class="fas fa-play"></i> Start
+                            </button>
+                        `}
+                        <button onclick="deleteAgent('${agent.agent_id}')" class="px-3 py-1 text-red-600 hover:bg-red-50 rounded">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
             </div>
         </div>
     `).join('');
@@ -599,6 +611,97 @@ async function restartAgent(agentId) {
         }, 3000);
     } catch (error) {
         showError('Failed to restart agent: ' + error.message);
+    }
+}
+
+// Start a stopped agent
+async function startAgent(agentId) {
+    try {
+        const response = await fetch(`/manager/v1/agents/${agentId}/start`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to start agent');
+        }
+
+        showNotification(`Agent ${agentId} is starting...`, 'success');
+        
+        // Refresh agents list after a short delay
+        setTimeout(() => {
+            loadAgents();
+        }, 2000);
+    } catch (error) {
+        console.error('Error starting agent:', error);
+        showNotification(error.message || 'Failed to start agent', 'error');
+    }
+}
+
+// Request stop with reason
+async function requestStopAgent(agentId) {
+    const reason = prompt(`Please provide a reason for stopping agent ${agentId}:`);
+    if (!reason) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/manager/v1/agents/${agentId}/shutdown`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ reason: reason })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to request stop');
+        }
+
+        showNotification(`Stop requested for agent ${agentId}: ${reason}`, 'success');
+        
+        // Refresh agents list after a short delay
+        setTimeout(() => {
+            loadAgents();
+        }, 3000);
+    } catch (error) {
+        console.error('Error requesting stop:', error);
+        showNotification(error.message || 'Failed to request agent stop', 'error');
+    }
+}
+
+// Force stop (immediate)
+async function forceStopAgent(agentId) {
+    if (!confirm(`Are you sure you want to force stop agent ${agentId}? This will immediately terminate the agent.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/manager/v1/agents/${agentId}/stop`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Failed to stop agent');
+        }
+
+        showNotification(`Agent ${agentId} is being force stopped...`, 'warning');
+        
+        // Refresh agents list after a short delay
+        setTimeout(() => {
+            loadAgents();
+        }, 2000);
+    } catch (error) {
+        console.error('Error force stopping agent:', error);
+        showNotification(error.message || 'Failed to force stop agent', 'error');
     }
 }
 

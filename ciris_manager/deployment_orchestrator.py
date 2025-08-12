@@ -417,7 +417,7 @@ class DeploymentOrchestrator:
         agents: List[AgentInfo],
     ) -> str:
         """
-        Evaluate update and stage if it requires human review.
+        Stage ALL deployments for human review - no automatic deployments.
 
         Args:
             notification: Update notification
@@ -426,15 +426,9 @@ class DeploymentOrchestrator:
         Returns:
             Deployment ID
         """
-        # Check if this is a high-risk update requiring staging
-        requires_staging = await self._requires_wisdom_based_deferral(notification, agents)
-
-        if requires_staging:
-            return await self.stage_deployment(notification, agents)
-        else:
-            # Low-risk update, proceed immediately
-            status = await self.start_deployment(notification, agents)
-            return status.deployment_id
+        # ALWAYS stage for human review - no exceptions
+        logger.info(f"Staging deployment for human review: {notification.message}")
+        return await self.stage_deployment(notification, agents)
 
     async def _requires_wisdom_based_deferral(
         self,

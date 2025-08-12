@@ -227,7 +227,6 @@ class TestAuditLogging:
         from ciris_manager.audit import audit_service_token_use
         import tempfile
         import json
-        import os
         from pathlib import Path
 
         # Use a temp file for audit log

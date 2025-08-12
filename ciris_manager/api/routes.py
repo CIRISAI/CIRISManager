@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Depends, Header, Response, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List, Union
+import asyncio
+import httpx
 import logging
 import os
 from pathlib import Path
@@ -481,6 +483,213 @@ def create_routes(manager: Any) -> APIRouter:
                 status_code=500,
                 detail=f"Failed to delete agent {agent_id}. Check logs for details.",
             )
+
+    @router.post("/agents/{agent_id}/start")
+    async def start_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+        """
+        Start a stopped agent container using Docker.
+        """
+        try:
+            # Check if agent exists in registry
+            agent = manager.agent_registry.get_agent(agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            # Get container name
+            container_name = f"ciris-agent-{agent_id}"
+
+            # Use Docker API to start the container
+            import docker
+
+            client = docker.from_env()
+
+            try:
+                container = client.containers.get(container_name)
+
+                # Check if container is already running
+                if container.status == "running":
+                    return {
+                        "status": "already_running",
+                        "agent_id": agent_id,
+                        "message": f"Agent {agent_id} is already running",
+                        "container": container_name,
+                    }
+
+                # Start the container
+                container.start()
+
+                logger.info(f"Agent {agent_id} started by {user['email']}")
+
+                return {
+                    "status": "success",
+                    "agent_id": agent_id,
+                    "message": f"Agent {agent_id} is starting",
+                    "container": container_name,
+                }
+            except docker.errors.NotFound:
+                # Try alternative container names
+                try:
+                    container = client.containers.get(f"ciris-{agent_id}")
+                    if container.status != "running":
+                        container.start()
+                    return {
+                        "status": "success",
+                        "agent_id": agent_id,
+                        "message": f"Agent {agent_id} is starting",
+                    }
+                except docker.errors.NotFound:
+                    # If container doesn't exist, try using docker-compose
+                    if agent and agent.compose_file:
+                        compose_path = Path(agent.compose_file)
+                        if compose_path.exists():
+                            result = await asyncio.create_subprocess_exec(
+                                "docker-compose",
+                                "-f",
+                                str(compose_path),
+                                "up",
+                                "-d",
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE,
+                            )
+                            stdout, stderr = await result.communicate()
+
+                            if result.returncode == 0:
+                                return {
+                                    "status": "success",
+                                    "agent_id": agent_id,
+                                    "message": f"Agent {agent_id} is starting via docker-compose",
+                                }
+                            else:
+                                raise HTTPException(
+                                    status_code=500,
+                                    detail=f"Failed to start agent: {stderr.decode()}",
+                                )
+
+                    raise HTTPException(
+                        status_code=404, detail=f"Container for agent '{agent_id}' not found"
+                    )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to start agent {agent_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to start agent: {str(e)}")
+
+    @router.post("/agents/{agent_id}/stop")
+    async def stop_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+        """
+        Force stop an agent container immediately using Docker.
+        """
+        try:
+            # Check if agent exists in registry
+            agent = manager.agent_registry.get_agent(agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            # Get container name
+            container_name = f"ciris-agent-{agent_id}"
+
+            # Use Docker API to stop the container
+            import docker
+
+            client = docker.from_env()
+
+            try:
+                container = client.containers.get(container_name)
+                container.stop(timeout=10)  # 10 second timeout for graceful stop
+
+                logger.info(f"Agent {agent_id} force stopped by {user['email']}")
+
+                return {
+                    "status": "success",
+                    "agent_id": agent_id,
+                    "message": f"Agent {agent_id} has been stopped",
+                    "container": container_name,
+                }
+            except docker.errors.NotFound:
+                # Try alternative container name
+                try:
+                    container = client.containers.get(f"ciris-{agent_id}")
+                    container.stop(timeout=10)
+                    return {
+                        "status": "success",
+                        "agent_id": agent_id,
+                        "message": f"Agent {agent_id} has been stopped",
+                    }
+                except docker.errors.NotFound:
+                    raise HTTPException(
+                        status_code=404, detail=f"Container for agent '{agent_id}' not found"
+                    )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to stop agent {agent_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to stop agent: {str(e)}")
+
+    @router.post("/agents/{agent_id}/shutdown")
+    async def request_shutdown_agent(
+        agent_id: str, request: Dict[str, str], user: dict = auth_dependency
+    ) -> Dict[str, str]:
+        """
+        Request a graceful shutdown of an agent with a reason.
+        This sends a shutdown request to the agent's API.
+        """
+        try:
+            # Check if agent exists and get its port
+            agent = manager.agent_registry.get_agent(agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            reason = request.get("reason", "Operator requested shutdown")
+
+            # Get agent auth headers
+            from ciris_manager.agent_auth import get_agent_auth
+
+            auth = get_agent_auth()
+
+            # Send shutdown request to agent's API
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                try:
+                    headers = auth.get_auth_headers(agent_id)
+                    response = await client.post(
+                        f"http://localhost:{agent.port}/v1/system/shutdown",
+                        headers=headers,
+                        json={"reason": reason},
+                    )
+
+                    if response.status_code == 200:
+                        logger.info(
+                            f"Shutdown requested for agent {agent_id} by {user['email']}: {reason}"
+                        )
+                        return {
+                            "status": "success",
+                            "agent_id": agent_id,
+                            "message": f"Shutdown request sent to agent {agent_id}",
+                            "reason": reason,
+                        }
+                    else:
+                        logger.warning(
+                            f"Agent {agent_id} returned {response.status_code} for shutdown request"
+                        )
+                        return {
+                            "status": "accepted",
+                            "agent_id": agent_id,
+                            "message": "Agent may not support graceful shutdown, use force stop if needed",
+                        }
+
+                except httpx.ConnectError:
+                    return {
+                        "status": "unreachable",
+                        "agent_id": agent_id,
+                        "message": "Agent is not responding, use force stop if needed",
+                    }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to request shutdown for agent {agent_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to request shutdown: {str(e)}")
 
     @router.post("/agents/{agent_id}/restart")
     async def restart_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
