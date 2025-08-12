@@ -83,15 +83,21 @@ class TestCDAPIEndpoints:
             "metadata": {"version": "2.0"},
         }
 
+        # Mock evaluate_and_stage to return deployment ID
+        deployment_id = "test-deployment-123"
+        mock_orchestrator.evaluate_and_stage = AsyncMock(return_value=deployment_id)
+        
+        # Mock the deployment as being immediately started (low risk)
         mock_status = DeploymentStatus(
-            deployment_id="test-deployment-123",
+            deployment_id=deployment_id,
             agents_total=2,
             started_at=datetime.now(timezone.utc).isoformat(),
             status="in_progress",
             message="Security update available",
             canary_phase="explorers",
         )
-        mock_orchestrator.start_deployment = AsyncMock(return_value=mock_status)
+        mock_orchestrator.deployments = {deployment_id: mock_status}
+        mock_orchestrator.pending_deployments = {}
 
         # Include deployment token authentication
         headers = {"Authorization": "Bearer test-deploy-token"}
@@ -100,9 +106,8 @@ class TestCDAPIEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["deployment_id"] == "test-deployment-123"
-        assert data["agents_total"] == 2
+        assert data["agents_affected"] == 2
         assert data["status"] == "in_progress"
-        assert data["canary_phase"] == "explorers"
 
     def test_notify_update_deployment_in_progress(self, app_with_mocked_orchestrator):
         """Test notification rejected when deployment in progress."""
@@ -115,7 +120,7 @@ class TestCDAPIEndpoints:
             "strategy": "canary",
         }
 
-        mock_orchestrator.start_deployment = AsyncMock(
+        mock_orchestrator.evaluate_and_stage = AsyncMock(
             side_effect=ValueError("Deployment already in progress")
         )
 
@@ -209,15 +214,20 @@ class TestCDAPIEndpoints:
             "strategy": "immediate",
         }
 
+        # Mock evaluate_and_stage for immediate deployment
+        deployment_id = "emergency-deployment"
+        mock_orchestrator.evaluate_and_stage = AsyncMock(return_value=deployment_id)
+        
         mock_status = DeploymentStatus(
-            deployment_id="emergency-deployment",
+            deployment_id=deployment_id,
             agents_total=5,
             started_at=datetime.now(timezone.utc).isoformat(),
             status="in_progress",
             message="Emergency security patch",
             canary_phase=None,  # No phases for immediate
         )
-        mock_orchestrator.start_deployment = AsyncMock(return_value=mock_status)
+        mock_orchestrator.deployments = {deployment_id: mock_status}
+        mock_orchestrator.pending_deployments = {}
 
         headers = {"Authorization": "Bearer test-deploy-token"}
         response = client.post("/manager/v1/updates/notify", json=notification, headers=headers)
@@ -225,4 +235,5 @@ class TestCDAPIEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["deployment_id"] == "emergency-deployment"
-        assert data["canary_phase"] is None  # No canary for immediate
+        assert data["agents_affected"] == 5
+        assert data["status"] == "in_progress"

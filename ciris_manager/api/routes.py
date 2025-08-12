@@ -1118,6 +1118,47 @@ def create_routes(manager: Any) -> APIRouter:
         """Get deployment history."""
         history = await deployment_orchestrator.get_deployment_history(limit)
         return {"deployments": history}
+    
+    @router.get("/updates/rollback-proposals")
+    async def get_rollback_proposals(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
+        """Get active rollback proposals requiring operator decision."""
+        proposals = getattr(deployment_orchestrator, "rollback_proposals", {})
+        
+        # Return active proposals
+        active_proposals = []
+        for deployment_id, proposal in proposals.items():
+            if deployment_id in deployment_orchestrator.deployments:
+                deployment = deployment_orchestrator.deployments[deployment_id]
+                if deployment.status == "rollback_proposed":
+                    active_proposals.append(proposal)
+        
+        return {
+            "proposals": active_proposals,
+            "count": len(active_proposals)
+        }
+    
+    @router.post("/updates/approve-rollback")
+    async def approve_rollback(
+        request: Dict[str, Any], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """Approve a proposed rollback."""
+        deployment_id = request.get("deployment_id")
+        if not deployment_id:
+            raise HTTPException(status_code=400, detail="deployment_id required")
+        
+        proposals = getattr(deployment_orchestrator, "rollback_proposals", {})
+        if deployment_id not in proposals:
+            raise HTTPException(status_code=404, detail="Rollback proposal not found")
+        
+        # Execute the rollback
+        success = await deployment_orchestrator.rollback_deployment(deployment_id)
+        
+        if success:
+            # Remove proposal
+            del proposals[deployment_id]
+            return {"status": "rollback_started", "deployment_id": deployment_id}
+        else:
+            raise HTTPException(status_code=404, detail="Deployment not found")
 
     @router.get("/updates/latest/changelog")
     async def get_latest_changelog() -> Dict[str, Any]:

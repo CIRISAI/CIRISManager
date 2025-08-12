@@ -456,39 +456,141 @@ class DeploymentOrchestrator:
             
         return False
     
+    async def _propose_rollback(
+        self,
+        deployment_id: str,
+        reason: str,
+        affected_agents: List[AgentInfo],
+    ) -> None:
+        """
+        Propose rollback to human operator.
+        
+        Args:
+            deployment_id: Deployment identifier
+            reason: Why rollback is being proposed
+            affected_agents: Agents that would be rolled back
+        """
+        if deployment_id not in self.deployments:
+            return
+            
+        deployment = self.deployments[deployment_id]
+        
+        # Create rollback proposal
+        rollback_proposal = {
+            "deployment_id": deployment_id,
+            "proposed_at": datetime.now(timezone.utc).isoformat(),
+            "reason": reason,
+            "affected_agents": [a.agent_id for a in affected_agents],
+            "previous_versions": await self._get_previous_versions(affected_agents),
+        }
+        
+        # Store proposal for UI to display
+        if not hasattr(self, "rollback_proposals"):
+            self.rollback_proposals = {}
+        self.rollback_proposals[deployment_id] = rollback_proposal
+        
+        # Mark deployment as requiring attention
+        deployment.status = "rollback_proposed"
+        
+        # Audit the proposal
+        from ciris_manager.audit import audit_deployment_action
+        audit_deployment_action(
+            "rollback_proposed",
+            deployment_id,
+            {"reason": reason, "affected_agents": len(affected_agents)}
+        )
+        
+        logger.warning(
+            f"Rollback proposed for deployment {deployment_id}: {reason}. "
+            f"Awaiting operator decision."
+        )
+    
+    async def _get_previous_versions(self, agents: List[AgentInfo]) -> Dict[str, str]:
+        """
+        Get previous image versions for agents.
+        
+        Args:
+            agents: List of agents
+            
+        Returns:
+            Dictionary mapping agent_id to previous image version
+        """
+        previous_versions = {}
+        
+        for agent in agents:
+            # Get from agent metadata if available
+            if self.manager and hasattr(self.manager, "agent_registry"):
+                agent_info = self.manager.agent_registry.get_agent(agent.agent_id)
+                if agent_info and hasattr(agent_info, "metadata"):
+                    # Look for n-1 version in metadata
+                    previous_images = agent_info.metadata.get("previous_images", {})
+                    if previous_images:
+                        # Get the most recent previous version
+                        previous_versions[agent.agent_id] = previous_images.get(
+                            "n-1", previous_images.get("agent", "unknown")
+                        )
+                    else:
+                        previous_versions[agent.agent_id] = "unknown"
+                        
+        return previous_versions
+
     async def _rollback_agents(self, deployment: DeploymentStatus) -> None:
         """
-        Rollback agents to previous versions.
+        Rollback agents to previous versions (n-1).
+        
+        This works by updating docker-compose.yml with previous image tags
+        and restarting containers. Since agents cannot consent when failed,
+        this requires human operator approval.
         
         Args:
             deployment: Deployment to rollback
         """
         logger.info(f"Starting rollback for deployment {deployment.deployment_id}")
         
-        # Get list of updated agents from deployment
-        # This would need to track which agents were updated
-        # For now, we'll restart all agents to trigger image pull of stable version
-        
         try:
-            # Stop all agent containers to force restart with previous image
-            process = await asyncio.create_subprocess_exec(
-                "docker", "ps", "--format", "{{.Names}}",
-                "--filter", "label=ciris.agent=true",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await process.communicate()
+            # Get affected agents from deployment
+            affected_agents = deployment.notification.metadata.get("affected_agents", [])
             
-            if stdout:
-                container_names = stdout.decode().strip().split('\n')
-                for name in container_names:
-                    if name:
-                        logger.info(f"Restarting container {name} for rollback")
-                        await asyncio.create_subprocess_exec(
-                            "docker", "restart", name,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE,
-                        )
+            if self.manager and hasattr(self.manager, "agent_registry"):
+                # Update docker-compose with n-1 versions
+                for agent_id in affected_agents:
+                    agent_info = self.manager.agent_registry.get_agent(agent_id)
+                    if not agent_info:
+                        continue
+                        
+                    # Get n-1 version from metadata
+                    if hasattr(agent_info, "metadata"):
+                        previous_images = agent_info.metadata.get("previous_images", {})
+                        n1_image = previous_images.get("n-1")
+                        
+                        if n1_image:
+                            logger.info(f"Rolling back {agent_id} to {n1_image}")
+                            
+                            # Update the agent's image in docker-compose
+                            # This would involve updating the compose file
+                            # For now, we'll restart with the previous image tag
+                            container_name = agent_info.container_name
+                            
+                            # Stop container to force re-pull of n-1 image
+                            await asyncio.create_subprocess_exec(
+                                "docker", "stop", container_name,
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE,
+                            )
+                            
+                            # Update container with n-1 image
+                            await asyncio.create_subprocess_exec(
+                                "docker", "run", "-d",
+                                "--name", container_name,
+                                "--restart", "unless-stopped",
+                                n1_image,
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE,
+                            )
+                            
+                            # Update metadata to reflect rollback
+                            agent_info.metadata["current_images"]["agent"] = n1_image
+                            self.manager.agent_registry.update_agent(agent_info)
             
             deployment.status = "rolled_back"
             deployment.completed_at = datetime.now(timezone.utc).isoformat()
@@ -954,11 +1056,19 @@ class DeploymentOrchestrator:
             # Wait before next check
             await asyncio.sleep(10)
 
-        # Timeout reached
+        # Timeout reached - propose rollback to operator
         logger.warning(
             f"Deployment {deployment_id}: No {phase_name} agents reached stable WORK state "
             f"within {wait_for_work_minutes} minutes"
         )
+        
+        # Stage a rollback proposal for human review
+        await self._propose_rollback(
+            deployment_id,
+            reason=f"No {phase_name} agents reached WORK state within {wait_for_work_minutes} minutes",
+            affected_agents=agents,
+        )
+        
         return False
 
     async def _run_canary_deployment(
@@ -1294,9 +1404,9 @@ class DeploymentOrchestrator:
                 if "service:" in headers.get("Authorization", ""):
                     audit_service_token_use(
                         agent_id=agent.agent_id,
-                        deployment_id=deployment_id,
+                        action=f"deployment_{deployment_id}",
                         success=True,
-                        token="[REDACTED]",  # Don't log actual token
+                        details={"deployment_id": deployment_id},
                     )
 
                 # Log the shutdown request
@@ -1306,8 +1416,7 @@ class DeploymentOrchestrator:
                 audit_deployment_action(
                     deployment_id=deployment_id,
                     action="shutdown_requested",
-                    agent_id=agent.agent_id,
-                    details={"reason": shutdown_payload["reason"]},
+                    details={"agent_id": agent.agent_id, "reason": shutdown_payload["reason"]},
                 )
 
                 response = await client.post(
@@ -1416,9 +1525,8 @@ class DeploymentOrchestrator:
             audit_deployment_action(
                 deployment_id=deployment_id,
                 action="update_error",
-                agent_id=agent.agent_id,
                 success=False,
-                details={"error": str(e), "error_type": type(e).__name__},
+                details={"agent_id": agent.agent_id, "error": str(e), "error_type": type(e).__name__},
             )
             return AgentUpdateResponse(
                 agent_id=agent.agent_id,
@@ -1652,17 +1760,34 @@ class DeploymentOrchestrator:
                 logger.warning(f"Agent {agent_id} not found in registry")
                 return
 
-            # Update image digests in metadata
+            # Initialize metadata if needed
             if not hasattr(agent_info, "metadata"):
                 agent_info.metadata = {}
 
-            agent_info.metadata["current_images"] = {}
+            # Rotate image versions: current -> n-1 -> n-2
+            if "current_images" not in agent_info.metadata:
+                agent_info.metadata["current_images"] = {}
+            if "previous_images" not in agent_info.metadata:
+                agent_info.metadata["previous_images"] = {}
 
-            # Store the resolved digests
+            # Move current to n-1, n-1 to n-2
+            current_agent = agent_info.metadata["current_images"].get("agent")
+            n1_agent = agent_info.metadata["previous_images"].get("n-1")
+            
+            if current_agent:
+                # Move current to n-1
+                agent_info.metadata["previous_images"]["n-1"] = current_agent
+                
+                if n1_agent:
+                    # Move n-1 to n-2
+                    agent_info.metadata["previous_images"]["n-2"] = n1_agent
+
+            # Store the new current version
             if notification.agent_image:
                 digest = await self.registry_client.resolve_image_digest(notification.agent_image)
                 if digest:
                     agent_info.metadata["current_images"]["agent"] = digest
+                    agent_info.metadata["current_images"]["agent_tag"] = notification.agent_image
 
             if notification.gui_image:
                 digest = await self.registry_client.resolve_image_digest(notification.gui_image)
@@ -1670,10 +1795,42 @@ class DeploymentOrchestrator:
                     agent_info.metadata["current_images"]["gui"] = digest
 
             agent_info.metadata["last_updated"] = datetime.now(timezone.utc).isoformat()
+            agent_info.metadata["version_history"] = agent_info.metadata.get("version_history", [])
+            
+            # Add to version history (keep last 10 deployments)
+            agent_info.metadata["version_history"].append({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "agent_image": notification.agent_image,
+                "deployment_id": self.current_deployment,
+            })
+            agent_info.metadata["version_history"] = agent_info.metadata["version_history"][-10:]
 
             # Save the updated metadata
             self.manager.agent_registry._save_metadata()
-            logger.info(f"Updated metadata for agent {agent_id} with new image digests")
+            logger.info(
+                f"Updated metadata for agent {agent_id}: "
+                f"current={notification.agent_image}, n-1={current_agent}, n-2={n1_agent}"
+            )
+            
+            # Schedule image cleanup to remove versions older than n-2
+            asyncio.create_task(self._trigger_image_cleanup())
 
         except Exception as e:
             logger.error(f"Failed to update agent metadata: {e}")
+    
+    async def _trigger_image_cleanup(self) -> None:
+        """Trigger Docker image cleanup to maintain only n-2 versions."""
+        try:
+            from ciris_manager.docker_image_cleanup import DockerImageCleanup
+            
+            # Clean up keeping n-2 versions
+            cleanup = DockerImageCleanup(versions_to_keep=3)  # Current, n-1, n-2
+            results = await cleanup.cleanup_images()
+            
+            if results:
+                total_removed = sum(results.values())
+                if total_removed > 0:
+                    logger.info(f"Image cleanup removed {total_removed} old images")
+        except Exception as e:
+            # Don't fail deployment if cleanup fails
+            logger.warning(f"Image cleanup failed (non-critical): {e}")

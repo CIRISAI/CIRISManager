@@ -17,10 +17,11 @@ AUDIT_LOG_PATH = Path("/var/log/ciris-manager/audit.jsonl")
 
 
 def audit_deployment_action(
-    action: str,
-    deployment_id: str,
+    action: str = None,
+    deployment_id: str = None,
     details: Optional[Dict[str, Any]] = None,
     user: Optional[str] = None,
+    success: Optional[bool] = None,
 ) -> None:
     """
     Log a deployment action for audit purposes.
@@ -43,6 +44,9 @@ def audit_deployment_action(
             "details": details or {},
         }
         
+        if success is not None:
+            audit_entry["success"] = success
+        
         # Append to audit log (JSONL format)
         with open(AUDIT_LOG_PATH, "a") as f:
             f.write(json.dumps(audit_entry) + "\n")
@@ -52,3 +56,38 @@ def audit_deployment_action(
     except Exception as e:
         # Don't fail operations due to audit logging issues
         logger.error(f"Failed to write audit log: {e}")
+
+
+def audit_service_token_use(
+    agent_id: str,
+    action: str,
+    success: bool = True,
+    details: Optional[Dict[str, Any]] = None,
+) -> None:
+    """
+    Log service token usage for security audit.
+    
+    Args:
+        agent_id: Agent using the token
+        action: Action performed with token
+        success: Whether action succeeded
+        details: Additional details
+    """
+    try:
+        AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        
+        audit_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "type": "service_token_use",
+            "agent_id": agent_id,
+            "action": action,
+            "success": success,
+            "details": details or {},
+        }
+        
+        with open(AUDIT_LOG_PATH, "a") as f:
+            f.write(json.dumps(audit_entry) + "\n")
+            
+    except Exception as e:
+        # Don't fail operations due to audit logging issues
+        logger.warning(f"Failed to audit service token use: {e}")
