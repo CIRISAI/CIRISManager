@@ -409,6 +409,9 @@ class TestDeploymentOrchestrator:
                 registry.set_canary_group(agent.agent_id, "general")
             # agents 3-9 remain unassigned
 
+        # Mock the health check to always succeed
+        orchestrator._check_canary_group_health = AsyncMock(return_value=True)
+        
         with patch.object(
             orchestrator, "_update_agent_group", new_callable=AsyncMock
         ) as mock_update:

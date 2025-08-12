@@ -40,7 +40,7 @@ class TestCanaryGroupHealth:
         agent = Mock(spec=AgentInfo)
         agent.agent_id = "test-agent"
         agent.name = "Test Agent"
-        agent.port = 8080
+        agent.api_port = 8080
         agent.is_running = True
         return agent
 
@@ -48,6 +48,16 @@ class TestCanaryGroupHealth:
     async def test_agent_reaches_work_state_quickly(self, orchestrator, sample_agent):
         """Test successful case where agent reaches WORK state quickly."""
         deployment_id = "test-deploy-1"
+        
+        # Register agent with service token so auth works
+        orchestrator.manager.agent_registry.register_agent(
+            sample_agent.agent_id,
+            sample_agent.name,
+            sample_agent.api_port,
+            "test",
+            "test.yml",
+            service_token="test-token-123"
+        )
 
         # Mock sleep to speed up tests
         with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -275,59 +285,71 @@ class TestCanaryGroupHealth:
         # Create multiple agents
         agent1 = Mock(spec=AgentInfo)
         agent1.agent_id = "agent-1"
-        agent1.port = 8081
+        agent1.name = "Agent 1"
+        agent1.api_port = 8081
         agent1.is_running = True
 
         agent2 = Mock(spec=AgentInfo)
         agent2.agent_id = "agent-2"
-        agent2.port = 8082
+        agent2.name = "Agent 2"
+        agent2.api_port = 8082
         agent2.is_running = True
+        
+        # Register agents with service tokens
+        orchestrator.manager.agent_registry.register_agent(
+            agent1.agent_id, agent1.name, agent1.api_port, "test", "test.yml", service_token="token1"
+        )
+        orchestrator.manager.agent_registry.register_agent(
+            agent2.agent_id, agent2.name, agent2.api_port, "test", "test.yml", service_token="token2"
+        )
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client_class.return_value.__aenter__.return_value = mock_client
+        # Mock asyncio.sleep to speed up test
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
-                mock_auth.return_value.get_auth_headers.return_value = {
-                    "Authorization": "Bearer test"
-                }
+                with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
+                    mock_auth.return_value.get_auth_headers.return_value = {
+                        "Authorization": "Bearer test"
+                    }
 
-                def get_response(url, *args, **kwargs):
-                    if "8081" in url:
-                        # Agent 1 stays in WAKEUP
-                        return Mock(
-                            status_code=200,
-                            json=lambda: {
-                                "data": {"cognitive_state": "wakeup", "version": "2.0.0"}
-                            },
-                        )
-                    elif "8082" in url:
-                        if "telemetry" in url:
-                            # Agent 2 telemetry - no incidents
-                            return Mock(
-                                status_code=200, json=lambda: {"data": {"recent_incidents": []}}
-                            )
-                        else:
-                            # Agent 2 reaches WORK
+                    def get_response(url, *args, **kwargs):
+                        if "8081" in url:
+                            # Agent 1 stays in WAKEUP
                             return Mock(
                                 status_code=200,
                                 json=lambda: {
-                                    "data": {"cognitive_state": "work", "version": "2.0.0"}
+                                    "data": {"cognitive_state": "wakeup", "version": "2.0.0"}
                                 },
                             )
+                        elif "8082" in url:
+                            if "telemetry" in url:
+                                # Agent 2 telemetry - no incidents
+                                return Mock(
+                                    status_code=200, json=lambda: {"data": {"recent_incidents": []}}
+                                )
+                            else:
+                                # Agent 2 reaches WORK
+                                return Mock(
+                                    status_code=200,
+                                    json=lambda: {
+                                        "data": {"cognitive_state": "work", "version": "2.0.0"}
+                                    },
+                                )
 
-                mock_client.get.side_effect = get_response
+                    mock_client.get.side_effect = get_response
 
-                result = await orchestrator._check_canary_group_health(
-                    deployment_id,
-                    [agent1, agent2],
-                    "test",
-                    wait_for_work_minutes=0.1,
-                    stability_minutes=0.01,
-                )
+                    result = await orchestrator._check_canary_group_health(
+                        deployment_id,
+                        [agent1, agent2],
+                        "test",
+                        wait_for_work_minutes=0.1,
+                        stability_minutes=0.01,
+                    )
 
-                # Should succeed because at least one agent reached WORK
-                assert result is True
+                    # Should succeed because at least one agent reached WORK
+                    assert result is True
 
 
 class TestCanaryDeploymentFlow:
@@ -361,7 +383,7 @@ class TestCanaryDeploymentFlow:
         explorer = Mock(spec=AgentInfo)
         explorer.agent_id = "explorer-1"
         explorer.name = "Explorer 1"
-        explorer.port = 8081
+        explorer.api_port = 8081
         explorer.is_running = True
         explorer.metadata = {"canary_group": "explorer"}
 
@@ -369,7 +391,7 @@ class TestCanaryDeploymentFlow:
         early_adopter = Mock(spec=AgentInfo)
         early_adopter.agent_id = "early-1"
         early_adopter.name = "Early 1"
-        early_adopter.port = 8082
+        early_adopter.api_port = 8082
         early_adopter.is_running = True
         early_adopter.metadata = {"canary_group": "early_adopter"}
 
@@ -377,7 +399,7 @@ class TestCanaryDeploymentFlow:
         general = Mock(spec=AgentInfo)
         general.agent_id = "general-1"
         general.name = "General 1"
-        general.port = 8083
+        general.api_port = 8083
         general.is_running = True
         general.metadata = {"canary_group": "general"}
 
@@ -385,27 +407,29 @@ class TestCanaryDeploymentFlow:
         registry.register_agent(
             explorer.agent_id,
             explorer.name,
-            explorer.port,
+            explorer.api_port,
             explorer.metadata.get("template", "test"),
             explorer.metadata.get("compose_file", "test.yml"),
-            metadata=explorer.metadata,
         )
+        registry.set_canary_group(explorer.agent_id, "explorer")
+        
         registry.register_agent(
             early_adopter.agent_id,
             early_adopter.name,
-            early_adopter.port,
+            early_adopter.api_port,
             early_adopter.metadata.get("template", "test"),
             early_adopter.metadata.get("compose_file", "test.yml"),
-            metadata=early_adopter.metadata,
         )
+        registry.set_canary_group(early_adopter.agent_id, "early_adopter")
+        
         registry.register_agent(
             general.agent_id,
             general.name,
-            general.port,
+            general.api_port,
             general.metadata.get("template", "test"),
             general.metadata.get("compose_file", "test.yml"),
-            metadata=general.metadata,
         )
+        registry.set_canary_group(general.agent_id, "general")
 
         return [explorer, early_adopter, general], registry
 
@@ -431,6 +455,11 @@ class TestCanaryDeploymentFlow:
                 notification=notification,
                 status="in_progress",
                 message="Starting deployment",
+                agents_total=3,
+                agents_updated=0,
+                agents_deferred=0,
+                agents_failed=0,
+                started_at=datetime.now(timezone.utc).isoformat(),
             )
 
             await orchestrator._run_canary_deployment(deployment_id, notification, agents)
@@ -468,6 +497,11 @@ class TestCanaryDeploymentFlow:
                 notification=notification,
                 status="in_progress",
                 message="Starting deployment",
+                agents_total=3,
+                agents_updated=0,
+                agents_deferred=0,
+                agents_failed=0,
+                started_at=datetime.now(timezone.utc).isoformat(),
             )
 
             await orchestrator._run_canary_deployment(deployment_id, notification, agents)
@@ -502,6 +536,11 @@ class TestCanaryDeploymentFlow:
                 notification=notification,
                 status="in_progress",
                 message="Starting deployment",
+                agents_total=3,
+                agents_updated=0,
+                agents_deferred=0,
+                agents_failed=0,
+                started_at=datetime.now(timezone.utc).isoformat(),
             )
 
             await orchestrator._run_canary_deployment(deployment_id, notification, agents)
@@ -533,6 +572,11 @@ class TestCanaryDeploymentFlow:
                 notification=notification,
                 status="in_progress",
                 message="Starting deployment",
+                agents_total=3,
+                agents_updated=0,
+                agents_deferred=0,
+                agents_failed=0,
+                started_at=datetime.now(timezone.utc).isoformat(),
             )
 
             await orchestrator._run_canary_deployment(deployment_id, notification, agents)
@@ -567,6 +611,11 @@ class TestCanaryDeploymentFlow:
                 notification=notification,
                 status="in_progress",
                 message="Starting deployment",
+                agents_total=3,
+                agents_updated=0,
+                agents_deferred=0,
+                agents_failed=0,
+                started_at=datetime.now(timezone.utc).isoformat(),
             )
 
             await orchestrator._run_canary_deployment(deployment_id, notification, agents)
