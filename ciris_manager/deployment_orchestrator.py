@@ -133,11 +133,13 @@ class DeploymentOrchestrator:
             deployment_id = str(uuid4())
             status = DeploymentStatus(
                 deployment_id=deployment_id,
+                notification=notification,
                 agents_total=len(agents_needing_update),
                 agents_updated=0,
                 agents_deferred=0,
                 agents_failed=0,
                 started_at=datetime.now(timezone.utc).isoformat(),
+                staged_at=None,
                 completed_at=None,
                 status="in_progress",
                 message=notification.message,
