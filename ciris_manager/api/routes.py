@@ -956,7 +956,7 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Evaluate and potentially stage deployment
             deployment_id = await deployment_orchestrator.evaluate_and_stage(notification, agents)
-            
+
             # Check if deployment was staged or started immediately
             if deployment_id in deployment_orchestrator.pending_deployments:
                 status = deployment_orchestrator.pending_deployments[deployment_id]
@@ -1010,7 +1010,7 @@ def create_routes(manager: Any) -> APIRouter:
     async def get_pending_deployment(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
         """
         Get pending deployment details if any.
-        
+
         Returns staged deployment waiting for operator approval.
         """
         pending = await deployment_orchestrator.get_pending_deployment()
@@ -1033,13 +1033,13 @@ def create_routes(manager: Any) -> APIRouter:
     ) -> Dict[str, str]:
         """
         Launch a staged deployment.
-        
+
         Requires operator approval to start canary rollout.
         """
         deployment_id = request.get("deployment_id")
         if not deployment_id:
             raise HTTPException(status_code=400, detail="deployment_id required")
-        
+
         success = await deployment_orchestrator.launch_staged_deployment(deployment_id)
         if success:
             return {"status": "launched", "deployment_id": deployment_id}
@@ -1052,15 +1052,15 @@ def create_routes(manager: Any) -> APIRouter:
     ) -> Dict[str, str]:
         """
         Reject a staged deployment.
-        
+
         Cancels the deployment and logs the rejection reason.
         """
         deployment_id = request.get("deployment_id")
         reason = request.get("reason", "Rejected by operator")
-        
+
         if not deployment_id:
             raise HTTPException(status_code=400, detail="deployment_id required")
-        
+
         success = await deployment_orchestrator.reject_staged_deployment(deployment_id, reason)
         if success:
             return {"status": "rejected", "deployment_id": deployment_id}
@@ -1073,13 +1073,13 @@ def create_routes(manager: Any) -> APIRouter:
     ) -> Dict[str, str]:
         """
         Pause an active deployment.
-        
+
         Stops further agent updates but keeps deployment active.
         """
         deployment_id = request.get("deployment_id")
         if not deployment_id:
             raise HTTPException(status_code=400, detail="deployment_id required")
-        
+
         success = await deployment_orchestrator.pause_deployment(deployment_id)
         if success:
             return {"status": "paused", "deployment_id": deployment_id}
@@ -1092,13 +1092,13 @@ def create_routes(manager: Any) -> APIRouter:
     ) -> Dict[str, str]:
         """
         Rollback a deployment.
-        
+
         Reverts updated agents to previous version.
         """
         deployment_id = request.get("deployment_id")
         if not deployment_id:
             raise HTTPException(status_code=400, detail="deployment_id required")
-        
+
         success = await deployment_orchestrator.rollback_deployment(deployment_id)
         if success:
             return {"status": "rolling_back", "deployment_id": deployment_id}
@@ -1118,12 +1118,12 @@ def create_routes(manager: Any) -> APIRouter:
         """Get deployment history."""
         history = await deployment_orchestrator.get_deployment_history(limit)
         return {"deployments": history}
-    
+
     @router.get("/updates/rollback-proposals")
     async def get_rollback_proposals(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
         """Get active rollback proposals requiring operator decision."""
         proposals = getattr(deployment_orchestrator, "rollback_proposals", {})
-        
+
         # Return active proposals
         active_proposals = []
         for deployment_id, proposal in proposals.items():
@@ -1131,12 +1131,9 @@ def create_routes(manager: Any) -> APIRouter:
                 deployment = deployment_orchestrator.deployments[deployment_id]
                 if deployment.status == "rollback_proposed":
                     active_proposals.append(proposal)
-        
-        return {
-            "proposals": active_proposals,
-            "count": len(active_proposals)
-        }
-    
+
+        return {"proposals": active_proposals, "count": len(active_proposals)}
+
     @router.post("/updates/approve-rollback")
     async def approve_rollback(
         request: Dict[str, Any], _user: Dict[str, str] = auth_dependency
@@ -1145,14 +1142,14 @@ def create_routes(manager: Any) -> APIRouter:
         deployment_id = request.get("deployment_id")
         if not deployment_id:
             raise HTTPException(status_code=400, detail="deployment_id required")
-        
+
         proposals = getattr(deployment_orchestrator, "rollback_proposals", {})
         if deployment_id not in proposals:
             raise HTTPException(status_code=404, detail="Rollback proposal not found")
-        
+
         # Execute the rollback
         success = await deployment_orchestrator.rollback_deployment(deployment_id)
-        
+
         if success:
             # Remove proposal
             del proposals[deployment_id]
@@ -1627,9 +1624,9 @@ def create_routes(manager: Any) -> APIRouter:
                                     service_type = (
                                         service_name.split(".")[-1].replace("Service", "").lower()
                                     )
-                                    circuit_breakers["critical_services"][service_type] = (
-                                        breaker_state
-                                    )
+                                    circuit_breakers["critical_services"][
+                                        service_type
+                                    ] = breaker_state
 
                                 # Track all open circuit breakers
                                 if breaker_state in ["open", "half_open"]:

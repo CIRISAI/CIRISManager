@@ -86,7 +86,7 @@ class TestCDAPIEndpoints:
         # Mock evaluate_and_stage to return deployment ID
         deployment_id = "test-deployment-123"
         mock_orchestrator.evaluate_and_stage = AsyncMock(return_value=deployment_id)
-        
+
         # Mock the deployment as being immediately started (low risk)
         mock_status = DeploymentStatus(
             deployment_id=deployment_id,
@@ -217,7 +217,7 @@ class TestCDAPIEndpoints:
         # Mock evaluate_and_stage for immediate deployment
         deployment_id = "emergency-deployment"
         mock_orchestrator.evaluate_and_stage = AsyncMock(return_value=deployment_id)
-        
+
         mock_status = DeploymentStatus(
             deployment_id=deployment_id,
             agents_total=5,

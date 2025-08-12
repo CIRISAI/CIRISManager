@@ -142,7 +142,9 @@ class DeploymentStatus(BaseModel):
     """Current deployment status."""
 
     deployment_id: str = Field(..., description="Unique deployment identifier")
-    notification: Optional[UpdateNotification] = Field(None, description="Original update notification")
+    notification: Optional[UpdateNotification] = Field(
+        None, description="Original update notification"
+    )
     agents_total: int = Field(..., description="Total number of agents")
     agents_updated: int = Field(0, description="Number of agents updated")
     agents_deferred: int = Field(0, description="Number of agents that deferred update")
@@ -154,7 +156,8 @@ class DeploymentStatus(BaseModel):
     staged_at: Optional[str] = Field(None, description="When deployment was staged for review")
     completed_at: Optional[str] = Field(None, description="Deployment completion timestamp")
     status: str = Field(
-        "in_progress", description="Deployment status: pending, in_progress, paused, completed, failed, cancelled, rejected, rolling_back, rolled_back"
+        "in_progress",
+        description="Deployment status: pending, in_progress, paused, completed, failed, cancelled, rejected, rolling_back, rolled_back",
     )
     message: str = Field(..., description="Current status message")
 
