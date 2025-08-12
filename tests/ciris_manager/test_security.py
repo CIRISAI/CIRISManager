@@ -225,20 +225,29 @@ class TestAuditLogging:
     def test_service_token_use_is_audited(self):
         """Test that service token usage is logged for audit."""
         from ciris_manager.audit import audit_service_token_use
+        import tempfile
+        import json
 
-        with patch("ciris_manager.audit.audit_logger") as mock_logger:
-            audit_service_token_use(
-                agent_id="test-agent", deployment_id="deploy-123", success=True, token="[REDACTED]"
-            )
-
-            # Check that audit log was called
-            mock_logger.info.assert_called_once()
-            call_args = str(mock_logger.info.call_args)
-            assert "test-agent" in call_args
-            assert "deploy-123" in call_args
-            assert "token_hash" in call_args  # Token should be hashed
-            assert "[REDACTED]" not in call_args  # We hash, not redact
-            assert "actual-token" not in call_args  # Should never log real token
+        # Use a temp file for audit log
+        with tempfile.NamedTemporaryFile(mode='w+', suffix='.jsonl', delete=False) as tmp:
+            with patch("ciris_manager.audit.AUDIT_LOG_PATH", tmp.name):
+                audit_service_token_use(
+                    agent_id="test-agent", 
+                    action="deployment",
+                    success=True,
+                    details={"deployment_id": "deploy-123"}
+                )
+                
+                # Read back the audit log
+                tmp.seek(0)
+                content = tmp.read()
+                
+                # Verify the log entry
+                assert len(content) > 0
+                log_entry = json.loads(content.strip())
+                assert log_entry["agent_id"] == "test-agent"
+                assert log_entry["action"] == "deployment"
+                assert log_entry["success"] is True
 
 
 class TestSecurityHeaders:
