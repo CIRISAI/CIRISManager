@@ -65,7 +65,7 @@ class VersionTracker:
     Maintains n/n-1/n-2 versions with optional n+1 for staged deployments.
     """
 
-    def __init__(self, data_dir: str = "/opt/ciris-manager/data"):
+    def __init__(self, data_dir: str = "/var/lib/ciris-manager"):
         """Initialize version tracker with persistent storage."""
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
