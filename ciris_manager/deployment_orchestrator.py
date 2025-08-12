@@ -1122,7 +1122,7 @@ class DeploymentOrchestrator:
                 tracker = get_version_tracker()
                 notification = deployment_status.notification
 
-                if notification:
+                if notification is not None:
                     # Promote agent version
                     if notification.agent_image:
                         await tracker.promote_staged_version("agents", deployment_id)

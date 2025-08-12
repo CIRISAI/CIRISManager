@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, asdict
 import asyncio
-import aiofiles
+import aiofiles  # type: ignore
 import logging
 
 logger = logging.getLogger(__name__)
@@ -335,7 +335,7 @@ class VersionTracker:
             Validation result with any warnings or errors
         """
         async with self._lock:
-            result = {"valid": True, "warnings": [], "errors": []}
+            result: Dict[str, Any] = {"valid": True, "warnings": [], "errors": []}
 
             for container_type, target_image in target_versions.items():
                 if container_type not in self.state:
