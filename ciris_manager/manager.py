@@ -511,11 +511,6 @@ class CIRISManager:
         """Start all manager services."""
         logger.info("Starting CIRISManager...")
 
-        # Set up audit logging
-        from ciris_manager.audit import setup_audit_logging
-
-        setup_audit_logging()
-
         self._running = True
 
         # Generate initial nginx config

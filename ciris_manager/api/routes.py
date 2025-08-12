@@ -959,25 +959,25 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Check if deployment was staged or started immediately
             if deployment_id in deployment_orchestrator.pending_deployments:
-                status = deployment_orchestrator.pending_deployments[deployment_id]
+                staged_status = deployment_orchestrator.pending_deployments[deployment_id]
                 logger.info(f"Staged deployment {deployment_id} for human review")
                 return {
                     "deployment_id": deployment_id,
                     "status": "staged",
                     "message": "Deployment staged for human review (Wisdom-Based Deferral)",
-                    "agents_affected": status.agents_total,
+                    "agents_affected": staged_status.agents_total,
                 }
             else:
-                status: Optional[DeploymentStatus] = deployment_orchestrator.deployments.get(
+                deploy_status: Optional[DeploymentStatus] = deployment_orchestrator.deployments.get(
                     deployment_id
                 )
-                if status:
+                if deploy_status:
                     logger.info(f"Auto-started low-risk deployment {deployment_id}")
                     return {
                         "deployment_id": deployment_id,
-                        "status": status.status,
-                        "message": status.message,
-                        "agents_affected": status.agents_total,
+                        "status": deploy_status.status,
+                        "message": deploy_status.message,
+                        "agents_affected": deploy_status.agents_total,
                     }
                 else:
                     # No-op deployment (no updates needed)
@@ -1632,9 +1632,9 @@ def create_routes(manager: Any) -> APIRouter:
                                     service_type = (
                                         service_name.split(".")[-1].replace("Service", "").lower()
                                     )
-                                    circuit_breakers["critical_services"][service_type] = (
-                                        breaker_state
-                                    )
+                                    circuit_breakers["critical_services"][
+                                        service_type
+                                    ] = breaker_state
 
                                 # Track all open circuit breakers
                                 if breaker_state in ["open", "half_open"]:

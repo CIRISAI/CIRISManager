@@ -225,7 +225,7 @@ class DeploymentOrchestrator:
             deployment.started_at = datetime.now(timezone.utc).isoformat()
 
             # Determine canary phase if applicable
-            if deployment.notification.strategy == "canary":
+            if deployment.notification and deployment.notification.strategy == "canary":
                 deployment.canary_phase = "explorers"
 
             self.deployments[deployment_id] = deployment
@@ -233,6 +233,9 @@ class DeploymentOrchestrator:
 
             # Get agents needing update
             from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+            if not self.manager or not self.manager.agent_registry:
+                raise ValueError("Manager or agent_registry not available")
 
             discovery = DockerAgentDiscovery(self.manager.agent_registry)
             agents = discovery.discover_agents()
