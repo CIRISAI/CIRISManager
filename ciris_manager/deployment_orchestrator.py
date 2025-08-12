@@ -478,55 +478,56 @@ class DeploymentOrchestrator:
         stability_minutes: int = 1,
     ) -> bool:
         """
-        Check if at least one agent in the canary group has reached WORK state 
+        Check if at least one agent in the canary group has reached WORK state
         and has no incidents for the stability period.
-        
+
         Args:
             deployment_id: Deployment identifier
             agents: List of agents in the canary group
             phase_name: Name of the current phase (for logging)
             wait_for_work_minutes: Max time to wait for WORK state
             stability_minutes: Time agent must be stable in WORK state
-            
+
         Returns:
             True if at least one agent is stable in WORK state, False otherwise
         """
         logger.info(
             f"Deployment {deployment_id}: Waiting for {phase_name} agents to reach WORK state"
         )
-        
+
         start_time = datetime.now(timezone.utc)
         wait_until = start_time.timestamp() + (wait_for_work_minutes * 60)
-        
+
         # Track which agents have reached WORK and when
         agents_in_work: Dict[str, datetime] = {}
-        
+
         while datetime.now(timezone.utc).timestamp() < wait_until:
             # Check each agent's state
             for agent in agents:
                 if not agent.is_running:
                     continue
-                    
+
                 try:
                     # Get agent health status
                     async with httpx.AsyncClient(timeout=5.0) as client:
                         # Get auth headers for this agent
                         from ciris_manager.agent_auth import get_agent_auth
+
                         auth = get_agent_auth()
                         headers = auth.get_auth_headers(agent.agent_id)
-                        
+
                         # Check health endpoint
                         health_url = f"http://localhost:{agent.port}/v1/health"
                         response = await client.get(health_url, headers=headers)
-                        
+
                         if response.status_code == 200:
                             health_data = response.json()
                             if isinstance(health_data, dict) and health_data.get("data"):
                                 health_data = health_data["data"]
-                            
+
                             cognitive_state = health_data.get("cognitive_state", "").lower()
                             version = health_data.get("version", "unknown")
-                            
+
                             # Check if agent is in WORK state
                             if cognitive_state == "work":
                                 if agent.agent_id not in agents_in_work:
@@ -534,39 +535,50 @@ class DeploymentOrchestrator:
                                     logger.info(
                                         f"Agent {agent.agent_id} reached WORK state with version {version}"
                                     )
-                                
+
                                 # Check if agent has been stable for required period
                                 work_duration = (
                                     datetime.now(timezone.utc) - agents_in_work[agent.agent_id]
                                 ).total_seconds() / 60
-                                
+
                                 if work_duration >= stability_minutes:
                                     # Check for recent incidents
-                                    telemetry_url = f"http://localhost:{agent.port}/v1/telemetry/overview"
-                                    telemetry_response = await client.get(telemetry_url, headers=headers)
-                                    
+                                    telemetry_url = (
+                                        f"http://localhost:{agent.port}/v1/telemetry/overview"
+                                    )
+                                    telemetry_response = await client.get(
+                                        telemetry_url, headers=headers
+                                    )
+
                                     if telemetry_response.status_code == 200:
                                         telemetry_data = telemetry_response.json()
-                                        if isinstance(telemetry_data, dict) and telemetry_data.get("data"):
+                                        if isinstance(telemetry_data, dict) and telemetry_data.get(
+                                            "data"
+                                        ):
                                             telemetry_data = telemetry_data["data"]
-                                        
+
                                         incidents = telemetry_data.get("recent_incidents", [])
-                                        
+
                                         # Check for critical incidents in the last stability_minutes
                                         recent_critical = False
-                                        cutoff_time = datetime.now(timezone.utc).timestamp() - (stability_minutes * 60)
-                                        
+                                        cutoff_time = datetime.now(timezone.utc).timestamp() - (
+                                            stability_minutes * 60
+                                        )
+
                                         for incident in incidents:
                                             if incident.get("severity") in ["critical", "high"]:
                                                 incident_time = incident.get("timestamp", 0)
                                                 if isinstance(incident_time, str):
                                                     # Parse ISO timestamp
                                                     from dateutil import parser
-                                                    incident_time = parser.parse(incident_time).timestamp()
+
+                                                    incident_time = parser.parse(
+                                                        incident_time
+                                                    ).timestamp()
                                                 if incident_time > cutoff_time:
                                                     recent_critical = True
                                                     break
-                                        
+
                                         if not recent_critical:
                                             logger.info(
                                                 f"Agent {agent.agent_id} is stable in WORK state "
@@ -580,13 +592,13 @@ class DeploymentOrchestrator:
                                     logger.warning(
                                         f"Agent {agent.agent_id} left WORK state, now in {cognitive_state}"
                                     )
-                                    
+
                 except Exception as e:
                     logger.error(f"Error checking agent {agent.agent_id} health: {e}")
-            
+
             # Wait before next check
             await asyncio.sleep(10)
-        
+
         # Timeout reached
         logger.warning(
             f"Deployment {deployment_id}: No {phase_name} agents reached stable WORK state "
@@ -678,15 +690,19 @@ class DeploymentOrchestrator:
             ):
                 status.message = "Explorer phase failed - no agents reached stable WORK state"
                 status.status = "failed"
-                logger.error(f"Deployment {deployment_id}: Explorer phase failed, aborting deployment")
+                logger.error(
+                    f"Deployment {deployment_id}: Explorer phase failed, aborting deployment"
+                )
                 audit_deployment_action(
                     deployment_id=deployment_id,
                     action="canary_phase_failed",
                     details={"phase": "explorers", "reason": "no_stable_work_state"},
                 )
                 return
-                
-            logger.info(f"Deployment {deployment_id}: Explorer phase successful, proceeding to early adopters")
+
+            logger.info(
+                f"Deployment {deployment_id}: Explorer phase successful, proceeding to early adopters"
+            )
         else:
             logger.info(f"Deployment {deployment_id}: No explorer agents assigned, skipping phase")
 
@@ -706,19 +722,27 @@ class DeploymentOrchestrator:
 
             # Wait for at least one early adopter to reach WORK state and be stable
             if not await self._check_canary_group_health(
-                deployment_id, early_adopters, "early adopter", wait_for_work_minutes=5, stability_minutes=1
+                deployment_id,
+                early_adopters,
+                "early adopter",
+                wait_for_work_minutes=5,
+                stability_minutes=1,
             ):
                 status.message = "Early adopter phase failed - no agents reached stable WORK state"
                 status.status = "failed"
-                logger.error(f"Deployment {deployment_id}: Early adopter phase failed, aborting deployment")
+                logger.error(
+                    f"Deployment {deployment_id}: Early adopter phase failed, aborting deployment"
+                )
                 audit_deployment_action(
                     deployment_id=deployment_id,
                     action="canary_phase_failed",
                     details={"phase": "early_adopters", "reason": "no_stable_work_state"},
                 )
                 return
-                
-            logger.info(f"Deployment {deployment_id}: Early adopter phase successful, proceeding to general")
+
+            logger.info(
+                f"Deployment {deployment_id}: Early adopter phase successful, proceeding to general"
+            )
         else:
             logger.info(
                 f"Deployment {deployment_id}: No early adopter agents assigned, skipping phase"
@@ -737,12 +761,14 @@ class DeploymentOrchestrator:
                 details={"phase": "general", "agent_count": len(general)},
             )
             await self._update_agent_group(deployment_id, notification, general)
-            
+
             # For general population, just log if they don't reach WORK state (don't fail deployment)
             if await self._check_canary_group_health(
                 deployment_id, general, "general", wait_for_work_minutes=5, stability_minutes=1
             ):
-                logger.info(f"Deployment {deployment_id}: General phase agents reached stable WORK state")
+                logger.info(
+                    f"Deployment {deployment_id}: General phase agents reached stable WORK state"
+                )
             else:
                 logger.warning(
                     f"Deployment {deployment_id}: Some general phase agents did not reach stable WORK state"
