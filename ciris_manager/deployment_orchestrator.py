@@ -1120,9 +1120,9 @@ class DeploymentOrchestrator:
 
                 # Promote staged versions to current (n+1 → n, n → n-1, n-1 → n-2)
                 tracker = get_version_tracker()
-                notification = deployment_status.notification
 
-                if notification is not None:
+                if deployment_status.notification is not None:
+                    notification = deployment_status.notification
                     # Promote agent version
                     if notification.agent_image:
                         await tracker.promote_staged_version("agents", deployment_id)
