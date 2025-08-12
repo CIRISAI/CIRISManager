@@ -48,7 +48,7 @@ class TestCanaryGroupHealth:
     async def test_agent_reaches_work_state_quickly(self, orchestrator, sample_agent):
         """Test successful case where agent reaches WORK state quickly."""
         deployment_id = "test-deploy-1"
-        
+
         # Register agent with service token so auth works
         orchestrator.manager.agent_registry.register_agent(
             sample_agent.agent_id,
@@ -56,7 +56,7 @@ class TestCanaryGroupHealth:
             sample_agent.api_port,
             "test",
             "test.yml",
-            service_token="test-token-123"
+            service_token="test-token-123",
         )
 
         # Mock sleep to speed up tests
@@ -294,13 +294,23 @@ class TestCanaryGroupHealth:
         agent2.name = "Agent 2"
         agent2.api_port = 8082
         agent2.is_running = True
-        
+
         # Register agents with service tokens
         orchestrator.manager.agent_registry.register_agent(
-            agent1.agent_id, agent1.name, agent1.api_port, "test", "test.yml", service_token="token1"
+            agent1.agent_id,
+            agent1.name,
+            agent1.api_port,
+            "test",
+            "test.yml",
+            service_token="token1",
         )
         orchestrator.manager.agent_registry.register_agent(
-            agent2.agent_id, agent2.name, agent2.api_port, "test", "test.yml", service_token="token2"
+            agent2.agent_id,
+            agent2.name,
+            agent2.api_port,
+            "test",
+            "test.yml",
+            service_token="token2",
         )
 
         # Mock asyncio.sleep to speed up test
@@ -412,7 +422,7 @@ class TestCanaryDeploymentFlow:
             explorer.metadata.get("compose_file", "test.yml"),
         )
         registry.set_canary_group(explorer.agent_id, "explorer")
-        
+
         registry.register_agent(
             early_adopter.agent_id,
             early_adopter.name,
@@ -421,7 +431,7 @@ class TestCanaryDeploymentFlow:
             early_adopter.metadata.get("compose_file", "test.yml"),
         )
         registry.set_canary_group(early_adopter.agent_id, "early_adopter")
-        
+
         registry.register_agent(
             general.agent_id,
             general.name,

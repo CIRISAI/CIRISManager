@@ -411,7 +411,7 @@ class TestDeploymentOrchestrator:
 
         # Mock the health check to always succeed
         orchestrator._check_canary_group_health = AsyncMock(return_value=True)
-        
+
         with patch.object(
             orchestrator, "_update_agent_group", new_callable=AsyncMock
         ) as mock_update:
