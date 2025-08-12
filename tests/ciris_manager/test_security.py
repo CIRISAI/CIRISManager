@@ -232,20 +232,20 @@ class TestAuditLogging:
         # Use a temp file for audit log
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "audit.jsonl"
-            
+
             with patch("ciris_manager.audit.AUDIT_LOG_PATH", log_path):
                 audit_service_token_use(
-                    agent_id="test-agent", 
+                    agent_id="test-agent",
                     action="deployment",
                     success=True,
-                    details={"deployment_id": "deploy-123"}
+                    details={"deployment_id": "deploy-123"},
                 )
-                
+
                 # Read back the audit log
                 assert log_path.exists(), "Audit log file was not created"
-                with open(log_path, 'r') as f:
+                with open(log_path, "r") as f:
                     content = f.read()
-                
+
                 # Verify the log entry
                 assert len(content) > 0, "Audit log is empty"
                 log_entry = json.loads(content.strip())
