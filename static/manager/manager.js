@@ -225,9 +225,9 @@ function switchTab(tab) {
     });
     document.getElementById(`${tab}-content`).classList.remove('hidden');
 
-    // Fetch version data when switching to versions tab
+    // Fetch version/deployment data when switching to versions tab
     if (tab === 'versions') {
-        fetchVersionData();
+        updateDeploymentTab();
     }
     
     // Fetch canary data when switching to canary tab
@@ -2171,4 +2171,299 @@ function stopDashboardRefresh() {
         clearInterval(dashboardUpdateInterval);
         dashboardUpdateInterval = null;
     }
+}
+
+// Staged Deployment Management Functions
+async function checkPendingDeployment() {
+    try {
+        const response = await fetch('/manager/v1/updates/pending', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to check pending deployment');
+        }
+        
+        const data = await response.json();
+        
+        if (data.pending) {
+            showPendingDeployment(data);
+        } else {
+            hidePendingDeployment();
+        }
+    } catch (error) {
+        console.error('Error checking pending deployment:', error);
+    }
+}
+
+function showPendingDeployment(deploymentData) {
+    const section = document.getElementById('pending-deployment-section');
+    if (!section) return;
+    
+    // Populate deployment details
+    document.getElementById('pending-agent-image').textContent = 
+        deploymentData.agent_image || 'N/A';
+    document.getElementById('pending-gui-image').textContent = 
+        deploymentData.gui_image || 'N/A';
+    document.getElementById('pending-strategy').textContent = 
+        deploymentData.strategy || 'canary';
+    document.getElementById('pending-message').textContent = 
+        deploymentData.message || 'No message provided';
+    document.getElementById('pending-staged-at').textContent = 
+        formatTimestamp(deploymentData.staged_at);
+    document.getElementById('affected-agents-count').textContent = 
+        `${deploymentData.affected_agents || 0} agents will be updated`;
+    
+    // Show the section
+    section.classList.remove('hidden');
+    
+    // Setup button handlers
+    setupDeploymentButtons(deploymentData);
+}
+
+function hidePendingDeployment() {
+    const section = document.getElementById('pending-deployment-section');
+    if (section) {
+        section.classList.add('hidden');
+    }
+}
+
+function setupDeploymentButtons(deploymentData) {
+    // Launch button
+    const launchBtn = document.getElementById('launch-deployment-btn');
+    if (launchBtn) {
+        launchBtn.onclick = async () => {
+            if (confirm('Are you sure you want to launch this deployment? This will begin the canary rollout process.')) {
+                await executeDeploymentAction('launch', deploymentData.deployment_id);
+            }
+        };
+    }
+    
+    // Reject button
+    const rejectBtn = document.getElementById('reject-deployment-btn');
+    if (rejectBtn) {
+        rejectBtn.onclick = async () => {
+            if (confirm('Are you sure you want to reject this update? The deployment will be cancelled.')) {
+                await executeDeploymentAction('reject', deploymentData.deployment_id);
+            }
+        };
+    }
+    
+    // View details button
+    const detailsBtn = document.getElementById('view-details-btn');
+    if (detailsBtn) {
+        detailsBtn.onclick = () => {
+            showDeploymentDetails(deploymentData);
+        };
+    }
+}
+
+async function executeDeploymentAction(action, deploymentId) {
+    try {
+        const response = await fetch(`/manager/v1/updates/${action}`, {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                deployment_id: deploymentId,
+                reason: action === 'reject' ? 'Manual rejection by operator' : undefined
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || `Failed to ${action} deployment`);
+        }
+        
+        const result = await response.json();
+        
+        // Show success message
+        alert(`Deployment ${action}ed successfully`);
+        
+        // Refresh the deployment status
+        await checkPendingDeployment();
+        await updateDeploymentStatus();
+        
+    } catch (error) {
+        console.error(`Error ${action}ing deployment:`, error);
+        alert(`Failed to ${action} deployment: ${error.message}`);
+    }
+}
+
+function showDeploymentDetails(deploymentData) {
+    // Create a modal or expand the details view
+    const details = `
+        Deployment ID: ${deploymentData.deployment_id}
+        Agent Image: ${deploymentData.agent_image}
+        GUI Image: ${deploymentData.gui_image || 'Not specified'}
+        Strategy: ${deploymentData.strategy}
+        Message: ${deploymentData.message}
+        Staged At: ${formatTimestamp(deploymentData.staged_at)}
+        Affected Agents: ${deploymentData.affected_agents || 0}
+        
+        Risk Assessment:
+        - Canary safety checks enabled
+        - Automatic rollback on failure
+        - WORK state validation required
+        - 1 minute stability period enforced
+    `;
+    
+    alert(details);
+}
+
+// Deployment status functions
+async function updateCurrentImages() {
+    try {
+        const response = await fetch('/manager/v1/updates/current-images', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch current images');
+        
+        const data = await response.json();
+        
+        document.getElementById('current-agent-image').textContent = data.agent_image || 'N/A';
+        document.getElementById('current-agent-digest').textContent = data.agent_digest || 'N/A';
+        document.getElementById('current-gui-image').textContent = data.gui_image || 'N/A';
+        document.getElementById('current-gui-digest').textContent = data.gui_digest || 'N/A';
+    } catch (error) {
+        console.error('Error fetching current images:', error);
+    }
+}
+
+async function updateDeploymentStatus() {
+    try {
+        const response = await fetch('/manager/v1/updates/status', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch deployment status');
+        
+        const data = await response.json();
+        const statusDiv = document.getElementById('deployment-status');
+        
+        if (data.deployment_id) {
+            statusDiv.innerHTML = `
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="font-medium">Status:</span>
+                        <span class="${data.status === 'in_progress' ? 'text-blue-600' : 
+                                       data.status === 'completed' ? 'text-green-600' : 
+                                       data.status === 'failed' ? 'text-red-600' : 
+                                       'text-gray-600'}">${data.status}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Phase:</span>
+                        <span>${data.canary_phase || 'N/A'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="font-medium">Progress:</span>
+                        <span>${data.agents_updated || 0}/${data.agents_total || 0}</span>
+                    </div>
+                    ${data.message ? `<div class="text-sm text-gray-600 italic">${data.message}</div>` : ''}
+                </div>
+            `;
+        } else {
+            statusDiv.innerHTML = '<p class="text-gray-600">No active deployment</p>';
+        }
+    } catch (error) {
+        console.error('Error fetching deployment status:', error);
+    }
+}
+
+async function updateDeploymentHistory() {
+    try {
+        const response = await fetch('/manager/v1/updates/history?limit=10', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch deployment history');
+        
+        const data = await response.json();
+        const historyDiv = document.getElementById('deployment-history');
+        
+        if (data.deployments && data.deployments.length > 0) {
+            historyDiv.innerHTML = data.deployments.map(d => `
+                <div class="border-b pb-2 mb-2 last:border-b-0">
+                    <div class="flex justify-between">
+                        <span class="text-sm font-medium">${formatTimestamp(d.started_at)}</span>
+                        <span class="text-sm ${d.status === 'completed' ? 'text-green-600' : 
+                                               d.status === 'failed' ? 'text-red-600' : 
+                                               'text-gray-600'}">${d.status}</span>
+                    </div>
+                    <div class="text-xs text-gray-600">${d.message || 'No message'}</div>
+                </div>
+            `).join('');
+        } else {
+            historyDiv.innerHTML = '<p class="text-gray-600">No deployment history</p>';
+        }
+    } catch (error) {
+        console.error('Error fetching deployment history:', error);
+    }
+}
+
+async function updateAgentVersions() {
+    try {
+        const response = await fetch('/manager/v1/agents', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch agent versions');
+        
+        const agents = await response.json();
+        const tableBody = document.getElementById('agent-versions-table');
+        
+        if (agents && agents.length > 0) {
+            tableBody.innerHTML = agents.map(agent => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        ${agent.name}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                   ${agent.status === 'running' ? 'bg-green-100 text-green-800' : 
+                                     'bg-gray-100 text-gray-800'}">
+                            ${agent.status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${agent.version || 'N/A'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${agent.gui_version || 'N/A'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${agent.last_updated ? formatTimestamp(agent.last_updated) : 'N/A'}
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">No agents found</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error fetching agent versions:', error);
+    }
+}
+
+// Main deployment tab update function
+async function updateDeploymentTab() {
+    await Promise.all([
+        updateCurrentImages(),
+        updateDeploymentStatus(),
+        updateDeploymentHistory(),
+        updateAgentVersions(),
+        checkPendingDeployment() // Check for pending deployments
+    ]);
 }

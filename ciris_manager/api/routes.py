@@ -982,6 +982,119 @@ def create_routes(manager: Any) -> APIRouter:
         else:
             return await deployment_orchestrator.get_current_deployment()
 
+    @router.get("/updates/pending")
+    async def get_pending_deployment(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
+        """
+        Get pending deployment details if any.
+        
+        Returns staged deployment waiting for operator approval.
+        """
+        pending = await deployment_orchestrator.get_pending_deployment()
+        if pending:
+            return {
+                "pending": True,
+                "deployment_id": pending.deployment_id,
+                "agent_image": pending.notification.agent_image,
+                "gui_image": pending.notification.gui_image,
+                "strategy": pending.notification.strategy,
+                "message": pending.notification.message,
+                "staged_at": pending.staged_at,
+                "affected_agents": pending.agents_total,
+            }
+        return {"pending": False}
+
+    @router.post("/updates/launch")
+    async def launch_deployment(
+        request: Dict[str, str], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, str]:
+        """
+        Launch a staged deployment.
+        
+        Requires operator approval to start canary rollout.
+        """
+        deployment_id = request.get("deployment_id")
+        if not deployment_id:
+            raise HTTPException(status_code=400, detail="deployment_id required")
+        
+        success = await deployment_orchestrator.launch_staged_deployment(deployment_id)
+        if success:
+            return {"status": "launched", "deployment_id": deployment_id}
+        else:
+            raise HTTPException(status_code=404, detail="Deployment not found or not pending")
+
+    @router.post("/updates/reject")
+    async def reject_deployment(
+        request: Dict[str, str], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, str]:
+        """
+        Reject a staged deployment.
+        
+        Cancels the deployment and logs the rejection reason.
+        """
+        deployment_id = request.get("deployment_id")
+        reason = request.get("reason", "Rejected by operator")
+        
+        if not deployment_id:
+            raise HTTPException(status_code=400, detail="deployment_id required")
+        
+        success = await deployment_orchestrator.reject_staged_deployment(deployment_id, reason)
+        if success:
+            return {"status": "rejected", "deployment_id": deployment_id}
+        else:
+            raise HTTPException(status_code=404, detail="Deployment not found or not pending")
+
+    @router.post("/updates/pause")
+    async def pause_deployment(
+        request: Dict[str, str], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, str]:
+        """
+        Pause an active deployment.
+        
+        Stops further agent updates but keeps deployment active.
+        """
+        deployment_id = request.get("deployment_id")
+        if not deployment_id:
+            raise HTTPException(status_code=400, detail="deployment_id required")
+        
+        success = await deployment_orchestrator.pause_deployment(deployment_id)
+        if success:
+            return {"status": "paused", "deployment_id": deployment_id}
+        else:
+            raise HTTPException(status_code=404, detail="Deployment not found or not active")
+
+    @router.post("/updates/rollback")
+    async def rollback_deployment(
+        request: Dict[str, str], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, str]:
+        """
+        Rollback a deployment.
+        
+        Reverts updated agents to previous version.
+        """
+        deployment_id = request.get("deployment_id")
+        if not deployment_id:
+            raise HTTPException(status_code=400, detail="deployment_id required")
+        
+        success = await deployment_orchestrator.rollback_deployment(deployment_id)
+        if success:
+            return {"status": "rolling_back", "deployment_id": deployment_id}
+        else:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+
+    @router.get("/updates/current-images")
+    async def get_current_images(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
+        """Get current running container images."""
+        images = await deployment_orchestrator.get_current_images()
+        return images
+
+    @router.get("/updates/history")
+    async def get_deployment_history(
+        limit: int = 10, _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """Get deployment history."""
+        history = await deployment_orchestrator.get_deployment_history(limit)
+        return {"deployments": history}
+
     @router.get("/updates/latest/changelog")
     async def get_latest_changelog() -> Dict[str, Any]:
         """

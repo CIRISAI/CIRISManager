@@ -169,6 +169,72 @@
                                 </div>
                             </div>
 
+                            <!-- Pending Deployment -->
+                            <div id="pending-deployment-section" class="hidden">
+                                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                                    <i class="fas fa-clock text-yellow-500 mr-2"></i>
+                                    Pending Deployment
+                                </h3>
+                                <div class="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-lg">
+                                    <div class="mb-4">
+                                        <h4 class="font-medium text-gray-700 mb-2">Update Details</h4>
+                                        <div class="space-y-2 text-sm">
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-600">Agent Image:</span>
+                                                <span id="pending-agent-image" class="font-mono text-xs"></span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-600">GUI Image:</span>
+                                                <span id="pending-gui-image" class="font-mono text-xs"></span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-600">Strategy:</span>
+                                                <span id="pending-strategy" class="font-medium"></span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-600">Message:</span>
+                                                <span id="pending-message" class="italic"></span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-600">Staged At:</span>
+                                                <span id="pending-staged-at"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Risk Assessment -->
+                                    <div class="mb-4 p-3 bg-white rounded border border-gray-200">
+                                        <h4 class="font-medium text-gray-700 mb-2">Risk Assessment</h4>
+                                        <div id="risk-assessment" class="space-y-1 text-sm">
+                                            <div class="flex items-center">
+                                                <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                                <span>Canary safety checks enabled</span>
+                                            </div>
+                                            <div class="flex items-center">
+                                                <i class="fas fa-shield-alt text-blue-500 mr-2"></i>
+                                                <span id="affected-agents-count">0 agents will be updated</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Action Buttons -->
+                                    <div class="flex flex-wrap gap-2">
+                                        <button id="launch-deployment-btn" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
+                                            <i class="fas fa-rocket mr-2"></i>Launch Deployment
+                                        </button>
+                                        <button id="pause-deployment-btn" class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors hidden">
+                                            <i class="fas fa-pause mr-2"></i>Pause
+                                        </button>
+                                        <button id="reject-deployment-btn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">
+                                            <i class="fas fa-times mr-2"></i>Reject Update
+                                        </button>
+                                        <button id="view-details-btn" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
+                                            <i class="fas fa-info-circle mr-2"></i>View Details
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Deployment Status -->
                             <div>
                                 <h3 class="text-lg font-semibold mb-4">Active Deployment</h3>
