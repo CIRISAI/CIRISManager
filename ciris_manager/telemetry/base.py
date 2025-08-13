@@ -400,4 +400,5 @@ class RetryableMixin:
                     await asyncio.sleep(wait_time)
 
         logger.error(f"All {self.max_retries} collection attempts failed: {last_error}")
-        return []  # type: ignore[return-value]
+        empty_list: List[Any] = []
+        return empty_list
