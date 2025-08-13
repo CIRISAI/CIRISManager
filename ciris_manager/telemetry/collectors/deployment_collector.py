@@ -188,9 +188,7 @@ class DeploymentCollector(BaseCollector[DeploymentMetrics]):
     def _parse_deployment_phase(self, phase: str) -> DeploymentPhase:
         """Parse deployment phase string to enum."""
         phase_lower = phase.lower()
-        if phase_lower == "staging":
-            return DeploymentPhase.STAGING
-        elif phase_lower == "explorers":
+        if phase_lower == "explorers":
             return DeploymentPhase.EXPLORERS
         elif phase_lower == "early_adopters":
             return DeploymentPhase.EARLY_ADOPTERS
@@ -199,6 +197,7 @@ class DeploymentCollector(BaseCollector[DeploymentMetrics]):
         elif phase_lower == "complete":
             return DeploymentPhase.COMPLETE
         else:
+            # Default to explorers for unknown phases
             return DeploymentPhase.EXPLORERS
 
     def _parse_timestamp(self, timestamp_str: Optional[str]) -> Optional[datetime]:
