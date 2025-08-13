@@ -381,10 +381,13 @@ class RetryableMixin:
 
         for attempt in range(self.max_retries):
             try:
-                # Call the collect method
-                result = await self.collect()
-                if result:
-                    return result
+                # Call the collect method if it exists
+                if hasattr(self, "collect") and callable(getattr(self, "collect")):
+                    result = await self.collect()  # type: ignore[attr-defined]
+                    if result:
+                        return result
+                else:
+                    raise AttributeError("RetryableMixin requires a 'collect' method")
 
             except Exception as e:
                 last_error = e
