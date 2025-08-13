@@ -221,7 +221,7 @@ class TestAgentMetricsCollector:
     async def test_handle_failed_requests(self, collector, mock_discovery):
         """Test handling of failed HTTP requests."""
         # Set up discovery with all agents
-        agents = mock_discovery.discover_agents()
+        mock_discovery.discover_agents()
 
         with patch(
             "ciris_manager.telemetry.collectors.agent_collector.httpx.AsyncClient"

@@ -40,6 +40,14 @@ class DeploymentOrchestrator:
         self.deployment_paused: Dict[str, bool] = {}  # Track paused deployments
         self.manager = manager
 
+        # Set up persistent storage
+        self.state_dir = Path("/var/lib/ciris-manager")
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.deployment_state_file = self.state_dir / "deployment_state.json"
+
+        # Load persisted state on startup
+        self._load_state()
+
         # Initialize Docker registry client with GitHub token if available
         github_token = os.getenv("GITHUB_TOKEN") or os.getenv("CIRIS_GITHUB_TOKEN")
         self.registry_client = DockerRegistryClient(auth_token=github_token)

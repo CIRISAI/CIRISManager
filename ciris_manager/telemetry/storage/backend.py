@@ -64,6 +64,10 @@ class TelemetryStorageBackend:
         if self._pool:
             return
 
+        if not ASYNCPG_AVAILABLE:
+            logger.error("asyncpg is not available")
+            raise ImportError("asyncpg is required for database storage")
+
         try:
             self._pool = await asyncpg.create_pool(
                 self.dsn,
@@ -96,6 +100,9 @@ class TelemetryStorageBackend:
             snapshot: Complete telemetry snapshot to store
         """
         await self.ensure_connected()
+
+        if not self._pool:
+            raise RuntimeError("Database connection not established")
 
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -394,6 +401,9 @@ class TelemetryStorageBackend:
         """
         await self.ensure_connected()
 
+        if not self._pool:
+            raise RuntimeError("Database connection not established")
+
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """
@@ -456,12 +466,17 @@ class TelemetryStorageBackend:
         """
         await self.ensure_connected()
 
+        if not self._pool:
+            return None
+
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow("""
+            row = await conn.fetchrow(
+                """
                 SELECT * FROM system_summaries
                 ORDER BY time DESC
                 LIMIT 1
-            """)
+            """
+            )
 
             if not row:
                 return None
@@ -502,6 +517,9 @@ class TelemetryStorageBackend:
             List of public history entries
         """
         await self.ensure_connected()
+
+        if not self._pool:
+            return []
 
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
@@ -560,6 +578,10 @@ class TelemetryStorageBackend:
             days_to_keep: Number of days of data to retain
         """
         await self.ensure_connected()
+
+        if not self._pool:
+            logger.warning("Cannot cleanup data: database connection not established")
+            return
 
         cutoff = datetime.now() - timedelta(days=days_to_keep)
 

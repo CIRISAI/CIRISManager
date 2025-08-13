@@ -158,7 +158,7 @@ class TestTelemetryIntegration:
         telemetry_service.orchestrator.collectors["agents"] = mock_agents
 
         # Start service
-        task = asyncio.create_task(telemetry_service.start())
+        asyncio.create_task(telemetry_service.start())
 
         # Let it run for a bit
         await asyncio.sleep(2.5)  # Should complete 2 collection cycles
