@@ -2049,7 +2049,7 @@ def create_routes(manager: Any) -> APIRouter:
         from ciris_manager.telemetry.api import create_telemetry_router
 
         telemetry_router = create_telemetry_router(manager)
-        router.include_router(telemetry_router, prefix="/telemetry", tags=["telemetry"])
+        router.include_router(telemetry_router, tags=["telemetry"])
         logger.info("Telemetry routes registered successfully")
     except ImportError as e:
         logger.warning(f"Telemetry module not available: {e}")
