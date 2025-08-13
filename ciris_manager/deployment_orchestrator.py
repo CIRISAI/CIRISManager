@@ -52,6 +52,21 @@ class DeploymentOrchestrator:
         github_token = os.getenv("GITHUB_TOKEN") or os.getenv("CIRIS_GITHUB_TOKEN")
         self.registry_client = DockerRegistryClient(auth_token=github_token)
 
+    def _load_state(self) -> None:
+        """Load deployment state from persistent storage."""
+        if self.deployment_state_file.exists():
+            try:
+                with open(self.deployment_state_file, "r") as f:
+                    state = json.load(f)
+                    # Restore deployments
+                    for deployment_id, deployment_data in state.get("deployments", {}).items():
+                        self.deployments[deployment_id] = DeploymentStatus(**deployment_data)
+                    # Restore current deployment
+                    self.current_deployment = state.get("current_deployment")
+                    logger.info(f"Loaded deployment state with {len(self.deployments)} deployments")
+            except Exception as e:
+                logger.warning(f"Failed to load deployment state: {e}")
+
     async def start_deployment(
         self,
         notification: UpdateNotification,

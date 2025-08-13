@@ -73,8 +73,10 @@ class DockerCollector(BaseCollector[ContainerMetrics], HealthCheckMixin):
             # Get all containers with 'ciris' in name
             if not self.client:
                 return []
+
+            client = self.client  # Type narrowing for mypy
             containers = await loop.run_in_executor(
-                None, lambda: self.client.containers.list(all=True, filters={"name": "ciris"})
+                None, lambda: client.containers.list(all=True, filters={"name": "ciris"})
             )
 
             metrics = []

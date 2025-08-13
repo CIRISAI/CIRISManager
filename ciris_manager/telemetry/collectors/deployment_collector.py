@@ -391,7 +391,7 @@ class VersionCollector:
                     current_version=current_version,
                     last_transition_at=last_transition_at,
                     last_work_state_at=last_work_state_at,
-                    deployment_group=group,
+                    deployment_group=group,  # type: ignore[arg-type]
                 )
             )
 

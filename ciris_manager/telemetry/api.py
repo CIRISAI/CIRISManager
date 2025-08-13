@@ -5,7 +5,7 @@ Provides both internal and public-safe interfaces for telemetry data.
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, TypedDict
 from fastapi import APIRouter, HTTPException, Query
 
 from ciris_manager.telemetry.service import TelemetryService
@@ -16,6 +16,42 @@ from ciris_manager.telemetry.schemas import (
     TelemetryQuery,
     TelemetryResponse,
 )
+
+
+class HealthResponse(TypedDict):
+    status: str
+    collection_status: str
+    last_collection_time: str | None
+    database_connected: bool
+    collectors_enabled: Dict[str, bool]
+    collection_interval: int
+    storage_enabled: bool
+
+
+class HistoryResponse(TypedDict):
+    hours: int
+    interval: str
+    data: List[Dict[str, Any]]
+
+
+class TriggerResponse(TypedDict):
+    status: str
+    message: str
+
+
+class AgentMetricsResponse(TypedDict, total=False):
+    agent_name: str
+    hours: int
+    current: Dict[str, Any]
+    data: List[Any]
+
+
+class ContainerMetricsResponse(TypedDict, total=False):
+    container_name: str
+    hours: int
+    current: Dict[str, Any]
+    data: List[Any]
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +100,7 @@ class TelemetryAPI:
         self.router.post("/collect")(self.trigger_collection)
         self.router.post("/cleanup")(self.cleanup_old_data)
 
-    async def get_health(self) -> Dict[str, Any]:
+    async def get_health(self) -> HealthResponse:
         """
         Get telemetry system health status.
 
@@ -129,7 +165,7 @@ class TelemetryAPI:
         self,
         hours: int = Query(default=24, ge=1, le=168),
         interval: str = Query(default="5m", regex="^(1m|5m|1h|1d)$"),
-    ) -> Dict[str, Any]:
+    ) -> HistoryResponse:
         """
         Get historical telemetry data.
 
@@ -201,7 +237,7 @@ class TelemetryAPI:
 
     async def get_agent_metrics(
         self, agent_name: str, hours: int = Query(default=24, ge=1, le=168)
-    ) -> Dict[str, Any]:
+    ) -> AgentMetricsResponse:
         """
         Get metrics for specific agent.
 
@@ -244,7 +280,7 @@ class TelemetryAPI:
 
     async def get_container_metrics(
         self, container_name: str, hours: int = Query(default=24, ge=1, le=168)
-    ) -> Dict[str, Any]:
+    ) -> ContainerMetricsResponse:
         """
         Get metrics for specific container.
 
@@ -323,7 +359,7 @@ class TelemetryAPI:
             logger.error(f"Failed to get public history: {e}")
             return []
 
-    async def trigger_collection(self) -> Dict[str, str]:
+    async def trigger_collection(self) -> TriggerResponse:
         """
         Manually trigger telemetry collection.
 
@@ -343,7 +379,7 @@ class TelemetryAPI:
             logger.error(f"Manual collection failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
-    async def cleanup_old_data(self, days: int = Query(default=7, ge=1, le=30)) -> Dict[str, str]:
+    async def cleanup_old_data(self, days: int = Query(default=7, ge=1, le=30)) -> TriggerResponse:
         """
         Clean up old telemetry data.
 

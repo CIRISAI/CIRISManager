@@ -381,11 +381,10 @@ class RetryableMixin:
 
         for attempt in range(self.max_retries):
             try:
-                # Call parent's collect method
-                if hasattr(super(), "collect"):
-                    result = await super().collect()
-                    if result:
-                        return result
+                # Call the collect method
+                result = await self.collect()
+                if result:
+                    return result
 
             except Exception as e:
                 last_error = e
@@ -398,4 +397,4 @@ class RetryableMixin:
                     await asyncio.sleep(wait_time)
 
         logger.error(f"All {self.max_retries} collection attempts failed: {last_error}")
-        return []
+        return []  # type: ignore[return-value]

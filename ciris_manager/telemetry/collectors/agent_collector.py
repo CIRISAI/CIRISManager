@@ -82,11 +82,11 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Filter out failures
-        metrics = []
+        metrics: List[AgentOperationalMetrics] = []
         for result in results:
             if isinstance(result, Exception):
                 logger.warning(f"Failed to collect from agent: {result}")
-            elif result:
+            elif result and not isinstance(result, BaseException):
                 metrics.append(result)
 
         logger.info(f"Collected metrics from {len(metrics)}/{len(agents)} agents")
