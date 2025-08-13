@@ -1,0 +1,330 @@
+name: Deploy Telemetry System
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ciris_manager/telemetry/**'
+      - 'migrations/telemetry/**'
+      - '.github/workflows/deploy-telemetry.yml'
+      - 'docker/telemetry/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/ciris-telemetry
+
+jobs:
+  test:
+    name: Test Telemetry System
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg14
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: telemetry_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      
+      - name: Run telemetry tests
+        env:
+          DATABASE_URL: postgresql://postgres:test_password@localhost:5432/telemetry_test
+        run: |
+          pytest tests/telemetry/ -v --cov=ciris_manager.telemetry --cov-report=xml
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: telemetry
+          name: telemetry-coverage
+
+  build:
+    name: Build Database Image
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-db
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push database image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/telemetry
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  migrate:
+    name: Run Database Migrations
+    runs-on: ubuntu-latest
+    needs: build
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      
+      - name: Run migrations
+        env:
+          DB_HOST: ${{ secrets.TELEMETRY_DB_HOST }}
+          DB_PORT: ${{ secrets.TELEMETRY_DB_PORT }}
+          DB_NAME: ${{ secrets.TELEMETRY_DB_NAME }}
+          DB_USER: ${{ secrets.TELEMETRY_DB_USER }}
+          DB_PASSWORD: ${{ secrets.TELEMETRY_DB_PASSWORD }}
+        run: |
+          # Create migration script
+          cat > /tmp/migrate.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "Running telemetry database migrations..."
+          
+          # Check if database exists
+          if ! PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -lqt | cut -d \| -f 1 | grep -qw $DB_NAME; then
+            echo "Creating database $DB_NAME..."
+            PGPASSWORD=$DB_PASSWORD createdb -h $DB_HOST -p $DB_PORT -U $DB_USER $DB_NAME
+          fi
+          
+          # Run migrations in order
+          for migration in migrations/telemetry/*.sql; do
+            if [ -f "$migration" ]; then
+              echo "Applying migration: $(basename $migration)"
+              PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$migration"
+            fi
+          done
+          
+          echo "Migrations completed successfully"
+          EOF
+          
+          chmod +x /tmp/migrate.sh
+          /tmp/migrate.sh
+
+  deploy:
+    name: Deploy Telemetry Service
+    runs-on: ubuntu-latest
+    needs: migrate
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      
+      - name: Deploy to production
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DB_HOST: ${{ secrets.TELEMETRY_DB_HOST }}
+          DB_PORT: ${{ secrets.TELEMETRY_DB_PORT }}
+          DB_NAME: ${{ secrets.TELEMETRY_DB_NAME }}
+          DB_USER: ${{ secrets.TELEMETRY_DB_USER }}
+          DB_PASSWORD: ${{ secrets.TELEMETRY_DB_PASSWORD }}
+        run: |
+          # Create deployment script
+          cat > /tmp/deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "Deploying telemetry system..."
+          
+          # Update CIRISManager
+          cd /opt/ciris-manager
+          git pull origin main
+          pip install -e ".[telemetry]"
+          
+          # Update configuration
+          cat > /etc/ciris-manager/telemetry.yml << EOC
+          telemetry:
+            enabled: true
+            database_url: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+            collection_interval: 60
+            retention_days: 30
+            enable_public_api: true
+            storage:
+              type: timescaledb
+              pool_size: 10
+              max_overflow: 20
+            collectors:
+              docker: true
+              agents: true
+              deployments: true
+              versions: true
+          EOC
+          
+          # Restart service to pick up changes
+          systemctl restart ciris-manager
+          
+          # Wait for service to be healthy
+          sleep 5
+          systemctl is-active ciris-manager
+          
+          echo "Deployment completed successfully"
+          EOF
+          
+          # Copy and execute deployment script
+          scp /tmp/deploy.sh ${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} "chmod +x /tmp/deploy.sh && sudo /tmp/deploy.sh"
+      
+      - name: Verify deployment
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          API_ENDPOINT: https://agents.ciris.ai
+        run: |
+          # Wait for service to be ready
+          sleep 10
+          
+          # Check telemetry endpoint
+          response=$(curl -s -o /dev/null -w "%{http_code}" ${API_ENDPOINT}/telemetry/health)
+          if [ "$response" != "200" ]; then
+            echo "Health check failed with status: $response"
+            exit 1
+          fi
+          
+          echo "Telemetry system is healthy"
+      
+      - name: Notify deployment
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: 'Telemetry system deployed successfully to ${{ github.event.inputs.environment || 'production' }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  monitor:
+    name: Post-Deployment Monitoring
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+      - name: Monitor telemetry collection
+        env:
+          API_ENDPOINT: https://agents.ciris.ai
+        run: |
+          # Monitor for 5 minutes
+          for i in {1..5}; do
+            echo "Checking telemetry status (minute $i)..."
+            
+            # Get collection status
+            status=$(curl -s ${API_ENDPOINT}/telemetry/status | jq -r '.collection_status')
+            
+            if [ "$status" != "active" ]; then
+              echo "Warning: Collection status is $status"
+            fi
+            
+            # Check for recent data
+            last_collection=$(curl -s ${API_ENDPOINT}/telemetry/status | jq -r '.last_collection_time')
+            echo "Last collection: $last_collection"
+            
+            sleep 60
+          done
+      
+      - name: Check error rates
+        env:
+          API_ENDPOINT: https://agents.ciris.ai
+        run: |
+          # Get error metrics
+          errors=$(curl -s ${API_ENDPOINT}/telemetry/metrics | jq -r '.errors_24h')
+          
+          if [ "$errors" -gt "100" ]; then
+            echo "High error rate detected: $errors errors in 24h"
+            exit 1
+          fi
+          
+          echo "Error rate acceptable: $errors errors in 24h"
+
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy, monitor]
+    if: failure()
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: Rollback deployment
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} << 'EOF'
+            echo "Rolling back telemetry deployment..."
+            
+            # Disable telemetry in config
+            sudo sed -i 's/enabled: true/enabled: false/' /etc/ciris-manager/telemetry.yml
+            
+            # Restart service
+            sudo systemctl restart ciris-manager
+            
+            echo "Rollback completed"
+          EOF
+      
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: 'Telemetry deployment failed and was rolled back'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
