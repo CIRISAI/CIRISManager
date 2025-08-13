@@ -124,11 +124,19 @@ def create_auth_routes() -> APIRouter:
     @router.get("/oauth/callback")
     async def google_callback(
         request: Request,
-        code: str,
-        state: str,
+        code: Optional[str] = None,
+        state: Optional[str] = None,
+        token: Optional[str] = None,
         auth_service: AuthService = Depends(get_auth_service),
     ) -> RedirectResponse:
-        """Handle Google OAuth callback."""
+        """Handle Google OAuth callback or token redirect."""
+        # If we have a token already, just redirect to manager
+        if token and not code:
+            return RedirectResponse(url=f"/manager/?token={token}")
+
+        # Otherwise handle normal OAuth flow
+        if not code or not state:
+            raise HTTPException(status_code=400, detail="Missing OAuth parameters")
         if not auth_service:
             raise HTTPException(status_code=500, detail=oauth_error_msg)
 
