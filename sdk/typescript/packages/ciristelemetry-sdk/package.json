@@ -13,7 +13,7 @@
   "scripts": {
     "build": "npm run clean && npm run build:cjs && npm run build:esm && npm run build:types",
     "build:cjs": "tsc --module commonjs --outDir dist",
-    "build:esm": "tsc --module esnext --outDir dist --declaration false && mv dist/index.js dist/index.esm.js",
+    "build:esm": "tsc --module esnext --outDir dist --declaration false --declarationMap false && mv dist/index.js dist/index.esm.js",
     "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist",
     "build:browser": "webpack --config webpack.config.js",
     "clean": "rm -rf dist",
