@@ -239,7 +239,6 @@ function switchTab(tab) {
 
     // Fetch version/deployment data when switching to versions tab
     if (tab === 'versions') {
-        console.log('Switching to deployments tab, loading data...');
         updateDeploymentTab();
     }
     
@@ -2287,22 +2286,19 @@ async function checkPendingDeployment() {
         });
         
         if (!response.ok) {
-            console.error('Failed to check pending deployment:', response.status);
             throw new Error('Failed to check pending deployment');
         }
         
         const data = await response.json();
-        console.log('Pending deployment data:', data);
         
         if (data.pending) {
-            console.log('Showing pending deployment for:', data.deployment_id);
             showPendingDeployment(data);
         } else {
-            console.log('No pending deployment found');
             hidePendingDeployment();
         }
     } catch (error) {
         console.error('Error checking pending deployment:', error);
+        hidePendingDeployment();
     }
 }
 
