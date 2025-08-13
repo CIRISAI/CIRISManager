@@ -78,54 +78,56 @@ class TestTelemetryIntegration:
         """Test complete collection cycle without storage."""
         # Mock Docker collector
         mock_docker = Mock()
-        mock_docker.collect = AsyncMock(
-            return_value=[
-                ContainerMetrics(
-                    container_id="abc123def456",  # Must be at least 12 chars
-                    container_name="ciris-agent-test",
-                    image="test:latest",
-                    status=ContainerStatus.RUNNING,
-                    health=HealthStatus.HEALTHY,
-                    restart_count=0,
-                    resources=ContainerResources(
-                        cpu_percent=25.5,
-                        memory_mb=256,
-                        memory_limit_mb=512,
-                        memory_percent=50.0,
-                        disk_read_mb=10,
-                        disk_write_mb=20,
-                        network_rx_mb=5,
-                        network_tx_mb=10,
-                    ),
-                    created_at=datetime.now(timezone.utc),
-                    started_at=datetime.now(timezone.utc),
-                )
-            ]
-        )
+        docker_metrics = [
+            ContainerMetrics(
+                container_id="abc123def456",  # Must be at least 12 chars
+                container_name="ciris-agent-test",
+                image="test:latest",
+                status=ContainerStatus.RUNNING,
+                health=HealthStatus.HEALTHY,
+                restart_count=0,
+                resources=ContainerResources(
+                    cpu_percent=25.5,
+                    memory_mb=256,
+                    memory_limit_mb=512,
+                    memory_percent=50.0,
+                    disk_read_mb=10,
+                    disk_write_mb=20,
+                    network_rx_mb=5,
+                    network_tx_mb=10,
+                ),
+                created_at=datetime.now(timezone.utc),
+                started_at=datetime.now(timezone.utc),
+            )
+        ]
+        mock_docker.collect = AsyncMock(return_value=docker_metrics)
+        mock_docker.collect_with_timeout = AsyncMock(return_value=docker_metrics)
         mock_docker.is_available = AsyncMock(return_value=True)
+        mock_docker.get_stats = Mock(return_value={"name": "docker", "available": True})
 
         # Mock Agent collector
         mock_agents = Mock()
-        mock_agents.collect = AsyncMock(
-            return_value=[
-                AgentOperationalMetrics(
-                    agent_id="test-123",
-                    agent_name="Test",
-                    version="1.4.0",
-                    cognitive_state=CognitiveState.WORK,
-                    api_healthy=True,
-                    api_response_time_ms=100,
-                    uptime_seconds=3600,
-                    incident_count_24h=2,
-                    message_count_24h=1000,
-                    cost_cents_24h=250,
-                    api_port=8080,
-                    oauth_configured=False,
-                    oauth_providers=[],
-                )
-            ]
-        )
+        agent_metrics = [
+            AgentOperationalMetrics(
+                agent_id="test-123",
+                agent_name="Test",
+                version="1.4.0",
+                cognitive_state=CognitiveState.WORK,
+                api_healthy=True,
+                api_response_time_ms=100,
+                uptime_seconds=3600,
+                incident_count_24h=2,
+                message_count_24h=1000,
+                cost_cents_24h=250,
+                api_port=8080,
+                oauth_configured=False,
+                oauth_providers=[],
+            )
+        ]
+        mock_agents.collect = AsyncMock(return_value=agent_metrics)
+        mock_agents.collect_with_timeout = AsyncMock(return_value=agent_metrics)
         mock_agents.is_available = AsyncMock(return_value=True)
+        mock_agents.get_stats = Mock(return_value={"name": "agents", "available": True})
 
         # Replace collectors in orchestrator
         telemetry_service.orchestrator.collectors["docker"] = mock_docker
@@ -148,11 +150,15 @@ class TestTelemetryIntegration:
         # Mock collectors as in previous test
         mock_docker = Mock()
         mock_docker.collect = AsyncMock(return_value=[])
+        mock_docker.collect_with_timeout = AsyncMock(return_value=[])
         mock_docker.is_available = AsyncMock(return_value=True)
+        mock_docker.get_stats = Mock(return_value={"name": "docker", "available": True})
 
         mock_agents = Mock()
         mock_agents.collect = AsyncMock(return_value=[])
+        mock_agents.collect_with_timeout = AsyncMock(return_value=[])
         mock_agents.is_available = AsyncMock(return_value=True)
+        mock_agents.get_stats = Mock(return_value={"name": "agents", "available": True})
 
         telemetry_service.orchestrator.collectors["docker"] = mock_docker
         telemetry_service.orchestrator.collectors["agents"] = mock_agents
@@ -166,9 +172,9 @@ class TestTelemetryIntegration:
         # Stop service
         await telemetry_service.stop()
 
-        # Verify collections happened
-        assert mock_docker.collect.call_count >= 2
-        assert mock_agents.collect.call_count >= 2
+        # Verify collections happened (check collect_with_timeout calls)
+        assert mock_docker.collect_with_timeout.call_count >= 2
+        assert mock_agents.collect_with_timeout.call_count >= 2
 
     @pytest.mark.asyncio
     async def test_public_api_safety(self, telemetry_service):
@@ -222,30 +228,33 @@ class TestTelemetryIntegration:
         # Make Docker collector fail
         mock_docker = Mock()
         mock_docker.collect = AsyncMock(side_effect=Exception("Docker API error"))
+        mock_docker.collect_with_timeout = AsyncMock(side_effect=Exception("Docker API error"))
         mock_docker.is_available = AsyncMock(return_value=False)
+        mock_docker.get_stats = Mock(return_value={"name": "docker", "available": False})
 
         # Agent collector works
         mock_agents = Mock()
-        mock_agents.collect = AsyncMock(
-            return_value=[
-                AgentOperationalMetrics(
-                    agent_id="test-123",
-                    agent_name="Test",
-                    version="1.4.0",
-                    cognitive_state=CognitiveState.WORK,
-                    api_healthy=True,
-                    api_response_time_ms=100,
-                    uptime_seconds=3600,
-                    incident_count_24h=0,
-                    message_count_24h=100,
-                    cost_cents_24h=10,
-                    api_port=8080,
-                    oauth_configured=False,
-                    oauth_providers=[],
-                )
-            ]
-        )
+        agent_metrics = [
+            AgentOperationalMetrics(
+                agent_id="test-123",
+                agent_name="Test",
+                version="1.4.0",
+                cognitive_state=CognitiveState.WORK,
+                api_healthy=True,
+                api_response_time_ms=100,
+                uptime_seconds=3600,
+                incident_count_24h=0,
+                message_count_24h=100,
+                cost_cents_24h=10,
+                api_port=8080,
+                oauth_configured=False,
+                oauth_providers=[],
+            )
+        ]
+        mock_agents.collect = AsyncMock(return_value=agent_metrics)
+        mock_agents.collect_with_timeout = AsyncMock(return_value=agent_metrics)
         mock_agents.is_available = AsyncMock(return_value=True)
+        mock_agents.get_stats = Mock(return_value={"name": "agents", "available": True})
 
         telemetry_service.orchestrator.collectors["docker"] = mock_docker
         telemetry_service.orchestrator.collectors["agents"] = mock_agents
@@ -288,6 +297,10 @@ class TestTelemetryIntegration:
             assert service.storage == mock_storage
             mock_storage.connect.assert_called_once()
 
+            # Start the service to set _running flag
+            asyncio.create_task(service.start())
+            await asyncio.sleep(0.1)  # Let it start
+
             # Mock collectors
             await self._mock_simple_collectors(service)
 
@@ -309,27 +322,28 @@ class TestTelemetryIntegration:
         """Test proper data aggregation across multiple agents."""
         # Mock multiple agents
         mock_agents = Mock()
-        mock_agents.collect = AsyncMock(
-            return_value=[
-                AgentOperationalMetrics(
-                    agent_id=f"agent-{i}",
-                    agent_name=f"Agent{i}",
-                    version="1.4.0",
-                    cognitive_state=CognitiveState.WORK if i % 2 == 0 else CognitiveState.DREAM,
-                    api_healthy=True,
-                    api_response_time_ms=100 * (i + 1),
-                    uptime_seconds=3600,
-                    incident_count_24h=i,
-                    message_count_24h=100 * i,
-                    cost_cents_24h=50 * i,
-                    api_port=8080 + i,
-                    oauth_configured=False,
-                    oauth_providers=[],
-                )
-                for i in range(5)
-            ]
-        )
+        agent_metrics = [
+            AgentOperationalMetrics(
+                agent_id=f"agent-{i}",
+                agent_name=f"Agent{i}",
+                version="1.4.0",
+                cognitive_state=CognitiveState.WORK if i % 2 == 0 else CognitiveState.DREAM,
+                api_healthy=True,
+                api_response_time_ms=100 * (i + 1),
+                uptime_seconds=3600,
+                incident_count_24h=i,
+                message_count_24h=100 * i,
+                cost_cents_24h=50 * i,
+                api_port=8080 + i,
+                oauth_configured=False,
+                oauth_providers=[],
+            )
+            for i in range(5)
+        ]
+        mock_agents.collect = AsyncMock(return_value=agent_metrics)
+        mock_agents.collect_with_timeout = AsyncMock(return_value=agent_metrics)
         mock_agents.is_available = AsyncMock(return_value=True)
+        mock_agents.get_stats = Mock(return_value={"name": "agents", "available": True})
 
         telemetry_service.orchestrator.collectors["agents"] = mock_agents
 
@@ -346,26 +360,27 @@ class TestTelemetryIntegration:
     async def _mock_collection_with_sensitive_data(self, telemetry_service):
         """Helper to mock collection with sensitive data."""
         mock_agents = Mock()
-        mock_agents.collect = AsyncMock(
-            return_value=[
-                AgentOperationalMetrics(
-                    agent_id="test-123",  # Sensitive
-                    agent_name="Test",  # Sensitive
-                    version="1.4.0",
-                    cognitive_state=CognitiveState.WORK,
-                    api_healthy=True,
-                    api_response_time_ms=100,
-                    uptime_seconds=3600,
-                    incident_count_24h=2,
-                    message_count_24h=1000,
-                    cost_cents_24h=250,  # Sensitive
-                    api_port=8080,  # Sensitive
-                    oauth_configured=False,
-                    oauth_providers=[],
-                )
-            ]
-        )
+        agent_metrics = [
+            AgentOperationalMetrics(
+                agent_id="test-123",  # Sensitive
+                agent_name="Test",  # Sensitive
+                version="1.4.0",
+                cognitive_state=CognitiveState.WORK,
+                api_healthy=True,
+                api_response_time_ms=100,
+                uptime_seconds=3600,
+                incident_count_24h=2,
+                message_count_24h=1000,
+                cost_cents_24h=250,  # Sensitive
+                api_port=8080,  # Sensitive
+                oauth_configured=False,
+                oauth_providers=[],
+            )
+        ]
+        mock_agents.collect = AsyncMock(return_value=agent_metrics)
+        mock_agents.collect_with_timeout = AsyncMock(return_value=agent_metrics)
         mock_agents.is_available = AsyncMock(return_value=True)
+        mock_agents.get_stats = Mock(return_value={"name": "agents", "available": True})
 
         telemetry_service.orchestrator.collectors["agents"] = mock_agents
         await telemetry_service.collect_once()
@@ -374,11 +389,15 @@ class TestTelemetryIntegration:
         """Helper to set up simple mock collectors."""
         mock_docker = Mock()
         mock_docker.collect = AsyncMock(return_value=[])
+        mock_docker.collect_with_timeout = AsyncMock(return_value=[])
         mock_docker.is_available = AsyncMock(return_value=True)
+        mock_docker.get_stats = Mock(return_value={"name": "docker", "available": True})
 
         mock_agents = Mock()
         mock_agents.collect = AsyncMock(return_value=[])
+        mock_agents.collect_with_timeout = AsyncMock(return_value=[])
         mock_agents.is_available = AsyncMock(return_value=True)
+        mock_agents.get_stats = Mock(return_value={"name": "agents", "available": True})
 
         service.orchestrator.collectors["docker"] = mock_docker
         service.orchestrator.collectors["agents"] = mock_agents

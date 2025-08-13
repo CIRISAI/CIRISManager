@@ -129,7 +129,16 @@ class TestCompositeCollector:
 
     def test_register_collector(self):
         """Test registering sub-collectors."""
-        composite = CompositeCollector()
+
+        # Create a concrete implementation for testing
+        class TestComposite(CompositeCollector):
+            async def collect(self):
+                return []
+
+            async def is_available(self):
+                return True
+
+        composite = TestComposite()
         collector1 = TestCollector("collector1")
         collector2 = TestCollector("collector2")
 
@@ -142,7 +151,15 @@ class TestCompositeCollector:
 
     def test_register_duplicate_fails(self):
         """Test that registering duplicate key fails."""
-        composite = CompositeCollector()
+
+        class TestComposite(CompositeCollector):
+            async def collect(self):
+                return []
+
+            async def is_available(self):
+                return True
+
+        composite = TestComposite()
         collector = TestCollector()
 
         composite.register_collector("test", collector)
@@ -152,7 +169,15 @@ class TestCompositeCollector:
 
     def test_unregister_collector(self):
         """Test unregistering collectors."""
-        composite = CompositeCollector()
+
+        class TestComposite(CompositeCollector):
+            async def collect(self):
+                return []
+
+            async def is_available(self):
+                return True
+
+        composite = TestComposite()
         collector = TestCollector()
 
         composite.register_collector("test", collector)
@@ -164,7 +189,15 @@ class TestCompositeCollector:
     @pytest.mark.asyncio
     async def test_collect_all_parallel(self):
         """Test parallel collection from all sub-collectors."""
-        composite = CompositeCollector()
+
+        class TestComposite(CompositeCollector):
+            async def collect(self):
+                return []
+
+            async def is_available(self):
+                return True
+
+        composite = TestComposite()
         collector1 = TestCollector("collector1")
         collector2 = TestCollector("collector2")
         collector3 = TestCollector("collector3")
@@ -184,7 +217,15 @@ class TestCompositeCollector:
     @pytest.mark.asyncio
     async def test_collect_all_empty(self):
         """Test collection with no registered collectors."""
-        composite = CompositeCollector()
+
+        class TestComposite(CompositeCollector):
+            async def collect(self):
+                return []
+
+            async def is_available(self):
+                return True
+
+        composite = TestComposite()
 
         results = await composite.collect_all_parallel()
 
@@ -192,7 +233,15 @@ class TestCompositeCollector:
 
     def test_get_all_stats(self):
         """Test getting stats for all collectors."""
-        composite = CompositeCollector()
+
+        class TestComposite(CompositeCollector):
+            async def collect(self):
+                return []
+
+            async def is_available(self):
+                return True
+
+        composite = TestComposite()
         collector1 = TestCollector("collector1")
         collector2 = TestCollector("collector2")
 

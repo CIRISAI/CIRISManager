@@ -98,12 +98,14 @@ class DeploymentCollector(BaseCollector[DeploymentMetrics]):
             if hasattr(deployment, "canary_phase") and deployment.canary_phase:
                 phase = self._parse_deployment_phase(deployment.canary_phase)
 
-            # Parse timestamps
+            # Parse timestamps - ensure created_at is never None
             created_at = (
                 self._parse_timestamp(deployment.created_at)
-                if hasattr(deployment, "created_at")
-                else datetime.now(timezone.utc)
+                if hasattr(deployment, "created_at") and deployment.created_at
+                else None
             )
+            if created_at is None:
+                created_at = datetime.now(timezone.utc)
             staged_at = (
                 self._parse_timestamp(deployment.staged_at)
                 if hasattr(deployment, "staged_at")
@@ -250,9 +252,34 @@ class VersionCollector:
         adoptions = await self.collect_agent_adoptions()
         return states, adoptions
 
+    async def collect_with_timeout(self) -> Tuple[List[VersionState], List[AgentVersionAdoption]]:
+        """
+        Collect with timeout protection.
+
+        This method is required for compatibility with the orchestrator.
+        """
+        import asyncio
+
+        try:
+            return await asyncio.wait_for(self.collect(), timeout=self.timeout_seconds)
+        except asyncio.TimeoutError:
+            logger.warning(f"{self.name} collection timed out after {self.timeout_seconds}s")
+            return [], []
+        except Exception as e:
+            logger.error(f"{self.name} collection failed: {e}")
+            return [], []
+
     async def is_available(self) -> bool:
         """Check if version tracker is available."""
         return self.manager is not None and hasattr(self.manager, "version_tracker")
+
+    def get_stats(self) -> dict:
+        """Get collector statistics (for compatibility)."""
+        return {
+            "name": self.name,
+            "timeout_seconds": self.timeout_seconds,
+            "available": True,
+        }
 
     async def collect_version_states(self) -> List[VersionState]:
         """
@@ -381,11 +408,13 @@ class VersionCollector:
                 last_work_state_at = None
 
                 # Get deployment group (default to general)
-                deployment_group = "general"
+                from typing import Literal
+
+                deployment_group: Literal["explorers", "early_adopters", "general"] = "general"
                 if hasattr(agent, "deployment_group"):
                     group = getattr(agent, "deployment_group")
                     if group in ["explorers", "early_adopters", "general"]:
-                        deployment_group = group
+                        deployment_group = group  # type: ignore[assignment]
 
                 # Create adoption entry for this agent
                 adoption = AgentVersionAdoption(

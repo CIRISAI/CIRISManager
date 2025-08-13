@@ -1,0 +1,642 @@
+openapi: 3.1.0
+info:
+  title: CIRIS Manager API
+  version: 1.0.0
+  description: API for managing CIRIS agents, deployments, and system operations
+  contact:
+    name: CIRIS Team
+  license:
+    name: MIT
+
+servers:
+  - url: https://agents.ciris.ai/manager/v1
+    description: Production server
+  - url: http://localhost:8888/manager/v1
+    description: Local development
+
+security:
+  - OAuth2: []
+  - ServiceToken: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+
+  /status:
+    get:
+      summary: Get system status
+      tags: [System]
+      responses:
+        '200':
+          description: System status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+
+  /agents:
+    get:
+      summary: List all agents
+      tags: [Agents]
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentListResponse'
+    
+    post:
+      summary: Create new agent
+      tags: [Agents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentRequest'
+      responses:
+        '200':
+          description: Agent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentResponse'
+        '409':
+          description: Agent already exists
+
+  /agents/{agent_id}:
+    get:
+      summary: Get agent details
+      tags: [Agents]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentResponse'
+        '404':
+          description: Agent not found
+
+    delete:
+      summary: Delete agent
+      tags: [Agents]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent deleted
+        '404':
+          description: Agent not found
+
+  /agents/{agent_id}/start:
+    post:
+      summary: Start agent
+      tags: [Agent Control]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent started
+        '400':
+          description: Agent already running
+        '404':
+          description: Agent not found
+
+  /agents/{agent_id}/stop:
+    post:
+      summary: Stop agent
+      tags: [Agent Control]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent stopped
+        '400':
+          description: Agent not running
+        '404':
+          description: Agent not found
+
+  /agents/{agent_id}/restart:
+    post:
+      summary: Restart agent
+      tags: [Agent Control]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent restarted
+        '404':
+          description: Agent not found
+
+  /agents/{agent_id}/config:
+    get:
+      summary: Get agent configuration
+      tags: [Agent Config]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfig'
+
+    patch:
+      summary: Update agent configuration
+      tags: [Agent Config]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentConfigUpdate'
+      responses:
+        '200':
+          description: Configuration updated
+        '400':
+          description: Invalid configuration
+
+  /updates/notify:
+    post:
+      summary: Notify of new update (CD webhook)
+      tags: [Deployments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNotification'
+      responses:
+        '200':
+          description: Update notification received
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentStatus'
+
+  /updates/status:
+    get:
+      summary: Get current deployment status
+      tags: [Deployments]
+      responses:
+        '200':
+          description: Deployment status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentStatus'
+        '404':
+          description: No active deployment
+
+  /updates/pending:
+    get:
+      summary: Get pending deployments
+      tags: [Deployments]
+      responses:
+        '200':
+          description: Pending deployments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingDeployment'
+
+  /updates/launch:
+    post:
+      summary: Launch staged deployment
+      tags: [Deployments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deployment_id:
+                  type: string
+                force:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Deployment launched
+        '404':
+          description: Deployment not found
+        '409':
+          description: Another deployment in progress
+
+  /updates/rollback:
+    post:
+      summary: Initiate rollback
+      tags: [Deployments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackRequest'
+      responses:
+        '200':
+          description: Rollback initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentStatus'
+
+  /updates/history:
+    get:
+      summary: Get deployment history
+      tags: [Deployments]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Deployment history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeploymentStatus'
+
+  /telemetry/health:
+    get:
+      summary: Telemetry system health
+      tags: [Telemetry]
+      responses:
+        '200':
+          description: Telemetry health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryHealth'
+
+  /telemetry/status:
+    get:
+      summary: Current system telemetry
+      tags: [Telemetry]
+      responses:
+        '200':
+          description: System telemetry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSummary'
+
+  /telemetry/history:
+    get:
+      summary: Historical telemetry data
+      tags: [Telemetry]
+      parameters:
+        - name: hours
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 168
+            default: 24
+        - name: interval
+          in: query
+          schema:
+            type: string
+            enum: [1m, 5m, 1h, 1d]
+            default: 5m
+      responses:
+        '200':
+          description: Historical data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryHistory'
+
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://accounts.google.com/o/oauth2/v2/auth
+          tokenUrl: https://oauth2.googleapis.com/token
+          scopes:
+            read: Read access
+            write: Write access
+    
+    ServiceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    AgentId:
+      name: agent_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Agent identifier
+
+  schemas:
+    StatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        agents_running:
+          type: integer
+        agents_total:
+          type: integer
+        container_count:
+          type: integer
+        manager_version:
+          type: string
+        uptime_seconds:
+          type: number
+
+    AgentListResponse:
+      type: object
+      properties:
+        agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentSummary'
+
+    AgentSummary:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        agent_name:
+          type: string
+        status:
+          type: string
+          enum: [running, stopped, error]
+        container_status:
+          type: string
+        version:
+          type: string
+        api_port:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        cognitive_state:
+          type: string
+          enum: [work, dream, play, solitude]
+
+    AgentResponse:
+      allOf:
+        - $ref: '#/components/schemas/AgentSummary'
+        - type: object
+          properties:
+            container_id:
+              type: string
+            image:
+              type: string
+            memory_limit:
+              type: string
+            cpu_limit:
+              type: string
+            environment:
+              type: object
+              additionalProperties:
+                type: string
+
+    CreateAgentRequest:
+      type: object
+      required:
+        - agent_name
+        - template
+      properties:
+        agent_name:
+          type: string
+        template:
+          type: string
+        model:
+          type: string
+        memory_limit:
+          type: string
+          default: "1G"
+        cpu_limit:
+          type: string
+          default: "2.0"
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+
+    AgentConfig:
+      type: object
+      properties:
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+        memory_limit:
+          type: string
+        cpu_limit:
+          type: string
+        volumes:
+          type: array
+          items:
+            type: string
+
+    AgentConfigUpdate:
+      type: object
+      properties:
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+        memory_limit:
+          type: string
+        cpu_limit:
+          type: string
+
+    UpdateNotification:
+      type: object
+      required:
+        - agent_image
+      properties:
+        agent_image:
+          type: string
+        gui_image:
+          type: string
+        nginx_image:
+          type: string
+        strategy:
+          type: string
+          enum: [canary, immediate, manual]
+          default: canary
+        message:
+          type: string
+        github_run_id:
+          type: string
+        commit_sha:
+          type: string
+
+    DeploymentStatus:
+      type: object
+      properties:
+        deployment_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, staged, in_progress, rolling_back, completed, failed, cancelled]
+        phase:
+          type: string
+          enum: [explorers, early_adopters, general, complete]
+        agent_image:
+          type: string
+        gui_image:
+          type: string
+        agents_total:
+          type: integer
+        agents_updated:
+          type: integer
+        agents_failed:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+        is_rollback:
+          type: boolean
+
+    PendingDeployment:
+      type: object
+      properties:
+        deployment_id:
+          type: string
+        agent_image:
+          type: string
+        gui_image:
+          type: string
+        staged_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    RollbackRequest:
+      type: object
+      required:
+        - target_version
+      properties:
+        target_version:
+          type: string
+          enum: [n-1, n-2, specific]
+        deployment_id:
+          type: string
+          description: Required if target_version is 'specific'
+        reason:
+          type: string
+
+    TelemetryHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        collection_status:
+          type: string
+        last_collection_time:
+          type: string
+          format: date-time
+        database_connected:
+          type: boolean
+        collectors_enabled:
+          type: object
+          additionalProperties:
+            type: boolean
+
+    SystemSummary:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        agents_total:
+          type: integer
+        agents_healthy:
+          type: integer
+        agents_degraded:
+          type: integer
+        agents_down:
+          type: integer
+        agents_in_work:
+          type: integer
+        agents_in_dream:
+          type: integer
+        agents_in_play:
+          type: integer
+        agents_in_solitude:
+          type: integer
+        total_cpu_percent:
+          type: number
+        total_memory_mb:
+          type: integer
+        total_messages_24h:
+          type: integer
+        total_incidents_24h:
+          type: integer
+        active_deployments:
+          type: integer
+        pending_deployments:
+          type: integer
+
+    TelemetryHistory:
+      type: object
+      properties:
+        hours:
+          type: integer
+        interval:
+          type: string
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              total_agents:
+                type: integer
+              healthy_agents:
+                type: integer
+              messages:
+                type: integer
+              incidents:
+                type: integer

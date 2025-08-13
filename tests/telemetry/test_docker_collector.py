@@ -153,7 +153,7 @@ class TestDockerCollector:
             assert metric.restart_count == 0
 
             # Verify resources
-            assert metric.resources.cpu_percent == 4.0  # (100M / 500M) * 2 cores * 100
+            assert metric.resources.cpu_percent == 40.0  # (100M / 500M) * 2 cores * 100
             assert metric.resources.memory_mb == 256
             assert metric.resources.memory_limit_mb == 512
             assert metric.resources.memory_percent == 50.0
@@ -169,7 +169,7 @@ class TestDockerCollector:
         containers = []
         for i in range(3):
             container = Mock()
-            container.short_id = f"container{i}"
+            container.short_id = f"container{i:03d}abc"  # Make it 12+ chars
             container.name = f"ciris-agent-{i}"
             container.status = "running"
             container.attrs = {
@@ -217,7 +217,7 @@ class TestDockerCollector:
     async def test_collect_stopped_container(self, mock_docker_client):
         """Test collecting metrics for stopped container."""
         container = Mock()
-        container.short_id = "stopped123"
+        container.short_id = "stopped123456"
         container.name = "ciris-agent-stopped"
         container.status = "exited"
         container.attrs = {
@@ -327,7 +327,7 @@ class TestDockerCollector:
         """Test handling errors for specific containers."""
         # Make one container fail
         bad_container = Mock()
-        bad_container.short_id = "bad"
+        bad_container.short_id = "bad123456789"
         bad_container.name = "ciris-agent-bad"
         bad_container.reload.side_effect = Exception("Container disappeared")
 

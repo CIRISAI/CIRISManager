@@ -110,7 +110,7 @@ class ContainerResources(BaseModel):
 class ContainerMetrics(BaseModel):
     """Complete container metrics at a point in time."""
 
-    model_config = ConfigDict(strict=True)
+    model_config = ConfigDict(strict=True, extra="forbid")
 
     container_id: str = Field(min_length=12, max_length=64)
     container_name: str = Field(min_length=1, max_length=255)
@@ -209,6 +209,10 @@ class DeploymentMetrics(BaseModel):
     # Rollback info
     is_rollback: bool = False
     rollback_from_deployment: Optional[str] = None
+
+    # Additional info
+    message: Optional[str] = None
+    duration_seconds: Optional[int] = None
 
 
 # ============================================================================

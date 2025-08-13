@@ -415,7 +415,7 @@ class TestTelemetrySnapshot:
 
         # Create sample data
         container = ContainerMetrics(
-            container_id="abc123",
+            container_id="abc123def456",
             container_name="ciris-agent-test",
             image="test:latest",
             image_digest=None,

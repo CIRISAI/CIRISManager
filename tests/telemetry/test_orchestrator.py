@@ -162,7 +162,12 @@ class TestTelemetryOrchestrator:
     async def test_collect_snapshot_success(self, orchestrator, sample_snapshot):
         """Test successful snapshot collection."""
         # Mock collector results
-        with patch.object(orchestrator, "collect_all_parallel") as mock_collect:
+        from unittest.mock import AsyncMock
+
+        with patch.object(
+            orchestrator, "collect_all_parallel", new_callable=AsyncMock
+        ) as mock_collect:
+            # Make collect_all_parallel return data directly
             mock_collect.return_value = {
                 "docker": sample_snapshot.containers,
                 "agents": sample_snapshot.agents,
@@ -178,7 +183,7 @@ class TestTelemetryOrchestrator:
             assert len(snapshot.deployments) == 1
             assert len(snapshot.versions) == 1
             assert len(snapshot.adoption) == 1
-            assert snapshot.collection_duration_ms > 0
+            assert snapshot.collection_duration_ms >= 0  # Changed to >= 0 since timing can be fast
 
     @pytest.mark.asyncio
     async def test_collect_snapshot_with_errors(self, orchestrator):
@@ -223,8 +228,9 @@ class TestTelemetryOrchestrator:
         is_available = await orchestrator.is_available()
         assert is_available is True
 
-        # All collectors unavailable
-        mock_collector.is_available.return_value = False
+        # All collectors unavailable - need to mock all collectors
+        for collector in orchestrator.collectors.values():
+            collector.is_available = AsyncMock(return_value=False)
         is_available = await orchestrator.is_available()
         assert is_available is False
 
@@ -376,6 +382,7 @@ class TestContinuousTelemetryCollector:
     def mock_orchestrator(self):
         """Create mock orchestrator."""
         orchestrator = Mock(spec=TelemetryOrchestrator)
+        orchestrator.name = "TelemetryOrchestrator"
         orchestrator.collect_snapshot = AsyncMock()
         orchestrator.calculate_summary = Mock()
         return orchestrator

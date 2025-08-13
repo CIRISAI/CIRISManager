@@ -180,6 +180,10 @@ class TelemetryService:
 
         summary = self.orchestrator.calculate_summary(snapshot)
 
+        # Cache in continuous collector for public access
+        if self.continuous_collector:
+            self.continuous_collector._last_summary = summary
+
         # Store if enabled
         if self.storage:
             try:
