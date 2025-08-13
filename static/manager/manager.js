@@ -2278,6 +2278,7 @@ function stopDashboardRefresh() {
 
 // Staged Deployment Management Functions
 async function checkPendingDeployment() {
+    console.log('Checking for pending deployments...');
     try {
         const response = await fetch('/manager/v1/updates/pending', {
             headers: { 
@@ -2285,15 +2286,20 @@ async function checkPendingDeployment() {
             }
         });
         
+        console.log('Pending deployment response status:', response.status);
+        
         if (!response.ok) {
-            throw new Error('Failed to check pending deployment');
+            throw new Error(`Failed to check pending deployment: ${response.status}`);
         }
         
         const data = await response.json();
+        console.log('Pending deployment data:', data);
         
         if (data.pending) {
+            console.log('Showing pending deployment');
             showPendingDeployment(data);
         } else {
+            console.log('No pending deployment');
             hidePendingDeployment();
         }
     } catch (error) {
@@ -2563,14 +2569,18 @@ async function updateAgentVersions() {
 
 // Main deployment tab update function
 async function updateDeploymentTab() {
-    await Promise.all([
-        updateCurrentImages(),
-        updateDeploymentStatus(),
-        updateDeploymentHistory(),
-        updateAgentVersions(),
-        checkPendingDeployment(), // Check for pending deployments
-        updateRollbackOptions() // Update rollback options
-    ]);
+    // Call each function independently to ensure they all run
+    // even if one fails
+    const updates = [
+        updateCurrentImages().catch(e => console.error('Error updating current images:', e)),
+        updateDeploymentStatus().catch(e => console.error('Error updating deployment status:', e)),
+        updateDeploymentHistory().catch(e => console.error('Error updating deployment history:', e)),
+        updateAgentVersions().catch(e => console.error('Error updating agent versions:', e)),
+        checkPendingDeployment().catch(e => console.error('Error checking pending deployment:', e)),
+        updateRollbackOptions().catch(e => console.error('Error updating rollback options:', e))
+    ];
+    
+    await Promise.all(updates);
 }
 
 // Update rollback options
