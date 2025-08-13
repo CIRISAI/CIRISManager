@@ -385,7 +385,7 @@ class RetryableMixin:
                 if hasattr(self, "collect") and callable(getattr(self, "collect")):
                     result = await self.collect()  # type: ignore[attr-defined]
                     if result:
-                        return result
+                        return result  # type: ignore[no-any-return]
                 else:
                     raise AttributeError("RetryableMixin requires a 'collect' method")
 
