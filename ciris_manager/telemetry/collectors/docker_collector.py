@@ -7,7 +7,7 @@ Collects metrics from Docker API for all CIRIS containers.
 import asyncio
 import logging
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import docker
 from docker.models.containers import Container
 
@@ -71,6 +71,8 @@ class DockerCollector(BaseCollector[ContainerMetrics], HealthCheckMixin):
             loop = asyncio.get_event_loop()
 
             # Get all containers with 'ciris' in name
+            if not self.client:
+                return []
             containers = await loop.run_in_executor(
                 None, lambda: self.client.containers.list(all=True, filters={"name": "ciris"})
             )
@@ -144,14 +146,14 @@ class DockerCollector(BaseCollector[ContainerMetrics], HealthCheckMixin):
 
             return ContainerMetrics(
                 container_id=container.short_id,
-                container_name=container.name,
+                container_name=container.name or "unknown",
                 image=image,
                 image_digest=image_digest,
                 status=status,
                 health=health,
                 restart_count=restart_count,
                 resources=resources,
-                created_at=created_at,
+                created_at=created_at or datetime.now(timezone.utc),
                 started_at=started_at,
                 finished_at=finished_at,
                 exit_code=exit_code,

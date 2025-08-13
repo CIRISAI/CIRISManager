@@ -215,7 +215,7 @@ class DeploymentCollector(BaseCollector[DeploymentMetrics]):
         return metrics
 
 
-class VersionCollector(BaseCollector[Tuple[List[VersionState], List[AgentVersionAdoption]]]):
+class VersionCollector:
     """Collects version state and adoption metrics."""
 
     def __init__(self, manager=None):
@@ -225,13 +225,14 @@ class VersionCollector(BaseCollector[Tuple[List[VersionState], List[AgentVersion
         Args:
             manager: CIRISManager instance for accessing version tracker and registry
         """
-        super().__init__(name="VersionCollector", timeout_seconds=5)
         self.manager = manager
+        self.name = "VersionCollector"
+        self.timeout_seconds = 5
 
     async def collect(self) -> Tuple[List[VersionState], List[AgentVersionAdoption]]:
-        """Implement BaseCollector abstract method."""
+        """Collect version states and adoption metrics."""
         states = await self.collect_version_state()
-        adoptions = await self.collect_agent_adoptions()
+        adoptions = await self.collect_adoption_metrics()
         return states, adoptions
 
     async def is_available(self) -> bool:
@@ -350,7 +351,12 @@ class VersionCollector(BaseCollector[Tuple[List[VersionState], List[AgentVersion
             # Get deployment group
             group = "general"  # Default
             if hasattr(agent_info, "metadata") and agent_info.metadata:
-                group = agent_info.metadata.get("deployment_group", "general")
+                raw_group = agent_info.metadata.get("deployment_group", "general")
+                # Ensure it's one of the allowed values
+                if raw_group in ["explorers", "early_adopters", "general"]:
+                    group = raw_group
+                else:
+                    group = "general"
 
             # Get version info
             current_version = agent_info.current_version or "unknown"
