@@ -95,48 +95,70 @@ class DeploymentCollector(BaseCollector[DeploymentMetrics]):
 
             # Parse phase
             phase = None
-            if deployment.canary_phase:
+            if hasattr(deployment, "canary_phase") and deployment.canary_phase:
                 phase = self._parse_deployment_phase(deployment.canary_phase)
 
             # Parse timestamps
-            created_at = self._parse_timestamp(deployment.started_at) or datetime.now(timezone.utc)
-            staged_at = self._parse_timestamp(deployment.staged_at)
-            started_at = self._parse_timestamp(deployment.started_at)
-            completed_at = self._parse_timestamp(deployment.completed_at)
+            created_at = (
+                self._parse_timestamp(deployment.created_at)
+                if hasattr(deployment, "created_at")
+                else datetime.now(timezone.utc)
+            )
+            staged_at = (
+                self._parse_timestamp(deployment.staged_at)
+                if hasattr(deployment, "staged_at")
+                else None
+            )
+            started_at = (
+                self._parse_timestamp(deployment.started_at)
+                if hasattr(deployment, "started_at")
+                else None
+            )
+            completed_at = (
+                self._parse_timestamp(deployment.completed_at)
+                if hasattr(deployment, "completed_at")
+                else None
+            )
 
-            # Get images from notification
-            agent_image = None
-            gui_image = None
-            nginx_image = None
-
-            if deployment.notification:
-                agent_image = deployment.notification.agent_image
-                gui_image = deployment.notification.gui_image
-                nginx_image = deployment.notification.nginx_image
-
-            # Determine if rollback
-            is_rollback = "rollback" in deployment.status.lower()
+            # Calculate duration if completed
+            duration_seconds = None
+            if started_at and completed_at:
+                duration_seconds = int((completed_at - started_at).total_seconds())
 
             return DeploymentMetrics(
                 deployment_id=deployment.deployment_id,
                 status=status,
                 phase=phase,
-                agent_image=agent_image,
-                gui_image=gui_image,
-                nginx_image=nginx_image,
-                agents_total=deployment.agents_total,
-                agents_staged=0,  # Would need to track separately
-                agents_updated=deployment.agents_updated,
-                agents_failed=deployment.agents_failed,
-                agents_deferred=deployment.agents_deferred,
+                agent_image=deployment.agent_image
+                if hasattr(deployment, "agent_image")
+                else "unknown",
+                gui_image=deployment.gui_image if hasattr(deployment, "gui_image") else None,
+                agents_total=deployment.agents_total if hasattr(deployment, "agents_total") else 0,
+                agents_staged=deployment.agents_staged
+                if hasattr(deployment, "agents_staged")
+                else 0,
+                agents_updated=deployment.agents_updated
+                if hasattr(deployment, "agents_updated")
+                else 0,
+                agents_failed=deployment.agents_failed
+                if hasattr(deployment, "agents_failed")
+                else 0,
+                agents_deferred=deployment.agents_deferred
+                if hasattr(deployment, "agents_deferred")
+                else 0,
                 created_at=created_at,
                 staged_at=staged_at,
                 started_at=started_at,
                 completed_at=completed_at,
-                initiated_by=None,  # Would need to track
-                approved_by=None,  # Would need to track
-                is_rollback=is_rollback,
-                rollback_from_deployment=None,  # Would need to track
+                duration_seconds=duration_seconds,
+                initiated_by=deployment.initiated_by
+                if hasattr(deployment, "initiated_by")
+                else None,
+                message=deployment.message if hasattr(deployment, "message") else None,
+                is_rollback=deployment.is_rollback if hasattr(deployment, "is_rollback") else False,
+                rollback_from_deployment=deployment.rollback_from_deployment
+                if hasattr(deployment, "rollback_from_deployment")
+                else None,
             )
 
         except Exception as e:
@@ -146,35 +168,29 @@ class DeploymentCollector(BaseCollector[DeploymentMetrics]):
     def _parse_deployment_status(self, status: str) -> DeploymentStatus:
         """Parse deployment status string to enum."""
         status_lower = status.lower()
-
         if status_lower == "pending":
             return DeploymentStatus.PENDING
+        elif status_lower == "staged":
+            return DeploymentStatus.STAGED
         elif status_lower == "in_progress":
             return DeploymentStatus.IN_PROGRESS
-        elif status_lower == "paused":
-            return DeploymentStatus.PAUSED
+        elif status_lower == "rolling_back":
+            return DeploymentStatus.ROLLING_BACK
         elif status_lower == "completed":
             return DeploymentStatus.COMPLETED
         elif status_lower == "failed":
             return DeploymentStatus.FAILED
         elif status_lower == "cancelled":
             return DeploymentStatus.CANCELLED
-        elif status_lower == "rejected":
-            return DeploymentStatus.REJECTED
-        elif status_lower == "rolling_back":
-            return DeploymentStatus.ROLLING_BACK
-        elif status_lower == "rolled_back":
-            return DeploymentStatus.ROLLED_BACK
-        elif status_lower == "staged":
-            return DeploymentStatus.STAGED
         else:
             return DeploymentStatus.PENDING
 
     def _parse_deployment_phase(self, phase: str) -> DeploymentPhase:
         """Parse deployment phase string to enum."""
         phase_lower = phase.lower()
-
-        if phase_lower == "explorers":
+        if phase_lower == "staging":
+            return DeploymentPhase.STAGING
+        elif phase_lower == "explorers":
             return DeploymentPhase.EXPLORERS
         elif phase_lower == "early_adopters":
             return DeploymentPhase.EARLY_ADOPTERS
@@ -231,67 +247,53 @@ class VersionCollector:
 
     async def collect(self) -> Tuple[List[VersionState], List[AgentVersionAdoption]]:
         """Collect version states and adoption metrics."""
-        states = await self.collect_version_state()
-        adoptions = await self.collect_adoption_metrics()
+        states = await self.collect_version_states()
+        adoptions = await self.collect_agent_adoptions()
         return states, adoptions
 
     async def is_available(self) -> bool:
         """Check if version tracker is available."""
-        return self.manager is not None
+        return self.manager is not None and hasattr(self.manager, "version_tracker")
 
-    async def collect_version_state(self) -> List[VersionState]:
+    async def collect_version_states(self) -> List[VersionState]:
         """
         Collect version state for all component types.
 
-        Returns state for: agents, gui, nginx, manager.
+        Returns state for: agents, gui, nginx.
         """
+        if not self.manager or not hasattr(self.manager, "version_tracker"):
+            return []
+
         states = []
 
-        # Get version tracker if available
+        # Get version data from version tracker
         try:
-            from ciris_manager.version_tracker import get_version_tracker
+            tracker = self.manager.version_tracker
 
-            tracker = get_version_tracker()
+            # Call get_rollback_options to get version data
+            version_data = await tracker.get_rollback_options()
 
-            # Ensure loaded
-            await tracker._ensure_loaded()
+            # Process each component type
+            for component_name, component_data in version_data.items():
+                if not component_data:
+                    continue
 
-            # Collect state for each component type
-            for component_type in ["agents", "gui", "nginx"]:
-                if component_type in tracker.state:
-                    state_data = tracker.state[component_type]
+                # Map component names to ComponentType enum
+                component_type = self._parse_component_type(component_name)
 
-                    # Convert to our schema
-                    version_state = VersionState(
-                        component_type=self._parse_component_type(component_type),
-                        current=self._create_version_info(state_data.n),
-                        previous=self._create_version_info(state_data.n_minus_1),
-                        fallback=self._create_version_info(state_data.n_minus_2),
-                        staged=self._create_version_info(state_data.n_plus_1),
-                        last_updated=datetime.now(timezone.utc),
-                    )
-                    states.append(version_state)
+                # Create VersionState from the data
+                version_state = VersionState(
+                    component_type=component_type,
+                    current=self._create_version_info_from_dict(component_data.get("current")),
+                    previous=self._create_version_info_from_dict(component_data.get("n_minus_1")),
+                    fallback=self._create_version_info_from_dict(component_data.get("n_minus_2")),
+                    staged=self._create_version_info_from_dict(component_data.get("staged")),
+                    last_updated=datetime.now(timezone.utc),
+                )
+                states.append(version_state)
 
         except Exception as e:
             logger.error(f"Failed to collect version state: {e}")
-
-        # Add manager version (static for now)
-        states.append(
-            VersionState(
-                component_type=ComponentType.MANAGER,
-                current=VersionInfo(
-                    image="ciris-manager:latest",
-                    digest=None,
-                    tag="latest",
-                    deployed_at=datetime.now(timezone.utc),
-                    deployment_id=None,
-                ),
-                previous=None,
-                fallback=None,
-                staged=None,
-                last_updated=datetime.now(timezone.utc),
-            )
-        )
 
         return states
 
@@ -306,93 +308,98 @@ class VersionCollector:
         else:
             return ComponentType.MANAGER
 
-    def _create_version_info(self, version_data) -> Optional[VersionInfo]:
-        """Create VersionInfo from version tracker data."""
+    def _create_version_info_from_dict(self, version_data: Optional[dict]) -> Optional[VersionInfo]:
+        """Create VersionInfo from version tracker dict data."""
         if not version_data:
             return None
 
         try:
-            deployed_at = datetime.now(timezone.utc)
-            if hasattr(version_data, "deployed_at"):
-                deployed_at = datetime.fromisoformat(
-                    version_data.deployed_at.replace("Z", "+00:00")
-                )
+            # Extract image and version
+            image = version_data.get("image", "unknown")
 
-            # Extract tag from image
-            image = version_data.image if hasattr(version_data, "image") else "unknown"
-            tag = image.split(":")[-1] if ":" in image else "latest"
+            # Extract version from image tag
+            if ":" in image:
+                version = image.split(":")[-1]
+            else:
+                version = "unknown"
+
+            # Parse deployed_at timestamp
+            deployed_at = datetime.now(timezone.utc)
+            if "deployed_at" in version_data and version_data["deployed_at"]:
+                try:
+                    deployed_at = datetime.fromisoformat(
+                        version_data["deployed_at"].replace("Z", "+00:00")
+                    )
+                except Exception:
+                    pass
 
             return VersionInfo(
                 image=image,
-                digest=version_data.digest if hasattr(version_data, "digest") else None,
-                tag=tag,
+                digest=version_data.get("digest"),
+                tag=version,  # Use version as tag
                 deployed_at=deployed_at,
-                deployment_id=version_data.deployment_id
-                if hasattr(version_data, "deployment_id")
-                else None,
+                deployment_id=version_data.get("deployment_id"),
             )
         except Exception as e:
             logger.debug(f"Failed to create version info: {e}")
-            return None
+            # Return a default VersionInfo on error
+            return VersionInfo(
+                image="unknown",
+                digest=None,
+                tag="unknown",
+                deployed_at=datetime.now(timezone.utc),
+                deployment_id=None,
+            )
 
-    async def collect_adoption_metrics(self) -> List[AgentVersionAdoption]:
+    async def collect_agent_adoptions(self) -> List[AgentVersionAdoption]:
         """
         Collect version adoption by agent.
 
-        Returns current version for each agent.
+        Returns current version for each individual agent.
         """
         if not self.manager or not hasattr(self.manager, "agent_registry"):
             return []
 
         registry = self.manager.agent_registry
-        metrics = []
+        adoptions = []
 
-        for agent_id, agent_info in registry.agents.items():
-            # Get deployment group
-            group = "general"  # Default
-            if hasattr(agent_info, "metadata") and agent_info.metadata:
-                raw_group = agent_info.metadata.get("deployment_group", "general")
-                # Ensure it's one of the allowed values
-                if raw_group in ["explorers", "early_adopters", "general"]:
-                    group = raw_group
-                else:
-                    group = "general"
+        try:
+            # Get all agents
+            agents = registry.list_agents()
 
-            # Get version info
-            current_version = agent_info.current_version or "unknown"
+            if not agents:
+                return []
 
-            # Parse timestamps
-            last_transition_at = None
-            last_work_state_at = None
+            # Create per-agent adoption entries
+            for agent in agents:
+                # Get agent details
+                agent_id = getattr(agent, "agent_id", "unknown")
+                agent_name = getattr(agent, "agent_name", getattr(agent, "name", "unknown"))
+                version = getattr(agent, "version", "unknown")
 
-            if agent_info.last_work_state_at:
-                try:
-                    last_work_state_at = datetime.fromisoformat(
-                        agent_info.last_work_state_at.replace("Z", "+00:00")
-                    )
-                except Exception:
-                    pass
+                # Try to get transition times
+                last_transition_at = None
+                last_work_state_at = None
 
-            # Get last transition time from version_transitions
-            if agent_info.version_transitions:
-                last_transition = agent_info.version_transitions[-1]
-                if "timestamp" in last_transition:
-                    try:
-                        last_transition_at = datetime.fromisoformat(
-                            last_transition["timestamp"].replace("Z", "+00:00")
-                        )
-                    except Exception:
-                        pass
+                # Get deployment group (default to general)
+                deployment_group = "general"
+                if hasattr(agent, "deployment_group"):
+                    group = getattr(agent, "deployment_group")
+                    if group in ["explorers", "early_adopters", "general"]:
+                        deployment_group = group
 
-            metrics.append(
-                AgentVersionAdoption(
+                # Create adoption entry for this agent
+                adoption = AgentVersionAdoption(
                     agent_id=agent_id,
-                    agent_name=agent_info.name,
-                    current_version=current_version,
+                    agent_name=agent_name,
+                    current_version=version,
                     last_transition_at=last_transition_at,
                     last_work_state_at=last_work_state_at,
-                    deployment_group=group,  # type: ignore[arg-type]
+                    deployment_group=deployment_group,
                 )
-            )
+                adoptions.append(adoption)
 
-        return metrics
+        except Exception as e:
+            logger.error(f"Failed to collect agent adoptions: {e}")
+
+        return adoptions
