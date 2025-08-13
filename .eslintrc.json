@@ -1,0 +1,38 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": 2021,
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-undef": "error",
+    "no-unused-vars": "warn",
+    "no-console": "off"
+  },
+  "globals": {
+    "escapeHtml": "readonly",
+    "switchTab": "readonly",
+    "showCreateDialog": "readonly",
+    "checkTemplateApproval": "readonly",
+    "loadEnvFromFile": "readonly",
+    "addEnvVar": "readonly",
+    "handleCreateAgent": "readonly",
+    "restartAgent": "readonly",
+    "startAgent": "readonly",
+    "requestStopAgent": "readonly",
+    "forceStopAgent": "readonly",
+    "deleteAgent": "readonly",
+    "openAgentUI": "readonly",
+    "moveAgent": "readonly",
+    "fetchVersionData": "readonly",
+    "logout": "readonly",
+    "showOAuthSetup": "readonly",
+    "copyToClipboard": "readonly",
+    "notifyEric": "readonly",
+    "verifyOAuth": "readonly"
+  }
+}

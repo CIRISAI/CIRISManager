@@ -632,7 +632,7 @@ async function startAgent(agentId) {
         
         // Refresh agents list after a short delay
         setTimeout(() => {
-            loadAgents();
+            fetchData();
         }, 2000);
     } catch (error) {
         console.error('Error starting agent:', error);
@@ -667,7 +667,7 @@ async function requestStopAgent(agentId) {
         
         // Refresh agents list after a short delay
         setTimeout(() => {
-            loadAgents();
+            fetchData();
         }, 3000);
     } catch (error) {
         console.error('Error requesting stop:', error);
@@ -697,7 +697,7 @@ async function forceStopAgent(agentId) {
         
         // Refresh agents list after a short delay
         setTimeout(() => {
-            loadAgents();
+            fetchData();
         }, 2000);
     } catch (error) {
         console.error('Error force stopping agent:', error);

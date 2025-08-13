@@ -1,0 +1,12 @@
+{
+  "name": "ciris-manager-ui",
+  "version": "1.0.0",
+  "description": "CIRIS Manager UI",
+  "scripts": {
+    "lint": "eslint static/manager/*.js",
+    "lint:fix": "eslint static/manager/*.js --fix"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  }
+}
