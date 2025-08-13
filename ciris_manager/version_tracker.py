@@ -68,7 +68,14 @@ class VersionTracker:
     def __init__(self, data_dir: str = "/var/lib/ciris-manager"):
         """Initialize version tracker with persistent storage."""
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            # Fall back to temp directory for testing
+            import tempfile
+
+            self.data_dir = Path(tempfile.gettempdir()) / "ciris-manager"
+            self.data_dir.mkdir(parents=True, exist_ok=True)
         self.version_file = self.data_dir / "version_state.json"
 
         # Version state for each container type

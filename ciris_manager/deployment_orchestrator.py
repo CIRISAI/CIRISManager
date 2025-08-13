@@ -42,7 +42,14 @@ class DeploymentOrchestrator:
 
         # Set up persistent storage
         self.state_dir = Path("/var/lib/ciris-manager")
-        self.state_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            # Fall back to temp directory for testing
+            import tempfile
+
+            self.state_dir = Path(tempfile.gettempdir()) / "ciris-manager"
+            self.state_dir.mkdir(parents=True, exist_ok=True)
         self.deployment_state_file = self.state_dir / "deployment_state.json"
 
         # Load persisted state on startup

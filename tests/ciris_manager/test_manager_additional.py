@@ -29,19 +29,30 @@ class TestManagerAdditional:
 
         manager = CIRISManager(config)
 
-        # Mock uvicorn module at import time
+        # Mock both uvicorn and api.routes modules
 
         mock_uvicorn = Mock()
         mock_server = AsyncMock()
         mock_uvicorn.Server.return_value = mock_server
         mock_uvicorn.Config.return_value = Mock()
 
-        with patch.dict("sys.modules", {"uvicorn": mock_uvicorn}):
-            # This will test the server creation path
-            await manager._start_api_server()
+        # Mock the API routes module
+        mock_routes = Mock()
+        mock_routes.create_routes = Mock(return_value=Mock())
 
-            # Just verify the method completes without error
-            assert mock_uvicorn.Config.called or mock_uvicorn.Server.called
+        with patch.dict(
+            "sys.modules", {"uvicorn": mock_uvicorn, "ciris_manager.api.routes": mock_routes}
+        ):
+            # Also mock the auth routes if needed
+            with patch("ciris_manager.manager.create_auth_routes", Mock(return_value=Mock())):
+                with patch(
+                    "ciris_manager.manager.create_device_auth_routes", Mock(return_value=Mock())
+                ):
+                    # This will test the server creation path
+                    await manager._start_api_server()
+
+                    # Verify server was started (Config called)
+                    assert mock_uvicorn.Config.called
 
     @pytest.mark.asyncio
     async def test_container_management_with_image_pull_disabled(self, tmp_path):

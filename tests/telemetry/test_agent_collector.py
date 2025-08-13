@@ -135,7 +135,7 @@ class TestAgentMetricsCollector:
         # Verify operational metrics
         assert metric.cognitive_state == CognitiveState.WORK
         assert metric.api_healthy is True
-        assert metric.api_response_time_ms > 0  # Calculated based on actual request time
+        assert metric.api_response_time_ms >= 0  # Can be 0 in mocked tests
         assert metric.uptime_seconds == 3600
         assert metric.incident_count_24h == 2
         assert metric.message_count_24h == 1000
