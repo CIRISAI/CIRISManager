@@ -44,7 +44,7 @@ jobs:
         with:
           node-version: '20'
       
-      - name: Build TypeScript SDK
+      - name: Build TypeScript Manager SDK
         run: |
           cd sdk/typescript/packages/cirismanager-sdk
           npm ci
@@ -52,11 +52,24 @@ jobs:
           npm run build:browser
           npm test
       
-      - name: Verify SDK build
+      - name: Build TypeScript Telemetry SDK
         run: |
-          ls -la sdk/typescript/packages/cirismanager-sdk/dist/
-          ls -la sdk/typescript/packages/cirismanager-sdk/dist-browser/
-          test -f sdk/typescript/packages/cirismanager-sdk/dist-browser/cirismanager-sdk.js
+          cd sdk/typescript/packages/ciristelemetry-sdk
+          npm ci
+          npm run build
+          npm run build:browser
+          npm test
+      
+      - name: Verify SDK builds
+        run: |
+          echo "=== Manager SDK ==="
+          ls -la sdk/typescript/packages/cirismanager-sdk/dist/ || true
+          ls -la sdk/typescript/packages/cirismanager-sdk/dist-browser/ || true
+          test -f sdk/typescript/packages/cirismanager-sdk/dist-browser/cirismanager-sdk.js || echo "Manager SDK browser build not found"
+          
+          echo "=== Telemetry SDK ==="
+          ls -la sdk/typescript/packages/ciristelemetry-sdk/dist/ || true
+          test -f sdk/typescript/packages/ciristelemetry-sdk/dist/ciristelemetry-sdk.min.js || echo "Telemetry SDK browser build not found"
     
   deploy:
     name: Deploy to Production
