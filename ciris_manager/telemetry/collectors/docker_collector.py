@@ -76,7 +76,7 @@ class DockerCollector(BaseCollector[ContainerMetrics], HealthCheckMixin):
 
             client = self.client  # Type narrowing for mypy
             containers = await loop.run_in_executor(
-                None, lambda: client.containers.list(all=True, filters={"name": "ciris"})
+                None, lambda: list(client.containers.list(all=True, filters={"name": "ciris"}))
             )
 
             metrics = []
@@ -212,7 +212,7 @@ class DockerCollector(BaseCollector[ContainerMetrics], HealthCheckMixin):
             loop = asyncio.get_event_loop()
 
             # Get stats (this is a blocking call)
-            stats = await loop.run_in_executor(None, lambda: container.stats(stream=False))
+            stats = await loop.run_in_executor(None, lambda: dict(container.stats(stream=False)))
 
             # Parse CPU usage
             cpu_delta = (
