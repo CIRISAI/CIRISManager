@@ -80,7 +80,7 @@ class TelemetryService:
         )
 
         # Initialize storage if enabled
-        if self.enable_storage:
+        if self.enable_storage and self.database_url:
             try:
                 self.storage = TelemetryStorageBackend(self.database_url)
                 await self.storage.connect()
@@ -169,6 +169,10 @@ class TelemetryService:
         """
         if not self.orchestrator:
             await self.initialize()
+
+        if not self.orchestrator:
+            logger.error("Failed to initialize orchestrator")
+            return None
 
         snapshot = await self.orchestrator.collect_snapshot()
         if not snapshot:

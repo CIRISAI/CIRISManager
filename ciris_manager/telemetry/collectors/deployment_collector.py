@@ -5,9 +5,10 @@ Collects deployment status and version tracking information.
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 
+from ciris_manager.telemetry.base import BaseCollector
 from ciris_manager.telemetry.schemas import (
     DeploymentMetrics,
     DeploymentStatus,
@@ -21,7 +22,7 @@ from ciris_manager.telemetry.schemas import (
 logger = logging.getLogger(__name__)
 
 
-class DeploymentCollector:
+class DeploymentCollector(BaseCollector[DeploymentMetrics]):
     """Collects deployment and version state metrics."""
 
     def __init__(self, manager=None):
@@ -31,7 +32,16 @@ class DeploymentCollector:
         Args:
             manager: CIRISManager instance for accessing orchestrator and registry
         """
+        super().__init__(name="DeploymentCollector", timeout_seconds=5)
         self.manager = manager
+
+    async def collect(self) -> List[DeploymentMetrics]:
+        """Implement BaseCollector abstract method."""
+        return await self.collect_deployment_metrics()
+
+    async def is_available(self) -> bool:
+        """Check if deployment orchestrator is available."""
+        return self.manager is not None and hasattr(self.manager, "deployment_orchestrator")
 
     async def collect_deployment_metrics(self) -> List[DeploymentMetrics]:
         """
@@ -205,7 +215,7 @@ class DeploymentCollector:
         return metrics
 
 
-class VersionCollector:
+class VersionCollector(BaseCollector[Tuple[List[VersionState], List[AgentVersionAdoption]]]):
     """Collects version state and adoption metrics."""
 
     def __init__(self, manager=None):
@@ -215,7 +225,18 @@ class VersionCollector:
         Args:
             manager: CIRISManager instance for accessing version tracker and registry
         """
+        super().__init__(name="VersionCollector", timeout_seconds=5)
         self.manager = manager
+
+    async def collect(self) -> Tuple[List[VersionState], List[AgentVersionAdoption]]:
+        """Implement BaseCollector abstract method."""
+        states = await self.collect_version_state()
+        adoptions = await self.collect_agent_adoptions()
+        return states, adoptions
+
+    async def is_available(self) -> bool:
+        """Check if version tracker is available."""
+        return self.manager is not None
 
     async def collect_version_state(self) -> List[VersionState]:
         """
@@ -229,7 +250,7 @@ class VersionCollector:
         try:
             from ciris_manager.version_tracker import get_version_tracker
 
-            tracker = await get_version_tracker()
+            tracker = get_version_tracker()
 
             # Ensure loaded
             await tracker._ensure_loaded()

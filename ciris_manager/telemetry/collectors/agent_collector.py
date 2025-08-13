@@ -10,6 +10,7 @@ import logging
 from typing import List, Dict, Optional
 import httpx
 
+from ciris_manager.telemetry.base import BaseCollector
 from ciris_manager.telemetry.schemas import (
     AgentOperationalMetrics,
     CognitiveState,
@@ -20,7 +21,7 @@ from ciris_manager.agent_auth import get_agent_auth
 logger = logging.getLogger(__name__)
 
 
-class AgentMetricsCollector:
+class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
     """Collects operational metrics from CIRIS agents."""
 
     def __init__(self, agent_registry=None):
@@ -30,6 +31,7 @@ class AgentMetricsCollector:
         Args:
             agent_registry: Optional agent registry for auth tokens
         """
+        super().__init__(name="AgentMetricsCollector", timeout_seconds=30)
         self.agent_registry = agent_registry
         self.discovery = DockerAgentDiscovery(agent_registry)
         self.auth = None
@@ -38,6 +40,19 @@ class AgentMetricsCollector:
                 self.auth = get_agent_auth(agent_registry)
             except Exception as e:
                 logger.warning(f"Failed to initialize agent auth: {e}")
+
+    async def collect(self) -> List[AgentOperationalMetrics]:
+        """Implement BaseCollector abstract method."""
+        return await self.collect_agent_metrics()
+
+    async def is_available(self) -> bool:
+        """Check if Docker is available for discovery."""
+        try:
+            # Try to discover agents
+            agents = self.discovery.discover_agents()
+            return agents is not None
+        except Exception:
+            return False
 
     async def collect_agent_metrics(self) -> List[AgentOperationalMetrics]:
         """
@@ -124,7 +139,7 @@ class AgentMetricsCollector:
 
                 # Get OAuth status from agent info
                 oauth_configured = agent.oauth_status in ["configured", "verified"]
-                oauth_providers = []  # Would need separate API call to get providers
+                oauth_providers: List[str] = []  # Would need separate API call to get providers
 
                 return AgentOperationalMetrics(
                     agent_id=agent_id,

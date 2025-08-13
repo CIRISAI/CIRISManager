@@ -81,7 +81,7 @@ class TelemetryAPI:
 
             # Check database connectivity if enabled
             db_healthy = False
-            if self.service.has_storage:
+            if self.service.has_storage and self.service.storage:
                 try:
                     # Try to get latest summary from DB
                     await self.service.storage.get_latest_summary()
@@ -151,6 +151,9 @@ class TelemetryAPI:
 
         try:
             # Get data from storage
+            if not self.service.storage:
+                return {"hours": hours, "interval": interval, "data": []}
+
             history = await self.service.storage.get_public_history(
                 hours=hours, interval_minutes=interval_minutes
             )
@@ -187,6 +190,9 @@ class TelemetryAPI:
             raise HTTPException(status_code=503, detail="Query not available (storage disabled)")
 
         try:
+            if not self.service.storage:
+                raise HTTPException(status_code=503, detail="Storage backend not available")
+
             response = await self.service.storage.query_telemetry(query)
             return response
         except Exception as e:
@@ -312,7 +318,7 @@ class TelemetryAPI:
         """
         try:
             history = await self.service.get_public_history(hours=hours)
-            return history
+            return history if history else []
         except Exception as e:
             logger.error(f"Failed to get public history: {e}")
             return []

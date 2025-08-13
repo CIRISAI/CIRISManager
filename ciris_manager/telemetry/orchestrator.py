@@ -8,7 +8,7 @@ and produces complete system snapshots.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Any, Tuple
 from pathlib import Path
 
 from ciris_manager.telemetry.base import CompositeCollector, PeriodicCollector
@@ -109,7 +109,7 @@ class TelemetryOrchestrator(CompositeCollector):
             deployments = results.get("deployments", [])
 
             # Version collector returns tuple
-            version_data = results.get("versions", ([], []))
+            version_data: Tuple[List[Any], List[Any]] = results.get("versions", ([], []))
             if isinstance(version_data, tuple) and len(version_data) == 2:
                 versions, adoptions = version_data
             else:
