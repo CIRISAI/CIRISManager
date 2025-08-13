@@ -405,8 +405,18 @@ http {
         }}
 """
 
-        # Root location - MUST come last as it's a catch-all
+        # OAuth GUI callback routes - must come before root catch-all
         server += """
+        # GUI OAuth callback routes (for post-auth redirect from agents)
+        location ~ ^/oauth/([^/]+)/([^/]+)/callback {
+            proxy_pass http://agent_gui/oauth/$1/$2/callback$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
         # Root and all GUI routes - Next.js handles routing internally
         # This MUST be last as it catches all unmatched routes
         location / {
