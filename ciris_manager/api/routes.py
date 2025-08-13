@@ -2044,4 +2044,16 @@ def create_routes(manager: Any) -> APIRouter:
             "recent_deployments": recent_deployments,
         }
 
+    # Add telemetry routes
+    try:
+        from ciris_manager.telemetry.api import create_telemetry_routes
+
+        telemetry_router = create_telemetry_routes(manager)
+        router.include_router(telemetry_router, prefix="/telemetry", tags=["telemetry"])
+        logger.info("Telemetry routes registered successfully")
+    except ImportError as e:
+        logger.warning(f"Telemetry module not available: {e}")
+    except Exception as e:
+        logger.error(f"Failed to register telemetry routes: {e}")
+
     return router
