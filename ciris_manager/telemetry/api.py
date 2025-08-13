@@ -354,7 +354,7 @@ class TelemetryAPI:
         """
         try:
             history = await self.service.get_public_history(hours=hours)
-            return history if history else []
+            return list(history) if history else []
         except Exception as e:
             logger.error(f"Failed to get public history: {e}")
             return []
