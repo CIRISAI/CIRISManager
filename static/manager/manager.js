@@ -2532,14 +2532,15 @@ async function updateAgentVersions() {
         
         if (!response.ok) throw new Error('Failed to fetch agent versions');
         
-        const agents = await response.json();
+        const data = await response.json();
+        const agents = data.agents || [];
         const tableBody = document.getElementById('agent-versions-table');
         
         if (agents && agents.length > 0) {
             tableBody.innerHTML = agents.map(agent => `
                 <tr>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        ${agent.name}
+                        ${agent.agent_name || agent.name || agent.agent_id}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
@@ -2552,10 +2553,10 @@ async function updateAgentVersions() {
                         ${agent.version || 'N/A'}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        ${agent.gui_version || 'N/A'}
+                        ${agent.image || 'N/A'}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        ${agent.last_updated ? formatTimestamp(agent.last_updated) : 'N/A'}
+                        ${agent.created_at ? formatTimestamp(agent.created_at) : 'N/A'}
                     </td>
                 </tr>
             `).join('');
