@@ -37,6 +37,26 @@ jobs:
       - name: Run tests
         run: |
           python -m pytest tests/ -v --cov=ciris_manager --cov-report=term-missing
+      
+      # Build TypeScript SDK
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Build TypeScript SDK
+        run: |
+          cd sdk/typescript/packages/cirismanager-sdk
+          npm ci
+          npm run build
+          npm run build:browser
+          npm test
+      
+      - name: Verify SDK build
+        run: |
+          ls -la sdk/typescript/packages/cirismanager-sdk/dist/
+          ls -la sdk/typescript/packages/cirismanager-sdk/dist-browser/
+          test -f sdk/typescript/packages/cirismanager-sdk/dist-browser/cirismanager-sdk.js
     
   deploy:
     name: Deploy to Production
@@ -137,6 +157,13 @@ jobs:
             
             # Ensure ciris home directory has proper permissions for group access
             chmod 755 /home/ciris
+            
+            # Copy static files for manager UI
+            echo "Deploying manager UI static files..."
+            mkdir -p /home/ciris/static/manager
+            cp -r /opt/ciris-manager/static/manager/* /home/ciris/static/manager/
+            chown -R ciris-manager:ciris /home/ciris/static
+            chmod -R 755 /home/ciris/static
             
             # Deploy nginx container if not running
             if ! docker ps | grep -q ciris-nginx; then

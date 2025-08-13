@@ -313,14 +313,16 @@ http {
             add_header Content-Type text/plain;
         }
         
-        # Manager UI routes
+        # Manager UI static files (HTML, JS, CSS)
         location /manager/ {
-            proxy_pass http://manager/manager/v1/;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            alias /home/ciris/static/manager/;
+            try_files $uri $uri/ /manager/index.html;
+            
+            # Cache static assets
+            location ~ \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+                expires 1h;
+                add_header Cache-Control "public, immutable";
+            }
         }
         
         # Agent GUI (multi-tenant container)
@@ -417,18 +419,15 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
         
-        # Root and all GUI routes - Next.js handles routing internally
-        # This MUST be last as it catches all unmatched routes
+        # Root location - serve manager UI
+        location = / {
+            return 301 /manager/;
+        }
+        
+        # Catch-all for other routes (if needed)
         location / {
-            proxy_pass http://agent_gui;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection 'upgrade';
-            proxy_set_header Host $host;
-            proxy_cache_bypass $http_upgrade;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
+            # For now, redirect to manager UI
+            return 301 /manager/;
         }
     }
 }

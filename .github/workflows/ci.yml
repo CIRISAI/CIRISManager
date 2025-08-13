@@ -29,10 +29,18 @@ jobs:
         ruff check ciris_manager/
         ruff format --check ciris_manager/
     
-    - name: Run JavaScript linting
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Build and test TypeScript SDK
       run: |
+        cd sdk/typescript/packages/cirismanager-sdk
         npm ci
-        npm run lint
+        npm run build
+        npm run build:browser
+        npm test
     
     - name: Run type checking
       run: |
