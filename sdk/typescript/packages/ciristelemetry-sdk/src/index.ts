@@ -6,7 +6,8 @@
  */
 
 // Main client
-export { CIRISTelemetryClient, createTelemetryClient } from './client';
+import { CIRISTelemetryClient, createTelemetryClient } from './client';
+export { CIRISTelemetryClient, createTelemetryClient };
 
 // API modules
 export { MonitoringAPI } from './apis/monitoring';

@@ -9,9 +9,6 @@ import { AxiosInstance } from 'axios';
 import {
   TelemetryQuery,
   TelemetryResponse,
-  PublicHistoryEntry,
-  AgentOperationalMetrics,
-  ContainerMetrics,
   RequestOptions
 } from '../types';
 

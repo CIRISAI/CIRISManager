@@ -22,7 +22,6 @@ export class MonitoringAPI {
    * Get real-time agent status for all agents
    */
   async getAllAgentsStatus(options?: RequestOptions): Promise<AgentOperationalMetrics[]> {
-    const summary = await this.getSystemSummary(options);
     const response = await this.axios.get<{ agents: AgentOperationalMetrics[] }>(
       '/telemetry/agents/current',
       { signal: options?.signal, timeout: options?.timeout }
@@ -90,9 +89,10 @@ export class MonitoringAPI {
    * Get agents with recent incidents
    */
   async getAgentsWithIncidents(
-    hoursBack: number = 24,
+    _hoursBack: number = 24,
     options?: RequestOptions
   ): Promise<AgentOperationalMetrics[]> {
+    // Note: hoursBack parameter reserved for future use when API supports it
     const allAgents = await this.getAllAgentsStatus(options);
     return allAgents.filter(agent => agent.incident_count_24h > 0);
   }
