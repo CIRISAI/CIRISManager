@@ -2322,7 +2322,7 @@ function showPendingDeployment(deploymentData) {
     document.getElementById('pending-message').textContent = 
         deploymentData.message || 'No message provided';
     document.getElementById('pending-staged-at').textContent = 
-        formatTimestamp(deploymentData.staged_at);
+        formatDate(deploymentData.staged_at);
     document.getElementById('affected-agents-count').textContent = 
         `${deploymentData.affected_agents || 0} agents will be updated`;
     
@@ -2412,7 +2412,7 @@ function showDeploymentDetails(deploymentData) {
         GUI Image: ${deploymentData.gui_image || 'Not specified'}
         Strategy: ${deploymentData.strategy}
         Message: ${deploymentData.message}
-        Staged At: ${formatTimestamp(deploymentData.staged_at)}
+        Staged At: ${formatDate(deploymentData.staged_at)}
         Affected Agents: ${deploymentData.affected_agents || 0}
         
         Risk Assessment:
@@ -2506,7 +2506,7 @@ async function updateDeploymentHistory() {
             historyDiv.innerHTML = data.deployments.map(d => `
                 <div class="border-b pb-2 mb-2 last:border-b-0">
                     <div class="flex justify-between">
-                        <span class="text-sm font-medium">${formatTimestamp(d.started_at)}</span>
+                        <span class="text-sm font-medium">${formatDate(d.started_at)}</span>
                         <span class="text-sm ${d.status === 'completed' ? 'text-green-600' : 
                                                d.status === 'failed' ? 'text-red-600' : 
                                                'text-gray-600'}">${d.status}</span>
@@ -2556,7 +2556,7 @@ async function updateAgentVersions() {
                         ${agent.image || 'N/A'}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        ${agent.created_at ? formatTimestamp(agent.created_at) : 'N/A'}
+                        ${agent.created_at ? formatDate(agent.created_at) : 'N/A'}
                     </td>
                 </tr>
             `).join('');
