@@ -1205,7 +1205,7 @@ def create_routes(manager: Any) -> APIRouter:
 
     @router.get("/updates/status", response_model=Optional[DeploymentStatus])
     async def get_deployment_status(
-        deployment_id: Optional[str] = None, _user: Dict[str, str] = Depends(deployment_auth)
+        deployment_id: Optional[str] = None, _user: Dict[str, str] = auth_dependency
     ) -> Optional[DeploymentStatus]:
         """
         Get deployment status.
