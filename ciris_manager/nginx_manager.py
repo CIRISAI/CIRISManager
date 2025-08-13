@@ -315,14 +315,12 @@ http {
         
         # Manager UI static files (HTML, JS, CSS)
         location /manager/ {
-            alias /home/ciris/static/manager/;
+            root /home/ciris/static;
             try_files $uri $uri/ /manager/index.html;
             
-            # Cache static assets
-            location ~ \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-                expires 1h;
-                add_header Cache-Control "public, immutable";
-            }
+            # Add appropriate headers
+            add_header X-Frame-Options "SAMEORIGIN";
+            add_header X-Content-Type-Options "nosniff";
         }
         
         # Agent GUI (multi-tenant container)
@@ -419,15 +417,18 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
         
-        # Root location - serve manager UI
-        location = / {
-            return 301 /manager/;
-        }
-        
-        # Catch-all for other routes (if needed)
+        # Root and all GUI routes - Agent GUI (login page) handles routing internally
+        # This MUST be last as it catches all unmatched routes
         location / {
-            # For now, redirect to manager UI
-            return 301 /manager/;
+            proxy_pass http://agent_gui;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
 }
