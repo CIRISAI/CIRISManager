@@ -346,6 +346,16 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
         
+        # Alternative callback path (frontend compatibility)
+        location /manager/callback {
+            proxy_pass http://manager/manager/oauth/callback;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
         # Manager routes
         location /manager/v1/ {
             proxy_pass http://manager/manager/v1/;
