@@ -210,6 +210,26 @@ class AgentRegistry:
         """List all registered agents."""
         return list(self.agents.values())
 
+    def update_agent_token(self, agent_id: str, encrypted_token: str) -> bool:
+        """Update the service token for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            encrypted_token: New encrypted service token
+
+        Returns:
+            True if successful, False if agent not found
+        """
+        agent = self.agents.get(agent_id)
+        if not agent:
+            logger.error(f"Agent {agent_id} not found for token update")
+            return False
+
+        agent.service_token = encrypted_token
+        self._save_metadata()
+        logger.info(f"Updated service token for agent {agent_id}")
+        return True
+
     def set_canary_group(self, agent_id: str, group: str) -> bool:
         """Set the canary deployment group for an agent.
 

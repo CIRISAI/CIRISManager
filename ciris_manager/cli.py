@@ -12,6 +12,15 @@ from pathlib import Path
 from ciris_manager.auth_cli import handle_auth_command
 from ciris_manager.cli_client import add_cli_commands, handle_agent_commands, handle_system_commands
 from ciris_manager.sdk import CIRISManagerClient
+from ciris_manager.cli.token_commands import (
+    handle_token_list,
+    handle_token_verify,
+    handle_token_regenerate,
+    handle_token_rotate,
+    handle_token_recover,
+    handle_token_validate,
+    handle_token_restore,
+)
 
 
 def generate_default_config(config_path: str) -> None:
@@ -86,6 +95,43 @@ Examples:
     # Auth token
     auth_subparsers.add_parser("token", help="Print current token (for use in scripts)")
 
+    # Token management subcommand
+    tokens_parser = subparsers.add_parser("tokens", help="Manage service tokens")
+    tokens_subparsers = tokens_parser.add_subparsers(dest="tokens_command", help="Token commands")
+
+    # Token list
+    tokens_subparsers.add_parser("list", help="List all agents and their token status")
+
+    # Token verify
+    verify_parser = tokens_subparsers.add_parser("verify", help="Verify token for an agent")
+    verify_parser.add_argument("agent_id", help="Agent ID to verify")
+    verify_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Token regenerate
+    regen_parser = tokens_subparsers.add_parser("regenerate", help="Regenerate token for an agent")
+    regen_parser.add_argument("agent_id", help="Agent ID")
+    regen_parser.add_argument("--no-restart", action="store_true", help="Do not restart container")
+    regen_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation")
+
+    # Token rotate
+    rotate_parser = tokens_subparsers.add_parser("rotate", help="Rotate all agent tokens")
+    rotate_parser.add_argument("--strategy", choices=["immediate", "canary"], default="canary")
+    rotate_parser.add_argument("--canary-percentage", type=int, default=10)
+    rotate_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation")
+
+    # Token recover
+    recover_parser = tokens_subparsers.add_parser("recover", help="Recover tokens from containers")
+    recover_parser.add_argument("--dry-run", action="store_true", help="Show what would be done")
+
+    # Token validate
+    validate_parser = tokens_subparsers.add_parser("validate", help="Validate all tokens")
+    validate_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Token restore
+    restore_parser = tokens_subparsers.add_parser("restore", help="Restore from backup")
+    restore_parser.add_argument("backup_path", help="Path to backup file")
+    restore_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation")
+
     # Agent API command
     agent_api_parser = subparsers.add_parser("agent-api", help="Call agent API endpoints")
     agent_api_parser.add_argument("agent_id", help="Agent ID (e.g., 'datum')")
@@ -121,6 +167,29 @@ Examples:
             auth_parser.print_help()
             sys.exit(1)
         sys.exit(handle_auth_command(args))
+
+    # Handle tokens subcommand
+    elif args.command == "tokens":
+        if not args.tokens_command:
+            tokens_parser.print_help()
+            sys.exit(1)
+
+        # Call the appropriate handler
+        if args.tokens_command == "list":
+            sys.exit(handle_token_list(args))
+        elif args.tokens_command == "verify":
+            sys.exit(handle_token_verify(args))
+        elif args.tokens_command == "regenerate":
+            sys.exit(handle_token_regenerate(args))
+        elif args.tokens_command == "rotate":
+            sys.exit(handle_token_rotate(args))
+        elif args.tokens_command == "recover":
+            sys.exit(handle_token_recover(args))
+        elif args.tokens_command == "validate":
+            sys.exit(handle_token_validate(args))
+        elif args.tokens_command == "restore":
+            sys.exit(handle_token_restore(args))
+        sys.exit(0)
 
     # Handle agent-api subcommand
     elif args.command == "agent-api":
