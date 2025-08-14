@@ -85,11 +85,15 @@ class AgentAuth:
                 self._encryption = get_token_encryption()
 
             decrypted_token = self._encryption.decrypt_token(registry_agent.service_token)
-            return str(decrypted_token) if decrypted_token else None
+            return str(decrypted_token)
 
+        except ValueError as e:
+            # Invalid token format - this is a critical error
+            logger.error(f"Invalid token format for {agent_id}: {e}")
+            raise
         except Exception as e:
-            logger.error(f"Failed to get service token for {agent_id}: {e}")
-            return None
+            logger.error(f"Failed to decrypt service token for {agent_id}: {e}")
+            raise
 
     def verify_token(self, provided_token: str, agent_id: str) -> bool:
         """

@@ -94,17 +94,29 @@ class TokenEncryption:
         Decrypt a service token.
 
         Args:
-            encrypted_token: Base64 encoded encrypted token
+            encrypted_token: Fernet encrypted token (must start with 'gAAAAA')
 
         Returns:
             Plain text token
+
+        Raises:
+            ValueError: If token format is invalid
+            cryptography.fernet.InvalidToken: If decryption fails
         """
+        if not encrypted_token:
+            raise ValueError("Empty token provided")
+
+        if not encrypted_token.startswith("gAAAAA"):
+            raise ValueError(
+                f"Invalid token format. Expected Fernet token starting with 'gAAAAA', "
+                f"got: {encrypted_token[:20]}..."
+            )
+
         try:
-            encrypted_bytes = base64.urlsafe_b64decode(encrypted_token.encode())
-            decrypted = self.cipher.decrypt(encrypted_bytes)
+            decrypted = self.cipher.decrypt(encrypted_token.encode())
             return str(decrypted.decode())
         except Exception as e:
-            logger.error(f"Failed to decrypt token: {e}")
+            logger.error(f"Token decryption failed: {e}")
             raise
 
 
