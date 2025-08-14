@@ -80,11 +80,12 @@ class TokenEncryption:
             token: Plain text token
 
         Returns:
-            Base64 encoded encrypted token
+            Fernet encrypted token (already base64 encoded)
         """
         try:
             encrypted = self.cipher.encrypt(token.encode())
-            return base64.urlsafe_b64encode(encrypted).decode()
+            # Fernet already returns base64 encoded bytes, just decode to string
+            return str(encrypted.decode())
         except Exception as e:
             logger.error(f"Failed to encrypt token: {e}")
             raise
