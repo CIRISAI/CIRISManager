@@ -2054,27 +2054,14 @@ def create_routes(manager: Any) -> APIRouter:
         )
 
         # Check if database is accessible
+        # For now, just check if asyncpg is available
+        # The actual connection test will happen when TelemetryService starts
         try:
             import asyncpg
-            import asyncio
 
-            async def test_db_connection():
-                try:
-                    conn = await asyncpg.connect(database_url)
-                    await conn.close()
-                    return True
-                except Exception:
-                    return False
-
-            # Quick test to see if DB is available
-            loop = asyncio.get_event_loop()
-            db_available = loop.run_until_complete(test_db_connection())
-
-            if not db_available:
-                logger.warning("PostgreSQL not accessible, using in-memory storage")
-                database_url = None
-            else:
-                logger.info("PostgreSQL connected for telemetry storage")
+            _ = asyncpg  # Mark as used for linter
+            logger.info("Will attempt to connect to PostgreSQL for telemetry storage")
+            # TelemetryService will handle the actual connection
         except ImportError:
             logger.warning("asyncpg not installed, using in-memory storage")
             database_url = None
