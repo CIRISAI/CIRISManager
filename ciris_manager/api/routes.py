@@ -8,7 +8,6 @@ from fastapi import APIRouter, HTTPException, Depends, Header, Response, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List, Union
-import asyncio
 import httpx
 import logging
 import os
@@ -2046,9 +2045,22 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Add telemetry routes
     try:
+        from ciris_manager.telemetry import TelemetryService
         from ciris_manager.telemetry.api import create_telemetry_router
 
-        telemetry_router = create_telemetry_router(manager)
+        # Create a telemetry service instance
+        telemetry_service = TelemetryService(
+            agent_registry=manager.agent_registry,
+            database_url=None,  # No database for now, in-memory only
+            collection_interval=60,  # Collect every 60 seconds
+        )
+
+        # Start the telemetry service
+        import asyncio
+
+        asyncio.create_task(telemetry_service.start())
+
+        telemetry_router = create_telemetry_router(telemetry_service)
         router.include_router(telemetry_router, tags=["telemetry"])
         logger.info("Telemetry routes registered successfully")
     except ImportError as e:
