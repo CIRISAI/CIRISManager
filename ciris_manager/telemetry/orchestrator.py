@@ -232,10 +232,22 @@ class TelemetryOrchestrator(CompositeCollector):
 
     def _calculate_activity_stats(self, snapshot: TelemetrySnapshot) -> dict:
         """Calculate activity metrics."""
+        total_cost = sum(a.cost_cents_24h for a in snapshot.agents)
+        total_messages = sum(a.message_count_24h for a in snapshot.agents)
+
+        # Debug logging
+        if total_cost > 0 or total_messages > 0:
+            logger.info(
+                f"Aggregated metrics: total_cost={total_cost} cents, total_messages={total_messages}"
+            )
+            for a in snapshot.agents:
+                if a.cost_cents_24h > 0:
+                    logger.info(f"  {a.agent_name}: cost={a.cost_cents_24h} cents")
+
         return {
-            "total_messages_24h": sum(a.message_count_24h for a in snapshot.agents),
+            "total_messages_24h": total_messages,
             "total_incidents_24h": sum(a.incident_count_24h for a in snapshot.agents),
-            "total_cost_cents_24h": sum(a.cost_cents_24h for a in snapshot.agents),
+            "total_cost_cents_24h": total_cost,
         }
 
     def _calculate_deployment_stats(self, snapshot: TelemetrySnapshot) -> dict:

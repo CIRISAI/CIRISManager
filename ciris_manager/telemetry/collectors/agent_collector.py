@@ -190,6 +190,12 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
         cost_cents = overview_data.get("cost_24h_cents", 0)
         carbon_grams = overview_data.get("carbon_24h_grams", 0)
         messages_processed = overview_data.get("messages_processed_24h", 0)
+
+        # Debug logging
+        if cost_cents > 0 or carbon_grams > 0:
+            logger.info(
+                f"Agent {agent_id} metrics: cost={cost_cents} cents, carbon={carbon_grams}g, messages={messages_processed}"
+            )
         errors_24h = overview_data.get("errors_24h", 0)
         api_healthy = overview_data.get("api_healthy", True)
 
