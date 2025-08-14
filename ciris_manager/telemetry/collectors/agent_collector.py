@@ -114,7 +114,7 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
                 # Try /v1/telemetry/overview first
                 overview_url = f"http://localhost:{port}/v1/telemetry/overview"
                 try:
-                    response = await client.get(overview_url)
+                    response = await client.get(overview_url, headers=headers)
                     response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
 
                     if response.status_code == 200:
@@ -128,7 +128,7 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
 
                 # Fallback to /v1/system/health
                 health_url = f"http://localhost:{port}/v1/system/health"
-                response = await client.get(health_url)
+                response = await client.get(health_url, headers=headers)
                 response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
 
                 if response.status_code != 200:
