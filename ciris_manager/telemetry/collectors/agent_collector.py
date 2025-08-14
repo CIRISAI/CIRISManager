@@ -130,7 +130,8 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
                 cognitive_state = self._parse_cognitive_state(
                     health_data.get("cognitive_state", "unknown")
                 )
-                uptime_seconds = health_data.get("uptime_seconds", 0)
+                # Convert uptime to int (agents return float)
+                uptime_seconds = int(health_data.get("uptime_seconds", 0))
 
                 # Get telemetry summary if available
                 incident_count = health_data.get("recent_incidents_count", 0)
