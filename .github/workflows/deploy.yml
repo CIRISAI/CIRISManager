@@ -204,10 +204,8 @@ jobs:
               source /opt/ciris-manager/.env
               
               # Create environment file for systemd service
-              cat > /etc/ciris-manager/environment <<EOF
-# Auto-generated environment file for CIRISManager
-TELEMETRY_DATABASE_URL=postgresql://ciris:${POSTGRES_PASSWORD}@localhost:5432/telemetry
-EOF
+              echo "# Auto-generated environment file for CIRISManager" > /etc/ciris-manager/environment
+              echo "TELEMETRY_DATABASE_URL=postgresql://ciris:${POSTGRES_PASSWORD}@localhost:5432/telemetry" >> /etc/ciris-manager/environment
               chmod 600 /etc/ciris-manager/environment
               
               docker-compose -f docker-compose-production.yml up -d postgres
