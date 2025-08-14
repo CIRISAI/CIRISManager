@@ -23,6 +23,28 @@ services:
       start_period: 5s
       retries: 3
 
+  # PostgreSQL for telemetry storage
+  postgres:
+    image: postgres:14-alpine
+    container_name: ciris-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ciris
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
+      POSTGRES_DB: telemetry
+    ports:
+      - "127.0.0.1:5432:5432"  # Only bind to localhost
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/init-telemetry.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ciris -d telemetry"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - ciris-network
+
   # CIRISManager API service (if running containerized)
   # Uncomment if you want to run manager in container instead of systemd
   # ciris-manager:
@@ -39,6 +61,9 @@ services:
   #   restart: unless-stopped
   #   networks:
   #     - ciris-network
+
+volumes:
+  postgres_data:
 
 networks:
   ciris-network:

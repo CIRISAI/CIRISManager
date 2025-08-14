@@ -2048,10 +2048,41 @@ def create_routes(manager: Any) -> APIRouter:
         from ciris_manager.telemetry import TelemetryService
         from ciris_manager.telemetry.api import create_telemetry_router
 
+        # Try to use PostgreSQL if available
+        database_url: Optional[str] = os.environ.get(
+            "TELEMETRY_DATABASE_URL", "postgresql://ciris:changeme@localhost:5432/telemetry"
+        )
+
+        # Check if database is accessible
+        try:
+            import asyncpg
+            import asyncio
+
+            async def test_db_connection():
+                try:
+                    conn = await asyncpg.connect(database_url)
+                    await conn.close()
+                    return True
+                except Exception:
+                    return False
+
+            # Quick test to see if DB is available
+            loop = asyncio.get_event_loop()
+            db_available = loop.run_until_complete(test_db_connection())
+
+            if not db_available:
+                logger.warning("PostgreSQL not accessible, using in-memory storage")
+                database_url = None
+            else:
+                logger.info("PostgreSQL connected for telemetry storage")
+        except ImportError:
+            logger.warning("asyncpg not installed, using in-memory storage")
+            database_url = None
+
         # Create a telemetry service instance
         telemetry_service = TelemetryService(
             agent_registry=manager.agent_registry,
-            database_url=None,  # No database for now, in-memory only
+            database_url=database_url,
             collection_interval=60,  # Collect every 60 seconds
         )
 

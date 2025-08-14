@@ -190,6 +190,44 @@ jobs:
             chown -R ciris-manager:ciris /home/ciris/static
             chmod -R 755 /home/ciris/static
             
+            # Deploy PostgreSQL container if not running
+            if ! docker ps | grep -q ciris-postgres; then
+              echo "Deploying PostgreSQL container..."
+              cd /opt/ciris-manager
+              # Set a secure password if not already set
+              if [ ! -f /opt/ciris-manager/.env ]; then
+                echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)" > /opt/ciris-manager/.env
+                chmod 600 /opt/ciris-manager/.env
+              fi
+              
+              # Load the password for the service
+              source /opt/ciris-manager/.env
+              
+              # Create environment file for systemd service
+              cat > /etc/ciris-manager/environment <<EOF
+# Auto-generated environment file for CIRISManager
+TELEMETRY_DATABASE_URL=postgresql://ciris:${POSTGRES_PASSWORD}@localhost:5432/telemetry
+EOF
+              chmod 600 /etc/ciris-manager/environment
+              
+              docker-compose -f docker-compose-production.yml up -d postgres
+              
+              # Wait for PostgreSQL to be ready
+              echo "Waiting for PostgreSQL to be ready..."
+              for i in {1..30}; do
+                if docker exec ciris-postgres pg_isready -U ciris -d telemetry 2>/dev/null; then
+                  echo "PostgreSQL is ready!"
+                  break
+                fi
+                if [ $i -eq 30 ]; then
+                  echo "PostgreSQL failed to start!"
+                  docker logs ciris-postgres --tail 50
+                  exit 1
+                fi
+                sleep 2
+              done
+            fi
+            
             # Deploy nginx container if not running
             if ! docker ps | grep -q ciris-nginx; then
               echo "Deploying nginx container..."
