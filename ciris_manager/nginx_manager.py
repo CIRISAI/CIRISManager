@@ -386,7 +386,7 @@ http {
         
         # Public telemetry endpoints (no auth required)
         location /telemetry/public/ {
-            proxy_pass http://manager/telemetry/public/;
+            proxy_pass http://manager/manager/v1/telemetry/public/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
