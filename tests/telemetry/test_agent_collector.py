@@ -77,6 +77,21 @@ class TestAgentMetricsCollector:
         }
 
     @pytest.fixture
+    def mock_overview_response(self):
+        """Create mock telemetry overview response."""
+        return {
+            "version": "1.4.0",
+            "uptime_seconds": 3600,
+            "cognitive_state": "WORK",
+            "cost_24h_cents": 250,
+            "carbon_24h_grams": 50,
+            "messages_processed_24h": 1000,
+            "errors_24h": 2,
+            "api_healthy": True,
+            "api_response_time_ms": 25,
+        }
+
+    @pytest.fixture
     def collector(self, mock_discovery):
         """Create collector with mocked discovery."""
         collector = AgentMetricsCollector(None)
@@ -116,10 +131,15 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = mock_health_response
-            mock_client.get.return_value = mock_response
+            # First call (overview) returns 404, second call (health) returns 200
+            overview_response = Mock()
+            overview_response.status_code = 404
+
+            health_response = Mock()
+            health_response.status_code = 200
+            health_response.json.return_value = mock_health_response
+
+            mock_client.get.side_effect = [overview_response, health_response]
 
             metrics = await collector.collect_agent_metrics()
 
@@ -140,13 +160,67 @@ class TestAgentMetricsCollector:
         assert metric.incident_count_24h == 2
         assert metric.message_count_24h == 1000
         assert metric.cost_cents_24h == 250
+        assert metric.carbon_24h_grams == 0  # Health endpoint doesn't provide carbon data
 
         # Verify OAuth info
         assert metric.oauth_configured is True
         assert metric.oauth_providers == []  # Collector doesn't fetch providers list
 
-        # Verify API was called correctly
-        mock_client.get.assert_called_once_with("http://localhost:8080/v1/system/health")
+        # Verify API was called correctly - should try overview first, then health
+        assert mock_client.get.call_count == 2
+        calls = mock_client.get.call_args_list
+        assert calls[0][0][0] == "http://localhost:8080/v1/telemetry/overview"
+        assert calls[1][0][0] == "http://localhost:8080/v1/system/health"
+
+    @pytest.mark.asyncio
+    async def test_collect_single_agent_with_overview(
+        self, collector, mock_discovery, mock_overview_response
+    ):
+        """Test collecting metrics using the overview endpoint."""
+        # Set up discovery with one agent
+        agents = mock_discovery.discover_agents()
+        mock_discovery.discover_agents.return_value = [agents[0]]  # Just Datum
+
+        # Mock HTTP client
+        with patch(
+            "ciris_manager.telemetry.collectors.agent_collector.httpx.AsyncClient"
+        ) as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+
+            # Overview endpoint returns 200 with overview data
+            overview_response = Mock()
+            overview_response.status_code = 200
+            overview_response.json.return_value = mock_overview_response
+            mock_client.get.return_value = overview_response
+
+            metrics = await collector.collect_agent_metrics()
+
+        assert len(metrics) == 1
+        metric = metrics[0]
+
+        # Verify agent info
+        assert metric.agent_id == "datum-abc123"
+        assert metric.agent_name == "Datum"
+        assert metric.version == "1.4.0"
+        assert metric.api_port == 8080
+
+        # Verify operational metrics from overview
+        assert metric.cognitive_state == CognitiveState.WORK
+        assert metric.api_healthy is True
+        assert metric.api_response_time_ms >= 0
+        assert metric.uptime_seconds == 3600
+        assert metric.incident_count_24h == 2  # errors_24h from overview
+        assert metric.message_count_24h == 1000  # messages_processed_24h
+        assert metric.cost_cents_24h == 250
+        assert metric.carbon_24h_grams == 50  # Only available in overview
+
+        # Verify OAuth info
+        assert metric.oauth_configured is True
+        assert metric.oauth_providers == []
+
+        # Verify only overview was called (not health)
+        mock_client.get.assert_called_once_with("http://localhost:8080/v1/telemetry/overview")
 
     @pytest.mark.asyncio
     async def test_collect_multiple_agents(self, collector, sample_agents):
@@ -188,13 +262,19 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # Set up side effects for multiple calls
+            # Set up side effects for multiple calls - each agent gets 2 calls (overview 404, then health 200)
             mock_responses = []
             for resp_data in responses:
-                mock_resp = Mock()
-                mock_resp.status_code = 200
-                mock_resp.json.return_value = resp_data
-                mock_responses.append(mock_resp)
+                # Overview call fails
+                overview_resp = Mock()
+                overview_resp.status_code = 404
+                mock_responses.append(overview_resp)
+
+                # Health call succeeds
+                health_resp = Mock()
+                health_resp.status_code = 200
+                health_resp.json.return_value = resp_data
+                mock_responses.append(health_resp)
 
             mock_client.get.side_effect = mock_responses
 
@@ -206,16 +286,19 @@ class TestAgentMetricsCollector:
         assert metrics[0].agent_name == "Datum"
         assert metrics[0].cognitive_state == CognitiveState.WORK
         assert metrics[0].message_count_24h == 1000
+        assert metrics[0].carbon_24h_grams == 0  # Health endpoint doesn't provide carbon
 
         # Verify second agent (DREAM state)
         assert metrics[1].agent_name == "Sage"
         assert metrics[1].cognitive_state == CognitiveState.DREAM
         assert metrics[1].message_count_24h == 500
+        assert metrics[1].carbon_24h_grams == 0  # Health endpoint doesn't provide carbon
 
         # Verify third agent (SOLITUDE state)
         assert metrics[2].agent_name == "Echo"
         assert metrics[2].cognitive_state == CognitiveState.SOLITUDE
         assert metrics[2].incident_count_24h == 5
+        assert metrics[2].carbon_24h_grams == 0  # Health endpoint doesn't provide carbon
 
     @pytest.mark.asyncio
     async def test_handle_failed_requests(self, collector, mock_discovery):
@@ -229,8 +312,10 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # Mix of successful and failed responses
+            # Mix of successful and failed responses - each agent gets 2 calls
             mock_client.get.side_effect = [
+                # Agent 1: overview fails, health succeeds
+                Mock(status_code=404),  # Overview 404
                 Mock(
                     status_code=200,
                     json=Mock(
@@ -245,8 +330,12 @@ class TestAgentMetricsCollector:
                         }
                     ),
                 ),
-                Mock(status_code=500),  # Server error
-                Mock(status_code=404),  # Not found
+                # Agent 2: overview fails, health fails
+                Mock(status_code=404),  # Overview 404
+                Mock(status_code=500),  # Health server error
+                # Agent 3: overview fails, health fails
+                Mock(status_code=404),  # Overview 404
+                Mock(status_code=404),  # Health not found
             ]
 
             metrics = await collector.collect_agent_metrics()
@@ -279,8 +368,9 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # Response with missing fields
-            mock_client.get.return_value = Mock(
+            # Overview fails, health returns with missing fields
+            overview_response = Mock(status_code=404)
+            health_response = Mock(
                 status_code=200,
                 json=Mock(
                     return_value={
@@ -289,6 +379,7 @@ class TestAgentMetricsCollector:
                     }
                 ),
             )
+            mock_client.get.side_effect = [overview_response, health_response]
 
             metrics = await collector.collect_agent_metrics()
 
@@ -299,6 +390,7 @@ class TestAgentMetricsCollector:
         assert metric.version == "unknown"  # Default when missing
         assert metric.cognitive_state == CognitiveState.UNKNOWN  # Default when missing
         assert metric.message_count_24h == 0  # Default when missing
+        assert metric.carbon_24h_grams == 0  # Health endpoint doesn't provide carbon
 
     @pytest.mark.asyncio
     async def test_handle_timeout(self, collector, mock_discovery):
@@ -313,7 +405,7 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # Simulate timeout
+            # Simulate timeout on first call (overview)
             mock_client.get.side_effect = asyncio.TimeoutError()
 
             metrics = await collector.collect_agent_metrics()
@@ -325,6 +417,7 @@ class TestAgentMetricsCollector:
         assert metric.agent_name == "Datum"
         assert metric.version == "unknown"
         assert metric.cognitive_state == CognitiveState.UNKNOWN
+        assert metric.carbon_24h_grams == 0
 
     @pytest.mark.asyncio
     async def test_collect_with_auth(self, collector):
@@ -345,7 +438,9 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            mock_client.get.return_value = Mock(
+            # Overview fails, health succeeds
+            overview_response = Mock(status_code=404)
+            health_response = Mock(
                 status_code=200,
                 json=Mock(
                     return_value={
@@ -359,6 +454,7 @@ class TestAgentMetricsCollector:
                     }
                 ),
             )
+            mock_client.get.side_effect = [overview_response, health_response]
 
             # Verify AsyncClient was created with auth headers
             metrics = await collector.collect_agent_metrics()
@@ -368,6 +464,7 @@ class TestAgentMetricsCollector:
 
         assert len(metrics) == 1
         assert metrics[0].api_healthy is True
+        assert metrics[0].carbon_24h_grams == 0  # Health endpoint doesn't provide carbon
 
     @pytest.mark.asyncio
     async def test_empty_agent_list(self, collector, mock_discovery):

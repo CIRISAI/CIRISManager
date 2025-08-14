@@ -199,6 +199,7 @@ class TestAgentMetrics:
             incident_count_24h=2,
             message_count_24h=1000,
             cost_cents_24h=250,
+            carbon_24h_grams=50,
             api_port=8080,
             oauth_configured=True,
             oauth_providers=["google", "github"],
@@ -208,6 +209,7 @@ class TestAgentMetrics:
         assert metrics.cognitive_state == CognitiveState.WORK
         assert metrics.api_healthy is True
         assert metrics.cost_cents_24h == 250
+        assert metrics.carbon_24h_grams == 50
 
     def test_agent_metrics_validation(self):
         """Test AgentOperationalMetrics validation."""
@@ -224,6 +226,7 @@ class TestAgentMetrics:
                 incident_count_24h=0,
                 message_count_24h=0,
                 cost_cents_24h=0,
+                carbon_24h_grams=0,
                 api_port=8080,
                 oauth_configured=False,
                 oauth_providers=[],
@@ -242,6 +245,7 @@ class TestAgentMetrics:
                 incident_count_24h=0,
                 message_count_24h=0,
                 cost_cents_24h=0,
+                carbon_24h_grams=0,
                 api_port=70000,  # Invalid (> 65535)
                 oauth_configured=False,
                 oauth_providers=[],
@@ -450,6 +454,7 @@ class TestTelemetrySnapshot:
             incident_count_24h=0,
             message_count_24h=100,
             cost_cents_24h=10,
+            carbon_24h_grams=5,
             api_port=8080,
             oauth_configured=False,
             oauth_providers=[],

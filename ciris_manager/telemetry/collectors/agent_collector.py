@@ -58,7 +58,8 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
         """
         Collect operational metrics from all agents.
 
-        Makes only ONE API call per agent to /v1/system/health.
+        Makes only ONE API call per agent, trying /v1/telemetry/overview first,
+        then falling back to /v1/system/health if overview fails.
         Returns partial results if some agents fail.
         """
         # Discover all agents
@@ -105,64 +106,42 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
             except Exception as e:
                 logger.debug(f"No auth available for {agent_id}: {e}")
 
-        # Make health API call with timeout
-        url = f"http://localhost:{port}/v1/system/health"
-
+        # Try overview endpoint first, fallback to health
         try:
             async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
                 start_time = asyncio.get_event_loop().time()
-                response = await client.get(url)
+
+                # Try /v1/telemetry/overview first
+                overview_url = f"http://localhost:{port}/v1/telemetry/overview"
+                try:
+                    response = await client.get(overview_url)
+                    response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
+
+                    if response.status_code == 200:
+                        return self._parse_overview_response(agent, response, response_time_ms)
+                    else:
+                        logger.debug(
+                            f"Agent {agent_id} overview returned {response.status_code}, trying health"
+                        )
+                except Exception as e:
+                    logger.debug(f"Agent {agent_id} overview failed: {e}, trying health")
+
+                # Fallback to /v1/system/health
+                health_url = f"http://localhost:{port}/v1/system/health"
+                response = await client.get(health_url)
                 response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
 
                 if response.status_code != 200:
                     logger.warning(f"Agent {agent_id} health returned {response.status_code}")
                     return self._create_unhealthy_metrics(agent, response_time_ms)
 
-                # Parse health response
-                health_data = response.json()
-
-                # Handle wrapped response format
-                if "data" in health_data:
-                    health_data = health_data["data"]
-
-                # Extract key fields
-                version = health_data.get("version", "unknown")
-                cognitive_state = self._parse_cognitive_state(
-                    health_data.get("cognitive_state", "unknown")
-                )
-                # Convert uptime to int (agents return float)
-                uptime_seconds = int(health_data.get("uptime_seconds", 0))
-
-                # Get telemetry summary if available
-                incident_count = health_data.get("recent_incidents_count", 0)
-                message_count = health_data.get("messages_24h", 0)
-                cost_cents = health_data.get("cost_24h_cents", 0)
-
-                # Get OAuth status from agent info
-                oauth_configured = agent.oauth_status in ["configured", "verified"]
-                oauth_providers: List[str] = []  # Would need separate API call to get providers
-
-                return AgentOperationalMetrics(
-                    agent_id=agent_id,
-                    agent_name=agent.agent_name,
-                    version=version,
-                    cognitive_state=cognitive_state,
-                    api_healthy=True,
-                    api_response_time_ms=response_time_ms,
-                    uptime_seconds=uptime_seconds,
-                    incident_count_24h=incident_count,
-                    message_count_24h=message_count,
-                    cost_cents_24h=cost_cents,
-                    api_port=port,
-                    oauth_configured=oauth_configured,
-                    oauth_providers=oauth_providers,
-                )
+                return self._parse_health_response(agent, response, response_time_ms)
 
         except asyncio.TimeoutError:
             logger.warning(f"Agent {agent_id} health timeout")
             return self._create_unhealthy_metrics(agent, None)
         except Exception as e:
-            logger.warning(f"Failed to get health for {agent_id}: {e}")
+            logger.warning(f"Failed to get metrics for {agent_id}: {e}")
             return self._create_unhealthy_metrics(agent, None)
 
     def _create_unhealthy_metrics(
@@ -180,9 +159,107 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
             incident_count_24h=0,
             message_count_24h=0,
             cost_cents_24h=0,
+            carbon_24h_grams=0,
             api_port=agent.api_port or 0,
             oauth_configured=agent.has_oauth,
             oauth_providers=[],
+        )
+
+    def _parse_overview_response(
+        self, agent, response, response_time_ms: int
+    ) -> AgentOperationalMetrics:
+        """Parse response from /v1/telemetry/overview endpoint."""
+        agent_id = agent.agent_id
+        port = agent.api_port
+
+        # Parse overview response
+        overview_data = response.json()
+
+        # Handle wrapped response format
+        if "data" in overview_data:
+            overview_data = overview_data["data"]
+
+        # Extract fields from SystemOverview object
+        version = overview_data.get("version", "unknown")
+        cognitive_state = self._parse_cognitive_state(
+            overview_data.get("cognitive_state", "unknown")
+        )
+        uptime_seconds = int(overview_data.get("uptime_seconds", 0))
+
+        # Get telemetry metrics from overview
+        cost_cents = overview_data.get("cost_24h_cents", 0)
+        carbon_grams = overview_data.get("carbon_24h_grams", 0)
+        messages_processed = overview_data.get("messages_processed_24h", 0)
+        errors_24h = overview_data.get("errors_24h", 0)
+        api_healthy = overview_data.get("api_healthy", True)
+
+        # Get OAuth status from agent info
+        oauth_configured = agent.oauth_status in ["configured", "verified"]
+        oauth_providers: List[str] = []  # Would need separate API call to get providers
+
+        return AgentOperationalMetrics(
+            agent_id=agent_id,
+            agent_name=agent.agent_name,
+            version=version,
+            cognitive_state=cognitive_state,
+            api_healthy=api_healthy,
+            api_response_time_ms=response_time_ms,
+            uptime_seconds=uptime_seconds,
+            incident_count_24h=errors_24h,
+            message_count_24h=messages_processed,
+            cost_cents_24h=cost_cents,
+            carbon_24h_grams=carbon_grams,
+            api_port=port,
+            oauth_configured=oauth_configured,
+            oauth_providers=oauth_providers,
+        )
+
+    def _parse_health_response(
+        self, agent, response, response_time_ms: int
+    ) -> AgentOperationalMetrics:
+        """Parse response from /v1/system/health endpoint (legacy)."""
+        agent_id = agent.agent_id
+        port = agent.api_port
+
+        # Parse health response
+        health_data = response.json()
+
+        # Handle wrapped response format
+        if "data" in health_data:
+            health_data = health_data["data"]
+
+        # Extract key fields
+        version = health_data.get("version", "unknown")
+        cognitive_state = self._parse_cognitive_state(health_data.get("cognitive_state", "unknown"))
+        # Convert uptime to int (agents return float)
+        uptime_seconds = int(health_data.get("uptime_seconds", 0))
+
+        # Get telemetry summary if available
+        incident_count = health_data.get("recent_incidents_count", 0)
+        message_count = health_data.get("messages_24h", 0)
+        cost_cents = health_data.get("cost_24h_cents", 0)
+        # Health endpoint doesn't have carbon data
+        carbon_grams = 0
+
+        # Get OAuth status from agent info
+        oauth_configured = agent.oauth_status in ["configured", "verified"]
+        oauth_providers: List[str] = []  # Would need separate API call to get providers
+
+        return AgentOperationalMetrics(
+            agent_id=agent_id,
+            agent_name=agent.agent_name,
+            version=version,
+            cognitive_state=cognitive_state,
+            api_healthy=True,
+            api_response_time_ms=response_time_ms,
+            uptime_seconds=uptime_seconds,
+            incident_count_24h=incident_count,
+            message_count_24h=message_count,
+            cost_cents_24h=cost_cents,
+            carbon_24h_grams=carbon_grams,
+            api_port=port,
+            oauth_configured=oauth_configured,
+            oauth_providers=oauth_providers,
         )
 
     def _parse_cognitive_state(self, state: str) -> CognitiveState:

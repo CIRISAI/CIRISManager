@@ -161,6 +161,7 @@ class AgentOperationalMetrics(BaseModel):
 
     # Resource constraints
     cost_cents_24h: int = Field(ge=0, description="Operational cost in last 24 hours")
+    carbon_24h_grams: int = Field(ge=0, description="CO2 emissions in grams for last 24 hours")
 
     # Port for routing
     api_port: int = Field(gt=0, le=65535)
