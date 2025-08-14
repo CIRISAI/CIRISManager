@@ -323,6 +323,24 @@ http {
             add_header X-Content-Type-Options "nosniff";
         }
         
+        # Public Dashboard (no auth required)
+        location /dashboard/ {
+            root /home/ciris/static;
+            try_files $uri $uri/ /dashboard/index.html;
+            
+            # Add appropriate headers
+            add_header X-Frame-Options "SAMEORIGIN";
+            add_header X-Content-Type-Options "nosniff";
+            add_header Cache-Control "public, max-age=300";
+        }
+        
+        # Telemetry SDK for dashboard
+        location /static/ciristelemetry-sdk.min.js {
+            alias /home/ciris/static/sdk/ciristelemetry-sdk.min.js;
+            add_header Content-Type "application/javascript";
+            add_header Cache-Control "public, max-age=3600";
+        }
+        
         # Agent GUI (multi-tenant container)
         location ~ ^/agent/([^/]+) {
             proxy_pass http://agent_gui;
@@ -364,6 +382,21 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        # Public telemetry endpoints (no auth required)
+        location /telemetry/public/ {
+            proxy_pass http://manager/telemetry/public/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Enable CORS for public API
+            add_header Access-Control-Allow-Origin "*";
+            add_header Access-Control-Allow-Methods "GET, OPTIONS";
+            add_header Access-Control-Allow-Headers "Content-Type, Authorization";
         }
 """
 

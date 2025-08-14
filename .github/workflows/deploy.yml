@@ -171,10 +171,22 @@ jobs:
             # Ensure ciris home directory has proper permissions for group access
             chmod 755 /home/ciris
             
-            # Copy static files for manager UI
-            echo "Deploying manager UI static files..."
+            # Copy static files for manager UI and dashboard
+            echo "Deploying static files..."
             mkdir -p /home/ciris/static/manager
+            mkdir -p /home/ciris/static/dashboard
+            mkdir -p /home/ciris/static/sdk
             cp -r /opt/ciris-manager/static/manager/* /home/ciris/static/manager/
+            cp -r /opt/ciris-manager/static/dashboard/* /home/ciris/static/dashboard/
+            
+            # Build and deploy telemetry SDK
+            if [ -f /opt/ciris-manager/scripts/build-telemetry-sdk.sh ]; then
+              echo "Building telemetry SDK..."
+              cd /opt/ciris-manager
+              bash scripts/build-telemetry-sdk.sh
+              cp static/sdk/ciristelemetry-sdk.min.js /home/ciris/static/sdk/
+            fi
+            
             chown -R ciris-manager:ciris /home/ciris/static
             chmod -R 755 /home/ciris/static
             
