@@ -18,11 +18,8 @@ module.exports = {
   output: {
     filename: 'ciristelemetry-sdk.min.js',
     path: path.resolve(__dirname, 'dist'),
-    library: {
-      name: 'CIRISTelemetry',
-      type: 'umd',
-      export: 'default'
-    },
+    library: 'CIRISTelemetry',
+    libraryTarget: 'umd',
     globalObject: 'this'
   },
   optimization: {

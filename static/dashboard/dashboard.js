@@ -18,7 +18,11 @@ async function initializeDashboard() {
     try {
         // Initialize telemetry client - no auth required for public endpoints
         const baseUrl = window.location.origin;
-        telemetryClient = new CIRISTelemetry.CIRISTelemetryClient({
+        
+        // The SDK exports CIRISTelemetryClient as default, available as CIRISTelemetry global
+        // Access the actual client class from the module
+        const ClientConstructor = CIRISTelemetry.default || CIRISTelemetry.CIRISTelemetryClient || CIRISTelemetry;
+        telemetryClient = new ClientConstructor({
             baseUrl: baseUrl,
             timeout: 30000,
             enableCache: true,
