@@ -119,6 +119,7 @@ class TestTelemetryIntegration:
                 incident_count_24h=2,
                 message_count_24h=1000,
                 cost_cents_24h=250,
+                carbon_24h_grams=150,
                 api_port=8080,
                 oauth_configured=False,
                 oauth_providers=[],
@@ -247,6 +248,7 @@ class TestTelemetryIntegration:
                 incident_count_24h=0,
                 message_count_24h=100,
                 cost_cents_24h=10,
+                carbon_24h_grams=5,
                 api_port=8080,
                 oauth_configured=False,
                 oauth_providers=[],
@@ -336,6 +338,7 @@ class TestTelemetryIntegration:
                 incident_count_24h=i,
                 message_count_24h=100 * i,
                 cost_cents_24h=50 * i,
+                carbon_24h_grams=25 * i,
                 api_port=8080 + i,
                 oauth_configured=False,
                 oauth_providers=[],
@@ -374,6 +377,7 @@ class TestTelemetryIntegration:
                 incident_count_24h=2,
                 message_count_24h=1000,
                 cost_cents_24h=250,  # Sensitive
+                carbon_24h_grams=150,
                 api_port=8080,  # Sensitive
                 oauth_configured=False,
                 oauth_providers=[],

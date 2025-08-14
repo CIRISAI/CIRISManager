@@ -99,6 +99,7 @@ class TestTelemetryStorageBackend:
             incident_count_24h=2,
             message_count_24h=1000,
             cost_cents_24h=250,
+            carbon_24h_grams=150,
             api_port=8080,
             oauth_configured=False,
             oauth_providers=[],
