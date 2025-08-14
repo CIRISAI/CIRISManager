@@ -12,7 +12,7 @@ from pathlib import Path
 from ciris_manager.auth_cli import handle_auth_command
 from ciris_manager.cli_client import add_cli_commands, handle_agent_commands, handle_system_commands
 from ciris_manager.sdk import CIRISManagerClient
-from ciris_manager.cli.token_commands import (
+from ciris_manager.cli_commands.token_commands import (
     handle_token_list,
     handle_token_verify,
     handle_token_regenerate,
