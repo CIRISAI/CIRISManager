@@ -266,24 +266,37 @@ jobs:
             echo "Restarting CIRISManager..."
             systemctl restart ciris-manager
             
+            # Verify service started successfully
+            sleep 3
+            if ! systemctl is-active --quiet ciris-manager; then
+              echo "ERROR: CIRISManager failed to start!"
+              echo "Service status:"
+              systemctl status ciris-manager --no-pager || true
+              echo "Recent logs:"
+              journalctl -u ciris-manager --no-pager -n 100 || true
+              exit 1
+            fi
+            
+            echo "Service restarted successfully, checking health endpoint..."
+            
             # Wait for service to be ready
-            echo "Waiting for CIRISManager to be ready..."
+            echo "Waiting for CIRISManager API to be ready..."
             for i in {1..30}; do
               if curl -sf http://localhost:8888/manager/v1/health 2>/dev/null; then
-                echo "CIRISManager is healthy!"
+                echo "✓ CIRISManager is healthy and responding!"
                 break
               fi
               if [ $i -eq 30 ]; then
-                echo "Warning: CIRISManager health check timed out after 60 seconds"
-                echo "Checking service status..."
+                echo "ERROR: CIRISManager health check failed after 60 seconds!"
+                echo "Service status:"
                 systemctl status ciris-manager --no-pager || true
                 echo "Recent logs:"
-                journalctl -u ciris-manager --no-pager -n 50 || true
-                # Don't fail deployment, service might still be starting
-                echo "Continuing despite health check timeout..."
-                break
+                journalctl -u ciris-manager --no-pager -n 100 || true
+                echo "Port check:"
+                netstat -tlnp | grep 8888 || true
+                exit 1
               fi
-              echo "Waiting for service... (attempt $i/30)"
+              echo "Waiting for API... (attempt $i/30)"
               sleep 2
             done
             
