@@ -1733,7 +1733,7 @@ class DeploymentOrchestrator:
         status = self.deployments[deployment_id]
 
         # Track peer results from previous phases
-        peer_results = {
+        peer_results: Dict[str, Dict[str, Any]] = {
             "explorers": {"total": 0, "successful": 0, "failed": 0, "time_to_work": []},
             "early_adopters": {"total": 0, "successful": 0, "failed": 0, "time_to_work": []},
         }
