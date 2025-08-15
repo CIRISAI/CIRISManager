@@ -239,6 +239,15 @@ jobs:
               sleep 2
             done
             
+            # Apply database schema updates
+            echo "Applying database schema updates..."
+            if [ -f "/opt/ciris-manager/deploy/init-telemetry-complete.sql" ]; then
+              docker exec -i ciris-postgres psql -U ciris -d telemetry < /opt/ciris-manager/deploy/init-telemetry-complete.sql 2>&1 | grep -v "already exists" || true
+              echo "Database schema updated"
+            else
+              echo "Warning: Schema file not found, skipping database update"
+            fi
+            
             # Deploy or update nginx container
             echo "Updating nginx container..."
             cd /opt/ciris-manager
