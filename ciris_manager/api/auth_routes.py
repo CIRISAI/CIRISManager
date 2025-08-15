@@ -84,7 +84,7 @@ def _get_callback_url(request: Request) -> str:
     """Determine OAuth callback URL based on environment."""
     if request.url.hostname in ["localhost", "127.0.0.1"]:
         return "http://localhost:8888/manager/v1/oauth/callback"
-    return "https://agents.ciris.ai/manager/oauth/callback"
+    return "https://agents.ciris.ai/manager/v1/oauth/callback"
 
 
 def _get_redirect_uri(request: Request, redirect_uri: Optional[str]) -> str:
