@@ -1011,6 +1011,20 @@ function renderVersionData(data) {
                         <span>ID: ${escapeHtml(deployment.deployment_id.substring(0, 8))}...</span>
                     </div>
                 </div>
+                
+                <!-- Action Buttons for Failed Deployments -->
+                ${deployment.status === 'failed' ? `
+                    <div class="flex gap-2 pt-3 border-t">
+                        <button onclick="cancelDeployment('${deployment.deployment_id}')" 
+                                class="px-3 py-1.5 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors">
+                            <i class="fas fa-times mr-1"></i>Clear & Reset
+                        </button>
+                        <button onclick="triggerNewDeployment()" 
+                                class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-redo mr-1"></i>Retry Deployment
+                        </button>
+                    </div>
+                ` : ''}
             </div>
         `;
     } else {
@@ -1470,6 +1484,50 @@ async function copyToClipboard(elementId) {
         input.select();
         document.execCommand('copy');
     }
+}
+
+// Cancel a failed deployment to clear the lock
+async function cancelDeployment(deploymentId) {
+    if (!confirm('Clear this failed deployment? This will allow starting a new deployment.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/manager/v1/updates/cancel', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
+            },
+            body: JSON.stringify({
+                deployment_id: deploymentId,
+                reason: 'Clearing failed deployment to allow retry'
+            })
+        });
+        
+        if (response.ok) {
+            showToast('Deployment cleared. You can now start a new deployment.', 'success');
+            await updateDeploymentTab();
+        } else {
+            const error = await response.json();
+            showToast(error.detail || 'Failed to cancel deployment', 'error');
+        }
+    } catch (error) {
+        console.error('Error cancelling deployment:', error);
+        showToast('Failed to cancel deployment', 'error');
+    }
+}
+
+// Trigger a new deployment (retry)
+async function triggerNewDeployment() {
+    if (!confirm('Retry the deployment? This will trigger a new deployment with the latest images.')) {
+        return;
+    }
+    
+    showToast('To retry deployment, the CD pipeline needs to be triggered again. You can also manually trigger from GitHub Actions.', 'info');
+    
+    // Optionally, we could add an API call here to trigger a webhook
+    // or provide instructions for manual triggering
 }
 
 // Notify Eric about OAuth setup request

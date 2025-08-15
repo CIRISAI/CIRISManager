@@ -71,6 +71,21 @@ class DeploymentOrchestrator:
                     # Restore current deployment
                     self.current_deployment = state.get("current_deployment")
                     logger.info(f"Loaded deployment state with {len(self.deployments)} deployments")
+
+                    # Check for in-progress deployments that need to be marked as failed
+                    if self.current_deployment and self.current_deployment in self.deployments:
+                        deployment = self.deployments[self.current_deployment]
+                        if deployment.status == "in_progress":
+                            logger.warning(
+                                f"Found in-progress deployment {self.current_deployment} after restart. "
+                                "Marking as failed due to manager restart during deployment."
+                            )
+                            deployment.status = "failed"
+                            deployment.completed_at = datetime.now(timezone.utc).isoformat()
+                            deployment.message = "Deployment interrupted by manager restart"
+                            # Clear the current deployment lock to allow new deployments
+                            self.current_deployment = None
+                            self._save_state()
             except Exception as e:
                 logger.warning(f"Failed to load deployment state: {e}")
 
