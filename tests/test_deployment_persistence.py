@@ -174,7 +174,8 @@ class TestDeploymentPersistence:
         assert len(orchestrator.deployments) == 2
         assert "dep-1" in orchestrator.deployments
         assert "dep-2" in orchestrator.deployments
-        assert orchestrator.current_deployment == "dep-2"
+        # After restart, in-progress deployment should be failed and lock cleared
+        assert orchestrator.current_deployment is None
 
         # Verify deployment details
         dep1 = orchestrator.deployments["dep-1"]
@@ -182,8 +183,9 @@ class TestDeploymentPersistence:
         assert dep1.agents_updated == 2
 
         dep2 = orchestrator.deployments["dep-2"]
-        assert dep2.status == "in_progress"
-        assert dep2.canary_phase == "explorers"
+        # In-progress deployment should be marked as failed after restart
+        assert dep2.status == "failed"
+        assert dep2.message == "Deployment interrupted by manager restart"
 
     def test_load_state_handles_missing_file(self, orchestrator):
         """Test that load_state handles missing state file gracefully."""
@@ -422,7 +424,8 @@ class TestDeploymentPersistence:
 
         # Verify state was restored
         assert len(orch2.deployments) == 2
-        assert orch2.current_deployment == "persist-2"
+        # After restart, in-progress deployment should be failed and lock cleared
+        assert orch2.current_deployment is None
 
         # Verify deployment details
         dep1 = orch2.deployments["persist-1"]
@@ -431,7 +434,9 @@ class TestDeploymentPersistence:
         assert dep1.canary_phase == "general"
 
         dep2 = orch2.deployments["persist-2"]
-        assert dep2.status == "in_progress"
+        # In-progress deployment should be marked as failed after restart
+        assert dep2.status == "failed"
+        assert dep2.message == "Deployment interrupted by manager restart"
         assert dep2.agents_total == 2
 
     def test_save_state_error_handling(self, orchestrator):
