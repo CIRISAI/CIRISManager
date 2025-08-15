@@ -1514,6 +1514,8 @@ class DeploymentOrchestrator:
             ):
                 status.message = "Explorer phase failed - no agents reached stable WORK state"
                 status.status = "failed"
+                # Clear the deployment lock on failure
+                self.current_deployment = None
                 self._save_state()
                 logger.error(
                     f"Deployment {deployment_id}: Explorer phase failed, aborting deployment"
@@ -1556,6 +1558,8 @@ class DeploymentOrchestrator:
             ):
                 status.message = "Early adopter phase failed - no agents reached stable WORK state"
                 status.status = "failed"
+                # Clear the deployment lock on failure
+                self.current_deployment = None
                 self._save_state()
                 logger.error(
                     f"Deployment {deployment_id}: Early adopter phase failed, aborting deployment"
