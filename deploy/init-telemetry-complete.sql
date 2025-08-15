@@ -27,11 +27,12 @@ CREATE INDEX IF NOT EXISTS idx_collection_runs_snapshot ON collection_runs(snaps
 -- Container metrics table
 CREATE TABLE IF NOT EXISTS container_metrics (
     id SERIAL PRIMARY KEY,
-    snapshot_id UUID NOT NULL,
+    snapshot_id UUID,
     time TIMESTAMPTZ NOT NULL,
     container_id VARCHAR(64) NOT NULL,
     container_name VARCHAR(255) NOT NULL,
     image TEXT NOT NULL,
+    image_digest VARCHAR(128),
     status VARCHAR(20) NOT NULL,
     health_status VARCHAR(20),
     cpu_percent DECIMAL(10,2) DEFAULT 0,
