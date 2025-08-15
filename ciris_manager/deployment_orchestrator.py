@@ -127,6 +127,14 @@ class DeploymentOrchestrator:
         except Exception as e:
             logger.error(f"Failed to save deployment state: {e}")
 
+    async def stop(self) -> None:
+        """Save state before shutdown."""
+        logger.info("Saving deployment state before shutdown...")
+        self._save_state()
+        logger.info(
+            f"Deployment state saved: {len(self.deployments)} deployments, {len(self.pending_deployments)} pending"
+        )
+
     async def start_deployment(
         self,
         notification: UpdateNotification,
@@ -321,6 +329,9 @@ class DeploymentOrchestrator:
             )
 
         logger.info(f"Staged deployment {deployment_id} for review with version tracking")
+
+        # Save state to persist the staged deployment
+        self._save_state()
 
         return deployment_id
 

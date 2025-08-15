@@ -698,6 +698,10 @@ class CIRISManager:
 
         self._running = False
 
+        # Save deployment state before shutdown
+        if hasattr(self, "deployment_orchestrator") and self.deployment_orchestrator:
+            await self.deployment_orchestrator.stop()
+
         # Stop watchdog
         await self.watchdog.stop()
 
