@@ -1216,6 +1216,76 @@ def create_routes(manager: Any) -> APIRouter:
         else:
             return await deployment_orchestrator.get_current_deployment()
 
+    @router.get("/updates/pending/all")
+    async def get_all_pending_deployments(
+        _user: Dict[str, str] = auth_dependency,
+    ) -> Dict[str, Any]:
+        """
+        Get all pending deployments (supports multiple staged deployments).
+
+        Returns all staged deployments and information about what 'latest' points to.
+        """
+        # Get all pending deployments
+        all_pending = []
+        for deployment_id, deployment in deployment_orchestrator.pending_deployments.items():
+            dep_info = {
+                "deployment_id": deployment_id,
+                "staged_at": deployment.staged_at,
+                "affected_agents": deployment.agents_total,
+                "status": deployment.status,
+            }
+            if deployment.notification:
+                dep_info.update(
+                    {
+                        "agent_image": deployment.notification.agent_image,
+                        "gui_image": deployment.notification.gui_image,
+                        "strategy": deployment.notification.strategy,
+                        "message": deployment.notification.message,
+                        "version": deployment.notification.version,
+                        "commit_sha": deployment.notification.commit_sha,
+                    }
+                )
+            all_pending.append(dep_info)
+
+        # Sort by staged_at (newest first)
+        all_pending.sort(key=lambda x: str(x.get("staged_at", "")), reverse=True)
+
+        # Get current 'latest' tag info
+        latest_info = {}
+        try:
+            # Try to get digest of current latest tag locally
+            import subprocess
+
+            result = subprocess.run(
+                ["docker", "images", "ghcr.io/cirisai/ciris-agent:latest", "--format", "{{.ID}}"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                latest_info["local_image_id"] = result.stdout.strip()[:12]  # Short ID
+
+            # Try to get what version is currently running
+            agents = (
+                await deployment_orchestrator.manager.get_agent_statuses()
+                if deployment_orchestrator.manager
+                else []
+            )
+            if agents:
+                # Get version from first agent (they should all be the same in production)
+                for agent in agents:
+                    if agent.get("is_running"):
+                        latest_info["running_version"] = agent.get("current_version", "unknown")
+                        break
+        except Exception as e:
+            logger.warning(f"Could not get latest tag info: {e}")
+
+        return {
+            "deployments": all_pending,
+            "latest_tag": latest_info,
+            "total_pending": len(all_pending),
+        }
+
     @router.get("/updates/pending")
     async def get_pending_deployment(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
         """

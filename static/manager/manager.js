@@ -2382,6 +2382,36 @@ function stopDashboardRefresh() {
 async function checkPendingDeployment() {
     console.log('Checking for pending deployments...');
     try {
+        // ONLY use the all endpoint - no fallbacks
+        const response = await fetch('/manager/v1/updates/pending/all', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to check pending deployments: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('All pending deployments:', data);
+        
+        // Show the deployments (handles 0, 1, or many)
+        showPendingDeployments(data);
+        
+    } catch (error) {
+        console.error('Error checking pending deployments:', error);
+        // Hide the section on error
+        const section = document.getElementById('pending-deployment-section');
+        if (section) {
+            section.style.display = 'none';
+        }
+    }
+}
+
+// This is the OLD function for backwards compat only - should be removed
+async function checkPendingDeploymentOLD() {
+    try {
         const response = await fetch('/manager/v1/updates/pending', {
             headers: { 
                 'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
@@ -2419,6 +2449,95 @@ async function checkPendingDeployment() {
     }
 }
 
+// NEW: Single function to show all pending deployments
+function showPendingDeployments(data) {
+    const section = document.getElementById('pending-deployment-section');
+    if (!section) {
+        throw new Error('pending-deployment-section element not found');
+    }
+    
+    // No deployments - hide section
+    if (data.total_pending === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    
+    // Clear existing content
+    section.innerHTML = '';
+    section.style.display = 'block';
+    
+    // Show latest tag info if available
+    if (data.latest_tag && Object.keys(data.latest_tag).length > 0) {
+        const latestInfo = document.createElement('div');
+        latestInfo.className = 'bg-gray-100 p-4 rounded-lg mb-4';
+        latestInfo.innerHTML = `
+            <h3 class="text-lg font-semibold mb-2">Current 'latest' Tag Status</h3>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                ${data.latest_tag.local_image_id ? `<div><span class="font-medium">Local Image:</span> ${data.latest_tag.local_image_id}</div>` : ''}
+                ${data.latest_tag.running_version ? `<div><span class="font-medium">Running Version:</span> ${data.latest_tag.running_version}</div>` : ''}
+            </div>
+        `;
+        section.appendChild(latestInfo);
+    }
+    
+    // Show each deployment
+    data.deployments.forEach((deployment, index) => {
+        const deploymentDiv = document.createElement('div');
+        deploymentDiv.className = `bg-white p-6 rounded-lg shadow-md ${index > 0 ? 'mt-4' : ''}`;
+        deploymentDiv.innerHTML = `
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-xl font-semibold text-blue-600">
+                    ${index === 0 ? '🚀 Latest Staged Deployment' : `📦 Staged Deployment #${index + 1}`}
+                </h3>
+                <span class="text-sm text-gray-500">${formatDate(deployment.staged_at)}</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <p class="text-sm text-gray-600">Deployment ID</p>
+                    <p class="font-mono text-xs">${deployment.deployment_id}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Version</p>
+                    <p class="font-semibold ${deployment.version && deployment.version.includes('.') ? 'text-green-600' : 'text-yellow-600'}">
+                        ${deployment.version || 'No semantic version'}
+                    </p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Strategy</p>
+                    <p class="font-medium">${deployment.strategy || 'canary'}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Affected Agents</p>
+                    <p class="font-medium">${deployment.affected_agents || 0}</p>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <p class="text-sm text-gray-600">Message</p>
+                <p class="text-gray-800">${deployment.message || 'No message provided'}</p>
+            </div>
+            
+            <div class="flex gap-2">
+                <button onclick="launchDeployment('${deployment.deployment_id}')" 
+                        class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                    🚀 Launch
+                </button>
+                <button onclick="fetchDeploymentPreview('${deployment.deployment_id}')" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    👁️ Preview
+                </button>
+                <button onclick="rejectDeployment('${deployment.deployment_id}')" 
+                        class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                    ❌ Reject
+                </button>
+            </div>
+        `;
+        section.appendChild(deploymentDiv);
+    });
+}
+
+// OLD function - kept for compatibility but should be removed
 function showPendingDeployment(deploymentData) {
     // FAIL FAST: Only handle pending deployments
     if (deploymentData.status && deploymentData.status !== 'pending') {
