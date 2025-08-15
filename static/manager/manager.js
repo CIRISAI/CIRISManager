@@ -2508,18 +2508,39 @@ function showFailedDeployment(deploymentData) {
         `${deploymentData.affected_agents || 0} agents were targeted`;
     
     // Hide launch/reject buttons and show clear/retry buttons
-    const buttonsContainer = section.querySelector('.flex.gap-2');
+    // Look for the button container - it has classes "flex flex-wrap gap-2"
+    const buttonsContainer = section.querySelector('.flex.flex-wrap.gap-2');
     if (buttonsContainer) {
+        console.log('Replacing buttons for failed deployment');
         buttonsContainer.innerHTML = `
             <button onclick="cancelDeployment('${deploymentData.deployment_id}')" 
-                    class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                    class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
                 <i class="fas fa-times mr-2"></i>Clear Failed Deployment
             </button>
             <button onclick="triggerNewDeployment()" 
-                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
                 <i class="fas fa-redo mr-2"></i>Retry Deployment
             </button>
         `;
+    } else {
+        console.error('ERROR: Could not find button container to replace with failed deployment buttons');
+        // Try to find the launch button and replace its parent container
+        const launchBtn = document.getElementById('launch-deployment-btn');
+        if (launchBtn && launchBtn.parentElement) {
+            console.log('Found button container via launch button parent');
+            launchBtn.parentElement.innerHTML = `
+                <button onclick="cancelDeployment('${deploymentData.deployment_id}')" 
+                        class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
+                    <i class="fas fa-times mr-2"></i>Clear Failed Deployment
+                </button>
+                <button onclick="triggerNewDeployment()" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-redo mr-2"></i>Retry Deployment
+                </button>
+            `;
+        } else {
+            console.error('CRITICAL ERROR: Cannot find any button container in pending deployment section');
+        }
     }
     
     // Show the section
