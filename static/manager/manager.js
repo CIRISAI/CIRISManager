@@ -2453,6 +2453,11 @@ function showPendingDeployment(deploymentData) {
     document.getElementById('affected-agents-count').textContent = 
         `${deploymentData.affected_agents || 0} agents will be updated`;
     
+    // Fetch and show deployment preview
+    if (deploymentData.deployment_id) {
+        fetchDeploymentPreview(deploymentData.deployment_id);
+    }
+    
     // Show the section
     section.classList.remove('hidden');
     
@@ -2460,10 +2465,114 @@ function showPendingDeployment(deploymentData) {
     setupDeploymentButtons(deploymentData);
 }
 
+async function fetchDeploymentPreview(deploymentId) {
+    try {
+        const response = await fetch(`/manager/v1/updates/preview/${deploymentId}`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('idToken')}`
+            }
+        });
+        
+        if (!response.ok) {
+            console.error('Failed to fetch deployment preview:', response.status);
+            return;
+        }
+        
+        const preview = await response.json();
+        displayDeploymentPreview(preview);
+    } catch (error) {
+        console.error('Error fetching deployment preview:', error);
+    }
+}
+
+function displayDeploymentPreview(preview) {
+    // Find or create preview container
+    let previewContainer = document.getElementById('deployment-preview');
+    if (!previewContainer) {
+        // Create preview container after the affected agents count
+        const affectedAgentsEl = document.getElementById('affected-agents-count');
+        if (!affectedAgentsEl) return;
+        
+        previewContainer = document.createElement('div');
+        previewContainer.id = 'deployment-preview';
+        previewContainer.className = 'mt-4 p-3 bg-gray-50 rounded-lg';
+        affectedAgentsEl.parentElement.parentElement.appendChild(previewContainer);
+    }
+    
+    // Build preview HTML
+    let html = '<h4 class="font-semibold mb-2 text-sm">Deployment Preview:</h4>';
+    
+    if (preview.error) {
+        html += `<p class="text-red-600">${preview.error}</p>`;
+    } else {
+        // Summary
+        html += `<div class="text-sm mb-2">
+            <span class="font-medium">${preview.agents_to_update}</span> of 
+            <span class="font-medium">${preview.total_agents}</span> agents need updates
+        </div>`;
+        
+        // Agent details table
+        if (preview.agent_details && preview.agent_details.length > 0) {
+            html += '<div class="overflow-x-auto"><table class="min-w-full text-xs">';
+            html += '<thead><tr class="border-b">';
+            html += '<th class="text-left py-1">Agent</th>';
+            html += '<th class="text-left py-1">Current Version</th>';
+            html += '<th class="text-left py-1">Status</th>';
+            html += '<th class="text-left py-1">Group</th>';
+            html += '</tr></thead><tbody>';
+            
+            preview.agent_details.forEach(agent => {
+                const statusClass = agent.needs_update ? 'text-orange-600' : 'text-green-600';
+                const statusIcon = agent.needs_update ? '⚠️' : '✓';
+                
+                html += '<tr class="border-b">';
+                html += `<td class="py-1 pr-2">${agent.agent_name}</td>`;
+                html += `<td class="py-1 pr-2">${agent.current_version || 'unknown'}</td>`;
+                html += `<td class="py-1 pr-2 ${statusClass}">${statusIcon} ${agent.status}</td>`;
+                html += `<td class="py-1">${agent.canary_group || 'none'}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table></div>';
+        }
+        
+        // Show deployment order for agents that need updates
+        const agentsToUpdate = preview.agent_details.filter(a => a.needs_update);
+        if (agentsToUpdate.length > 0) {
+            const explorers = agentsToUpdate.filter(a => a.canary_group === 'explorer');
+            const earlyAdopters = agentsToUpdate.filter(a => a.canary_group === 'early_adopter');
+            const general = agentsToUpdate.filter(a => !a.canary_group || a.canary_group === 'general');
+            
+            html += '<div class="mt-3 text-xs">';
+            html += '<p class="font-semibold mb-1">Deployment Order:</p>';
+            
+            if (explorers.length > 0) {
+                html += `<div class="ml-2">1. Explorers (${explorers.length}): ${explorers.map(a => a.agent_name).join(', ')}</div>`;
+            }
+            if (earlyAdopters.length > 0) {
+                html += `<div class="ml-2">2. Early Adopters (${earlyAdopters.length}): ${earlyAdopters.map(a => a.agent_name).join(', ')}</div>`;
+            }
+            if (general.length > 0) {
+                html += `<div class="ml-2">3. General (${general.length}): ${general.map(a => a.agent_name).join(', ')}</div>`;
+            }
+            
+            html += '</div>';
+        }
+    }
+    
+    previewContainer.innerHTML = html;
+}
+
 function hidePendingDeployment() {
     const section = document.getElementById('pending-deployment-section');
     if (section) {
         section.classList.add('hidden');
+    }
+    
+    // Also hide preview
+    const preview = document.getElementById('deployment-preview');
+    if (preview) {
+        preview.remove();
     }
 }
 
@@ -2506,6 +2615,11 @@ function showFailedDeployment(deploymentData) {
         formatDate(deploymentData.staged_at);
     document.getElementById('affected-agents-count').textContent = 
         `${deploymentData.affected_agents || 0} agents were targeted`;
+    
+    // Fetch and show deployment preview for failed deployments too
+    if (deploymentData.deployment_id) {
+        fetchDeploymentPreview(deploymentData.deployment_id);
+    }
     
     // Hide launch/reject buttons and show clear/retry buttons
     // Look for the button container - it has classes "flex flex-wrap gap-2"

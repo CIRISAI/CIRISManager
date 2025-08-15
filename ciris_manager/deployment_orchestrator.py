@@ -1124,6 +1124,121 @@ class DeploymentOrchestrator:
             logger.error(f"Error getting container image digest for {container_name}: {e}")
             return None
 
+    def _get_agent_canary_group(self, agent_id: str) -> str:
+        """
+        Get the canary group for an agent.
+
+        Args:
+            agent_id: ID of the agent
+        Returns:
+            Canary group name: 'explorer', 'early_adopter', 'general', or None
+        """
+        if not self.manager or not self.manager.agent_registry:
+            return None
+
+        # Get from agent registry metadata
+        try:
+            agent_metadata = self.manager.agent_registry.get_agent_metadata(agent_id)
+            if agent_metadata:
+                return agent_metadata.get("metadata", {}).get("canary_group", "general")
+        except Exception:
+            pass
+
+        return "general"  # Default to general if not specified
+
+    async def get_deployment_preview(self, deployment_id: str) -> Dict[str, Any]:
+        """
+        Get a preview of what a deployment will do without launching it.
+        Shows which agents need updates and which are already current.
+
+        Args:
+            deployment_id: ID of the pending deployment
+        Returns:
+            Preview data with per-agent update status
+        """
+        if deployment_id not in self.pending_deployments:
+            return {"error": "Deployment not found"}
+
+        deployment = self.pending_deployments[deployment_id]
+        if not deployment.notification:
+            return {"error": "No update notification for deployment"}
+
+        # Get all agents
+        from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+        if not self.manager or not self.manager.agent_registry:
+            return {"error": "Manager not available"}
+
+        discovery = DockerAgentDiscovery(self.manager.agent_registry)
+        all_agents = discovery.discover_agents()
+
+        # Check which agents need updates
+        agents_needing_update, nginx_needs_update = await self._check_agents_need_update(
+            deployment.notification, all_agents
+        )
+
+        # Build preview data
+        preview = {
+            "deployment_id": deployment_id,
+            "version": deployment.notification.version or "unknown",
+            "total_agents": len(all_agents),
+            "agents_to_update": len(agents_needing_update),
+            "nginx_needs_update": nginx_needs_update,
+            "agent_details": [],
+        }
+
+        # Get current and target digests for each agent
+        target_agent_digest = None
+        if deployment.notification.agent_image:
+            target_agent_digest = await self._get_local_image_digest(
+                deployment.notification.agent_image
+            )
+
+        # Add details for each agent
+        for agent in all_agents:
+            current_digest = await self._get_container_image_digest(f"ciris-{agent.agent_id}")
+
+            needs_update = agent in agents_needing_update
+            agent_detail = {
+                "agent_id": agent.agent_id,
+                "agent_name": agent.agent_name,
+                "needs_update": needs_update,
+                "current_digest": current_digest[:12] if current_digest else "unknown",
+                "target_digest": target_agent_digest[:12]
+                if target_agent_digest and needs_update
+                else None,
+                "status": "Up to date" if not needs_update else "Needs update",
+                "canary_group": self._get_agent_canary_group(agent.agent_id),
+            }
+
+            # Try to get current version from agent
+            try:
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    from ciris_manager.agent_auth import get_agent_auth
+
+                    auth = get_agent_auth()
+                    headers = auth.get_auth_headers(agent.agent_id)
+
+                    health_url = f"http://localhost:{agent.api_port}/v1/system/health"
+                    response = await client.get(health_url, headers=headers)
+
+                    if response.status_code == 200:
+                        health_data = response.json()
+                        if isinstance(health_data, dict) and health_data.get("data"):
+                            health_data = health_data["data"]
+                        agent_detail["current_version"] = health_data.get("version", "unknown")
+            except Exception:
+                agent_detail["current_version"] = "unknown"
+
+            preview["agent_details"].append(agent_detail)
+
+        # Sort agents by update status and canary group
+        preview["agent_details"].sort(
+            key=lambda x: (not x["needs_update"], x.get("canary_group", ""), x["agent_id"])
+        )
+
+        return preview
+
     async def _check_agents_need_update(
         self,
         notification: UpdateNotification,

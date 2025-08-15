@@ -1270,6 +1270,18 @@ def create_routes(manager: Any) -> APIRouter:
 
         return {"pending": False}
 
+    @router.get("/updates/preview/{deployment_id}")
+    async def preview_deployment(
+        deployment_id: str, _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """
+        Get a preview of what a deployment will do.
+        Shows which agents need updates and which are already current.
+        Designed for scale - efficiently checks all agents.
+        """
+        preview = await deployment_orchestrator.get_deployment_preview(deployment_id)
+        return preview
+
     @router.post("/updates/launch")
     async def launch_deployment(
         request: Dict[str, str], _user: Dict[str, str] = auth_dependency
