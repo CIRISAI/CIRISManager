@@ -74,6 +74,29 @@ class DeploymentOrchestrator:
             except Exception as e:
                 logger.warning(f"Failed to load deployment state: {e}")
 
+    def _save_state(self) -> None:
+        """Save deployment state to persistent storage."""
+        try:
+            state = {
+                "deployments": {
+                    deployment_id: deployment.dict()
+                    for deployment_id, deployment in self.deployments.items()
+                },
+                "current_deployment": self.current_deployment,
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Write to temp file first, then move atomically
+            temp_file = self.deployment_state_file.with_suffix(".tmp")
+            with open(temp_file, "w") as f:
+                json.dump(state, f, indent=2)
+
+            # Atomic rename
+            temp_file.replace(self.deployment_state_file)
+            logger.debug(f"Saved deployment state with {len(self.deployments)} deployments")
+        except Exception as e:
+            logger.error(f"Failed to save deployment state: {e}")
+
     async def start_deployment(
         self,
         notification: UpdateNotification,
@@ -183,6 +206,9 @@ class DeploymentOrchestrator:
 
             self.deployments[deployment_id] = status
             self.current_deployment = deployment_id
+
+            # Save state after creating deployment
+            self._save_state()
 
             # Start deployment in background with only agents that need updates
             asyncio.create_task(
@@ -302,6 +328,7 @@ class DeploymentOrchestrator:
 
             self.deployments[deployment_id] = deployment
             self.current_deployment = deployment_id
+            self._save_state()
 
             # Get agents needing update
             from ciris_manager.docker_discovery import DockerAgentDiscovery
@@ -349,6 +376,7 @@ class DeploymentOrchestrator:
         deployment.message = reason
 
         self.deployments[deployment_id] = deployment
+        self._save_state()
 
         # Audit the rejection
         from ciris_manager.audit import audit_deployment_action
@@ -1124,6 +1152,7 @@ class DeploymentOrchestrator:
             else:
                 status.message = f"Unknown deployment strategy: {notification.strategy}"
                 status.status = "failed"
+                self._save_state()
 
         except Exception as e:
             logger.error(f"Deployment {deployment_id} failed: {e}", exc_info=True)
@@ -1137,6 +1166,7 @@ class DeploymentOrchestrator:
             if deployment_status:
                 deployment_status.status = "failed"
                 deployment_status.message = str(e)
+                self._save_state()
         finally:
             async with self._deployment_lock:
                 if self.current_deployment == deployment_id:
@@ -1147,6 +1177,7 @@ class DeploymentOrchestrator:
             if deployment_status and deployment_status.status == "in_progress":
                 deployment_status.status = "completed"
                 deployment_status.completed_at = datetime.now(timezone.utc).isoformat()
+                self._save_state()
 
                 # Promote staged versions to current (n+1 → n, n → n-1, n-1 → n-2)
                 tracker = get_version_tracker()
@@ -1391,6 +1422,7 @@ class DeploymentOrchestrator:
             )
             status.message = "Canary deployment requires agent registry with group assignments"
             status.status = "failed"
+            self._save_state()
             return
 
         # Check if we have any agents in canary groups
@@ -1400,6 +1432,7 @@ class DeploymentOrchestrator:
                 "No agents assigned to canary groups, cannot proceed with canary deployment"
             )
             status.status = "failed"
+            self._save_state()
             return
 
         # Phase 1: Explorers (if any)
@@ -1408,6 +1441,7 @@ class DeploymentOrchestrator:
         if explorers:
             status.canary_phase = "explorers"
             status.message = f"Notifying {len(explorers)} explorer agents"
+            self._save_state()
             logger.info(
                 f"Deployment {deployment_id}: Starting explorer phase with {len(explorers)} pre-assigned explorer agents"
             )
@@ -1424,6 +1458,7 @@ class DeploymentOrchestrator:
             ):
                 status.message = "Explorer phase failed - no agents reached stable WORK state"
                 status.status = "failed"
+                self._save_state()
                 logger.error(
                     f"Deployment {deployment_id}: Explorer phase failed, aborting deployment"
                 )
@@ -1444,6 +1479,7 @@ class DeploymentOrchestrator:
         if early_adopters:
             status.canary_phase = "early_adopters"
             status.message = f"Notifying {len(early_adopters)} early adopter agents"
+            self._save_state()
             logger.info(
                 f"Deployment {deployment_id}: Starting early adopter phase with {len(early_adopters)} pre-assigned agents"
             )
@@ -1464,6 +1500,7 @@ class DeploymentOrchestrator:
             ):
                 status.message = "Early adopter phase failed - no agents reached stable WORK state"
                 status.status = "failed"
+                self._save_state()
                 logger.error(
                     f"Deployment {deployment_id}: Early adopter phase failed, aborting deployment"
                 )
@@ -1486,6 +1523,7 @@ class DeploymentOrchestrator:
         if general:
             status.canary_phase = "general"
             status.message = f"Notifying {len(general)} general agents"
+            self._save_state()
             logger.info(
                 f"Deployment {deployment_id}: Starting general phase with {len(general)} pre-assigned agents"
             )
@@ -1528,6 +1566,7 @@ class DeploymentOrchestrator:
         running_agents = [a for a in agents if a.is_running]
 
         status.message = f"Updating {len(running_agents)} agents immediately"
+        self._save_state()
         await self._update_agent_group(deployment_id, notification, running_agents)
 
     async def _update_agent_group(
@@ -1572,6 +1611,9 @@ class DeploymentOrchestrator:
                     status.agents_deferred += 1
                 else:
                     status.agents_failed += 1
+
+        # Save state after updating counts
+        self._save_state()
 
     async def _update_single_agent(
         self,
