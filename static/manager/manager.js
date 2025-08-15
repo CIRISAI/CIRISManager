@@ -2538,6 +2538,20 @@ async function updateDeploymentStatus() {
                     </div>
                     ${data.message ? `<div class="text-sm text-gray-600 italic">${data.message}</div>` : ''}
                 </div>
+                
+                <!-- Action Buttons for Failed Deployments -->
+                ${data.status === 'failed' ? `
+                    <div class="flex gap-2 pt-3 border-t mt-3">
+                        <button onclick="cancelDeployment('${data.deployment_id}')" 
+                                class="px-3 py-1.5 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors">
+                            <i class="fas fa-times mr-1"></i>Clear & Reset
+                        </button>
+                        <button onclick="triggerNewDeployment()" 
+                                class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-redo mr-1"></i>Retry Deployment
+                        </button>
+                    </div>
+                ` : ''}
             `;
         } else {
             statusDiv.innerHTML = '<p class="text-gray-600">No active deployment</p>';
