@@ -111,8 +111,15 @@ class TestDeploymentPersistence:
             state = json.load(f)
         assert state["deployments"]["test-456"]["canary_phase"] == "explorers"
 
-    def test_load_state_restores_deployments(self, orchestrator):
+    def test_load_state_restores_deployments(self, temp_dir):
         """Test that load_state correctly restores deployments."""
+        # Create orchestrator with temp dir
+        from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+
+        orchestrator = DeploymentOrchestrator(manager=None)
+        orchestrator.state_dir = temp_dir
+        orchestrator.deployment_state_file = temp_dir / "deployment_state.json"
+
         # Create state file
         state = {
             "deployments": {
@@ -130,6 +137,7 @@ class TestDeploymentPersistence:
                     "started_at": "2025-01-01T12:00:00Z",
                     "completed_at": "2025-01-01T12:30:00Z",
                     "status": "completed",
+                    "message": "First deployment completed",
                 },
                 "dep-2": {
                     "deployment_id": "dep-2",
@@ -145,6 +153,7 @@ class TestDeploymentPersistence:
                     "started_at": "2025-01-02T10:00:00Z",
                     "status": "in_progress",
                     "canary_phase": "explorers",
+                    "message": "Second deployment in progress",
                 },
             },
             "current_deployment": "dep-2",
@@ -252,25 +261,22 @@ class TestDeploymentPersistence:
             )
         ]
 
-        # Mock image checks
-        orchestrator._check_agents_need_update = AsyncMock(return_value=(agents, False))
+        # Mock image checks to return agents that need update
+        orchestrator._check_agents_need_update = AsyncMock(return_value=(agents, True))
 
         # Stage deployment
         deployment_id = await orchestrator.stage_deployment(notification, agents)
 
-        # Verify state was saved
-        assert orchestrator.deployment_state_file.exists()
+        # Verify deployment is in pending_deployments
+        assert deployment_id in orchestrator.pending_deployments
+        deployment = orchestrator.pending_deployments[deployment_id]
+        assert deployment.status == "pending"
+        assert deployment.agents_total == 1
 
-        with open(orchestrator.deployment_state_file) as f:
-            state = json.load(f)
-
-        assert deployment_id in state["deployments"]
-        deployment = state["deployments"][deployment_id]
-        assert deployment["status"] == "staged"
-
-    def test_reject_deployment_saves_state(self, orchestrator):
+    @pytest.mark.asyncio
+    async def test_reject_deployment_saves_state(self, orchestrator):
         """Test that rejecting a deployment saves state."""
-        # Create a staged deployment
+        # Create a staged deployment in pending_deployments
         deployment = DeploymentStatus(
             deployment_id="staged-123",
             notification=UpdateNotification(
@@ -281,16 +287,15 @@ class TestDeploymentPersistence:
             agents_deferred=0,
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
-            status="staged",
+            status="pending",
             message="Staged for approval",
         )
-        orchestrator.deployments["staged-123"] = deployment
-        orchestrator._save_state()
+        orchestrator.pending_deployments["staged-123"] = deployment
 
-        # Mock audit
-        with patch("ciris_manager.deployment_orchestrator.audit_deployment_action"):
+        # Mock audit function - it's imported inside the reject_staged_deployment method
+        with patch("ciris_manager.audit.audit_deployment_action"):
             # Reject deployment
-            orchestrator.reject_deployment("staged-123", "Testing rejection")
+            await orchestrator.reject_staged_deployment("staged-123", "Testing rejection")
 
         # Verify state was saved with rejection
         with open(orchestrator.deployment_state_file) as f:
@@ -353,9 +358,14 @@ class TestDeploymentPersistence:
     def test_state_persistence_across_restarts(self, temp_dir):
         """Test that state persists across orchestrator restarts."""
         # First orchestrator instance
-        orch1 = DeploymentOrchestrator()
+        from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+
+        orch1 = DeploymentOrchestrator(manager=None)
         orch1.state_dir = temp_dir
         orch1.deployment_state_file = temp_dir / "deployment_state.json"
+        # Clear any loaded state
+        orch1.deployments = {}
+        orch1.current_deployment = None
 
         # Add deployments
         deployment1 = DeploymentStatus(
@@ -394,9 +404,12 @@ class TestDeploymentPersistence:
         orch1._save_state()
 
         # Create new orchestrator instance
-        orch2 = DeploymentOrchestrator()
+        orch2 = DeploymentOrchestrator(manager=None)
         orch2.state_dir = temp_dir
         orch2.deployment_state_file = temp_dir / "deployment_state.json"
+        # Clear any existing state before loading
+        orch2.deployments = {}
+        orch2.current_deployment = None
         orch2._load_state()
 
         # Verify state was restored

@@ -79,7 +79,7 @@ class DeploymentOrchestrator:
         try:
             state = {
                 "deployments": {
-                    deployment_id: deployment.dict()
+                    deployment_id: deployment.model_dump()
                     for deployment_id, deployment in self.deployments.items()
                 },
                 "current_deployment": self.current_deployment,
