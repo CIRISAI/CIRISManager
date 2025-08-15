@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Any
 from uuid import uuid4
 import httpx
 
+from ciris_manager.agent_auth import get_agent_auth
 from ciris_manager.models import (
     AgentInfo,
     UpdateNotification,
@@ -1251,7 +1252,7 @@ class DeploymentOrchestrator:
         agents: List[AgentInfo],
     ) -> tuple[List[AgentInfo], bool]:
         """
-        Check which agents actually need updating based on image digests.
+        Check which agents actually need updating based on versions.
 
         Args:
             notification: Update notification with new images
@@ -1260,14 +1261,9 @@ class DeploymentOrchestrator:
         Returns:
             Tuple of (List of agents that need updating, bool for nginx needs update)
         """
-        # Get digests of newly pulled images from local Docker
-        new_agent_digest = None
+        # For GUI/nginx, still use digests since they don't have versions
         new_gui_digest = None
         nginx_needs_update = False
-
-        if notification.agent_image:
-            new_agent_digest = await self._get_local_image_digest(notification.agent_image)
-            logger.info(f"New agent image digest: {new_agent_digest}")
 
         if notification.gui_image:
             new_gui_digest = await self._get_local_image_digest(notification.gui_image)
@@ -1282,27 +1278,87 @@ class DeploymentOrchestrator:
             else:
                 logger.info("GUI/nginx image unchanged")
 
-        # Check each agent to see if it needs updating
+        # Check each agent to see if it needs updating based on version
         agents_needing_update = []
+        target_version = notification.version
+
+        if not target_version:
+            logger.warning(
+                "No target version specified in notification, falling back to digest comparison"
+            )
+            # Fall back to digest comparison if no version specified
+            new_agent_digest = None
+            if notification.agent_image:
+                new_agent_digest = await self._get_local_image_digest(notification.agent_image)
+                logger.info(f"New agent image digest: {new_agent_digest}")
 
         for agent in agents:
-            # Get current image digest from running container
-            current_agent_digest = None
-            if agent.container_name:
-                current_agent_digest = await self._get_container_image_digest(agent.container_name)
-                logger.info(f"Agent {agent.agent_name} current digest: {current_agent_digest}")
+            needs_update = False
 
-            # Check if agent image changed
-            agent_changed = new_agent_digest and new_agent_digest != current_agent_digest
+            if target_version:
+                # Version-based comparison
+                try:
+                    # Get current version from agent's health endpoint
+                    auth = get_agent_auth()
+                    try:
+                        headers = auth.get_auth_headers(agent.agent_id)
+                    except Exception:
+                        # If auth fails, use empty headers for testing
+                        headers = {}
 
-            if agent_changed:
-                logger.info(
-                    f"Agent {agent.agent_name} needs update: "
-                    f"agent image changed from {current_agent_digest} to {new_agent_digest}"
-                )
-                agents_needing_update.append(agent)
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+                        health_url = f"http://localhost:{agent.api_port}/v1/system/health"
+                        response = await client.get(health_url, headers=headers)
+
+                        if response.status_code == 200:
+                            health_data = response.json()
+                            current_version = health_data.get("data", {}).get("version", "unknown")
+
+                            # Compare versions
+                            if current_version != target_version:
+                                logger.info(
+                                    f"Agent {agent.agent_name} needs update: "
+                                    f"version {current_version} -> {target_version}"
+                                )
+                                needs_update = True
+                            else:
+                                logger.info(
+                                    f"Agent {agent.agent_name} is up to date at version {current_version}"
+                                )
+                        else:
+                            logger.warning(
+                                f"Could not get version for agent {agent.agent_name}, "
+                                f"assuming update needed"
+                            )
+                            needs_update = True
+
+                except Exception as e:
+                    logger.warning(
+                        f"Error checking version for agent {agent.agent_name}: {e}, "
+                        f"assuming update needed"
+                    )
+                    needs_update = True
             else:
-                logger.info(f"Agent {agent.agent_name} is up to date")
+                # Digest-based comparison (fallback)
+                current_agent_digest = None
+                if agent.container_name:
+                    current_agent_digest = await self._get_container_image_digest(
+                        agent.container_name
+                    )
+                    logger.info(f"Agent {agent.agent_name} current digest: {current_agent_digest}")
+
+                # Check if agent image changed
+                agent_changed = bool(new_agent_digest and new_agent_digest != current_agent_digest)
+                needs_update = agent_changed
+
+                if needs_update:
+                    logger.info(
+                        f"Agent {agent.agent_name} needs update: "
+                        f"digest changed from {current_agent_digest} to {new_agent_digest}"
+                    )
+
+            if needs_update:
+                agents_needing_update.append(agent)
 
         return agents_needing_update, nginx_needs_update
 

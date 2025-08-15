@@ -80,69 +80,51 @@ class TestDeploymentPreview:
             mock_discovery = MockDiscovery.return_value
             mock_discovery.discover_agents.return_value = mock_agents
 
-            # Mock image digests - Datum is already updated, others need updates
-            with patch.object(orchestrator, "_get_local_image_digest") as mock_local_digest:
-                mock_local_digest.return_value = "sha256:newhash123456"
+            # Mock auth
+            with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
+                mock_auth.return_value.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test"
+                }
 
-                with patch.object(
-                    orchestrator, "_get_container_image_digest"
-                ) as mock_container_digest:
-                    # Return different digests for different containers
-                    def get_container_digest(container_name):
-                        if "datum" in container_name:
-                            return "sha256:newhash123456"  # Already updated
-                        else:
-                            return "sha256:oldhash789012"  # Needs update
+                # Mock agent health checks for versions
+                with patch("httpx.AsyncClient") as MockClient:
+                    mock_client = MockClient.return_value.__aenter__.return_value
 
-                    mock_container_digest.side_effect = get_container_digest
+                    async def mock_get(url, headers):
+                        response = MagicMock()
+                        response.status_code = 200
 
-                    # Mock auth
-                    with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
-                        mock_auth.return_value.get_auth_headers.return_value = {
-                            "Authorization": "Bearer test"
-                        }
+                        if "8001" in url:  # Datum
+                            response.json.return_value = {
+                                "data": {"version": "1.4.2", "cognitive_state": "work"}
+                            }
+                        elif "8002" in url:  # Sage
+                            response.json.return_value = {
+                                "data": {"version": "1.4.1", "cognitive_state": "work"}
+                            }
+                        else:  # Nexus
+                            response.json.return_value = {
+                                "data": {"version": "1.4.0", "cognitive_state": "work"}
+                            }
+                        return response
 
-                        # Mock agent health checks for versions
-                        with patch("httpx.AsyncClient") as MockClient:
-                            mock_client = MockClient.return_value.__aenter__.return_value
+                    mock_client.get = mock_get
 
-                            async def mock_get(url, headers):
-                                response = MagicMock()
-                                response.status_code = 200
+                    # Mock canary groups
+                    with patch.object(orchestrator, "_get_agent_canary_group") as mock_group:
 
-                                if "8001" in url:  # Datum
-                                    response.json.return_value = {
-                                        "data": {"version": "1.4.2", "cognitive_state": "work"}
-                                    }
-                                elif "8002" in url:  # Sage
-                                    response.json.return_value = {
-                                        "data": {"version": "1.4.1", "cognitive_state": "work"}
-                                    }
-                                else:  # Nexus
-                                    response.json.return_value = {
-                                        "data": {"version": "1.4.0", "cognitive_state": "work"}
-                                    }
-                                return response
+                        def get_canary_group(agent_id):
+                            if agent_id == "datum":
+                                return "early_adopter"
+                            elif agent_id == "sage":
+                                return "general"
+                            else:
+                                return "explorer"
 
-                            mock_client.get = mock_get
+                        mock_group.side_effect = get_canary_group
 
-                            # Mock canary groups
-                            with patch.object(
-                                orchestrator, "_get_agent_canary_group"
-                            ) as mock_group:
-
-                                def get_canary_group(agent_id):
-                                    if agent_id == "datum":
-                                        return "early_adopter"
-                                    elif agent_id == "sage":
-                                        return "general"
-                                    else:
-                                        return "explorer"
-
-                                mock_group.side_effect = get_canary_group
-
-                                # Get preview
-                                preview = await orchestrator.get_deployment_preview(deployment_id)
+                        # Get preview
+                        preview = await orchestrator.get_deployment_preview(deployment_id)
 
         # Verify preview structure
         assert "error" not in preview
@@ -225,88 +207,70 @@ class TestDeploymentPreview:
             mock_discovery = MockDiscovery.return_value
             mock_discovery.discover_agents.return_value = mock_agents
 
-            # Mock image digests - 30% already updated, 70% need updates
-            with patch.object(orchestrator, "_get_local_image_digest") as mock_local_digest:
-                mock_local_digest.return_value = "sha256:newhash2000"
+            # Mock auth for all agents
+            with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
+                mock_auth.return_value.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test"
+                }
 
-                with patch.object(
-                    orchestrator, "_get_container_image_digest"
-                ) as mock_container_digest:
+                # Mock agent health checks - use fast timeout
+                with patch("httpx.AsyncClient") as MockClient:
+                    mock_client = MockClient.return_value.__aenter__.return_value
 
-                    def get_container_digest(container_name):
-                        # First 30 agents are already updated
-                        agent_num = int(container_name.split("agent")[1])
-                        if agent_num < 30:
-                            return "sha256:newhash2000"
-                        else:
-                            return "sha256:oldhash1999"
+                    async def mock_get(url, headers):
+                        response = MagicMock()
+                        # Simulate some agents being unreachable
+                        port = int(url.split(":")[2].split("/")[0])
+                        agent_num = port - 8000
 
-                    mock_container_digest.side_effect = get_container_digest
+                        if agent_num % 10 == 0:  # Every 10th agent is unreachable
+                            raise Exception("Connection timeout")
 
-                    # Mock auth for all agents
-                    with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
-                        mock_auth.return_value.get_auth_headers.return_value = {
-                            "Authorization": "Bearer test"
+                        response.status_code = 200
+                        response.json.return_value = {
+                            "data": {
+                                "version": "2.0.0" if agent_num < 30 else "1.9.0",
+                                "cognitive_state": "work",
+                            }
                         }
+                        return response
 
-                        # Mock agent health checks - use fast timeout
-                        with patch("httpx.AsyncClient") as MockClient:
-                            mock_client = MockClient.return_value.__aenter__.return_value
+                    mock_client.get = mock_get
 
-                            async def mock_get(url, headers):
-                                response = MagicMock()
-                                # Simulate some agents being unreachable
-                                port = int(url.split(":")[2].split("/")[0])
-                                agent_num = port - 8000
+                    # Mock canary groups - distribute agents
+                    with patch.object(orchestrator, "_get_agent_canary_group") as mock_group:
 
-                                if agent_num % 10 == 0:  # Every 10th agent is unreachable
-                                    raise Exception("Connection timeout")
+                        def get_canary_group(agent_id):
+                            num = int(agent_id.replace("agent", ""))
+                            if num < 10:
+                                return "explorer"
+                            elif num < 30:
+                                return "early_adopter"
+                            else:
+                                return "general"
 
-                                response.status_code = 200
-                                response.json.return_value = {
-                                    "data": {
-                                        "version": "2.0.0" if agent_num < 30 else "1.9.0",
-                                        "cognitive_state": "work",
-                                    }
-                                }
-                                return response
+                        mock_group.side_effect = get_canary_group
 
-                            mock_client.get = mock_get
+                        # Time the preview generation
+                        import time
 
-                            # Mock canary groups - distribute agents
-                            with patch.object(
-                                orchestrator, "_get_agent_canary_group"
-                            ) as mock_group:
-
-                                def get_canary_group(agent_id):
-                                    num = int(agent_id.replace("agent", ""))
-                                    if num < 10:
-                                        return "explorer"
-                                    elif num < 30:
-                                        return "early_adopter"
-                                    else:
-                                        return "general"
-
-                                mock_group.side_effect = get_canary_group
-
-                                # Time the preview generation
-                                import time
-
-                                start = time.time()
-                                preview = await orchestrator.get_deployment_preview(deployment_id)
-                                elapsed = time.time() - start
+                        start = time.time()
+                        preview = await orchestrator.get_deployment_preview(deployment_id)
+                        elapsed = time.time() - start
 
         # Verify it completes quickly even with many agents
         assert elapsed < 5.0  # Should complete within 5 seconds
 
         # Verify preview correctness
         assert preview["total_agents"] == 100
-        assert preview["agents_to_update"] == 70  # 70% need updates
+        # 70 agents need updates (agents 30-99)
+        # Plus 3 unreachable agents that are at version 2.0.0 (0, 10, 20) are counted as needing updates
+        assert preview["agents_to_update"] == 73  # 70 actually need + 3 unreachable but up-to-date
         assert len(preview["agent_details"]) == 100
 
         # Verify sorting - agents needing updates should be first
-        needs_update_count = sum(1 for a in preview["agent_details"][:70] if a["needs_update"])
-        assert needs_update_count == 70
+        needs_update_count = sum(1 for a in preview["agent_details"][:73] if a["needs_update"])
+        assert needs_update_count == 73
 
         # Verify unknown versions for unreachable agents
         unknown_versions = sum(
@@ -368,6 +332,7 @@ class TestDeploymentPreview:
             agent_image="ghcr.io/cirisai/ciris-agent:latest",
             strategy="canary",
             message="Test canary deployment",
+            version="2.0.0",  # Target version different from current 1.0.0
         )
 
         # Create deployment status directly since stage_deployment needs agents
@@ -432,37 +397,33 @@ class TestDeploymentPreview:
             mock_discovery = MockDiscovery.return_value
             mock_discovery.discover_agents.return_value = mock_agents
 
-            with patch.object(orchestrator, "_get_local_image_digest") as mock_local_digest:
-                mock_local_digest.return_value = "sha256:newversion"
+            with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
+                mock_auth.return_value.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test"
+                }
 
-                with patch.object(
-                    orchestrator, "_get_container_image_digest"
-                ) as mock_container_digest:
-                    # All agents need updates
-                    mock_container_digest.return_value = "sha256:oldversion"
+                with patch("httpx.AsyncClient") as MockClient:
+                    mock_client = MockClient.return_value.__aenter__.return_value
+                    response = MagicMock()
+                    response.status_code = 200
+                    response.json.return_value = {
+                        "data": {"version": "1.0.0", "cognitive_state": "work"}
+                    }
+                    mock_client.get = AsyncMock(return_value=response)
 
-                    with patch("httpx.AsyncClient") as MockClient:
-                        mock_client = MockClient.return_value.__aenter__.return_value
-                        response = MagicMock()
-                        response.status_code = 200
-                        response.json.return_value = {
-                            "data": {"version": "1.0.0", "cognitive_state": "work"}
-                        }
-                        mock_client.get = AsyncMock(return_value=response)
+                    with patch.object(orchestrator, "_get_agent_canary_group") as mock_group:
 
-                        with patch.object(orchestrator, "_get_agent_canary_group") as mock_group:
+                        def get_canary_group(agent_id):
+                            if "explorer" in agent_id:
+                                return "explorer"
+                            elif "early" in agent_id:
+                                return "early_adopter"
+                            else:
+                                return "general"
 
-                            def get_canary_group(agent_id):
-                                if "explorer" in agent_id:
-                                    return "explorer"
-                                elif "early" in agent_id:
-                                    return "early_adopter"
-                                else:
-                                    return "general"
+                        mock_group.side_effect = get_canary_group
 
-                            mock_group.side_effect = get_canary_group
-
-                            preview = await orchestrator.get_deployment_preview(deployment_id)
+                        preview = await orchestrator.get_deployment_preview(deployment_id)
 
         # Verify all agents need updates
         assert preview["agents_to_update"] == 7
