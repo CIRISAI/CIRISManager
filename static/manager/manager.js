@@ -1519,17 +1519,17 @@ async function cancelDeployment(deploymentId) {
         if (response.ok) {
             const result = await response.json();
             console.log('Deployment successfully cancelled:', result);
-            showToast('Deployment cleared. You can now start a new deployment.', 'success');
+            alert('Deployment cleared successfully! You can now start a new deployment.');
             await updateDeploymentTab();
         } else {
             const error = await response.json();
             console.error('ERROR: Failed to cancel deployment:', error);
-            showToast(error.detail || 'Failed to cancel deployment', 'error');
+            alert(error.detail || 'Failed to cancel deployment');
             throw new Error(`Failed to cancel deployment: ${error.detail || response.status}`);
         }
     } catch (error) {
         console.error('ERROR: Exception while cancelling deployment:', error);
-        showToast('Failed to cancel deployment: ' + error.message, 'error');
+        alert('Failed to cancel deployment: ' + error.message);
         throw error; // Re-throw to make failures visible
     }
 }
@@ -1552,7 +1552,7 @@ async function triggerNewDeployment() {
             
             if (data.pending && data.status === 'failed') {
                 console.error('ERROR: Failed deployment is blocking. Must clear it first.');
-                showToast('Please clear the failed deployment first using the "Clear Failed Deployment" button', 'error');
+                alert('Please clear the failed deployment first using the "Clear Failed Deployment" button');
                 return;
             }
         }
@@ -1566,7 +1566,7 @@ async function triggerNewDeployment() {
     }
     
     console.log('NOTE: Manual CD trigger required - no automatic webhook implemented yet');
-    showToast('To retry deployment, the CD pipeline needs to be triggered again. You can also manually trigger from GitHub Actions.', 'info');
+    alert('To retry deployment, the CD pipeline needs to be triggered again. You can also manually trigger from GitHub Actions.');
     
     // TODO: Implement actual deployment trigger
     // This would require an endpoint like /manager/v1/updates/trigger
