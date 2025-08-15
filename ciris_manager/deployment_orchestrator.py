@@ -1233,9 +1233,14 @@ class DeploymentOrchestrator:
 
             preview["agent_details"].append(agent_detail)
 
-        # Sort agents by update status and canary group
+        # Sort agents by update status and canary group (in deployment order)
+        canary_order = {"explorer": 0, "early_adopter": 1, "general": 2}
         preview["agent_details"].sort(
-            key=lambda x: (not x["needs_update"], x.get("canary_group", ""), x["agent_id"])
+            key=lambda x: (
+                not x["needs_update"],
+                canary_order.get(x.get("canary_group", "general"), 2),
+                x["agent_id"],
+            )
         )
 
         return preview

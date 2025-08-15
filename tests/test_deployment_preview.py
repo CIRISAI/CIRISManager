@@ -243,50 +243,58 @@ class TestDeploymentPreview:
 
                     mock_container_digest.side_effect = get_container_digest
 
-                    # Mock agent health checks - use fast timeout
-                    with patch("httpx.AsyncClient") as MockClient:
-                        mock_client = MockClient.return_value.__aenter__.return_value
+                    # Mock auth for all agents
+                    with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth:
+                        mock_auth.return_value.get_auth_headers.return_value = {
+                            "Authorization": "Bearer test"
+                        }
 
-                        async def mock_get(url, headers):
-                            response = MagicMock()
-                            # Simulate some agents being unreachable
-                            port = int(url.split(":")[2].split("/")[0])
-                            agent_num = port - 8000
+                        # Mock agent health checks - use fast timeout
+                        with patch("httpx.AsyncClient") as MockClient:
+                            mock_client = MockClient.return_value.__aenter__.return_value
 
-                            if agent_num % 10 == 0:  # Every 10th agent is unreachable
-                                raise Exception("Connection timeout")
+                            async def mock_get(url, headers):
+                                response = MagicMock()
+                                # Simulate some agents being unreachable
+                                port = int(url.split(":")[2].split("/")[0])
+                                agent_num = port - 8000
 
-                            response.status_code = 200
-                            response.json.return_value = {
-                                "data": {
-                                    "version": "2.0.0" if agent_num < 30 else "1.9.0",
-                                    "cognitive_state": "work",
+                                if agent_num % 10 == 0:  # Every 10th agent is unreachable
+                                    raise Exception("Connection timeout")
+
+                                response.status_code = 200
+                                response.json.return_value = {
+                                    "data": {
+                                        "version": "2.0.0" if agent_num < 30 else "1.9.0",
+                                        "cognitive_state": "work",
+                                    }
                                 }
-                            }
-                            return response
+                                return response
 
-                        mock_client.get = mock_get
+                            mock_client.get = mock_get
 
-                        # Mock canary groups - distribute agents
-                        with patch.object(orchestrator, "_get_agent_canary_group") as mock_group:
+                            # Mock canary groups - distribute agents
+                            with patch.object(
+                                orchestrator, "_get_agent_canary_group"
+                            ) as mock_group:
 
-                            def get_canary_group(agent_id):
-                                num = int(agent_id.replace("agent", ""))
-                                if num < 10:
-                                    return "explorer"
-                                elif num < 30:
-                                    return "early_adopter"
-                                else:
-                                    return "general"
+                                def get_canary_group(agent_id):
+                                    num = int(agent_id.replace("agent", ""))
+                                    if num < 10:
+                                        return "explorer"
+                                    elif num < 30:
+                                        return "early_adopter"
+                                    else:
+                                        return "general"
 
-                            mock_group.side_effect = get_canary_group
+                                mock_group.side_effect = get_canary_group
 
-                            # Time the preview generation
-                            import time
+                                # Time the preview generation
+                                import time
 
-                            start = time.time()
-                            preview = await orchestrator.get_deployment_preview(deployment_id)
-                            elapsed = time.time() - start
+                                start = time.time()
+                                preview = await orchestrator.get_deployment_preview(deployment_id)
+                                elapsed = time.time() - start
 
         # Verify it completes quickly even with many agents
         assert elapsed < 5.0  # Should complete within 5 seconds
@@ -328,6 +336,9 @@ class TestDeploymentPreview:
             staged_at=datetime.now(timezone.utc).isoformat(),
         )
         orchestrator.pending_deployments[deployment_id] = deployment_status
+
+        # Set manager to None to test error handling
+        orchestrator.manager = None
 
         preview = await orchestrator.get_deployment_preview(deployment_id)
         assert preview["error"] == "Manager not available"
