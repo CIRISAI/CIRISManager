@@ -1262,6 +1262,27 @@ def create_routes(manager: Any) -> APIRouter:
         else:
             raise HTTPException(status_code=404, detail="Deployment not found or not pending")
 
+    @router.post("/updates/cancel")
+    async def cancel_deployment(
+        request: Dict[str, str], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, str]:
+        """
+        Cancel a stuck deployment.
+
+        Clears the deployment lock to allow starting a new deployment.
+        """
+        deployment_id = request.get("deployment_id")
+        reason = request.get("reason", "Cancelled due to stuck state")
+
+        if not deployment_id:
+            raise HTTPException(status_code=400, detail="deployment_id required")
+
+        success = await deployment_orchestrator.cancel_stuck_deployment(deployment_id, reason)
+        if success:
+            return {"status": "cancelled", "deployment_id": deployment_id}
+        else:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+
     @router.post("/updates/reject")
     async def reject_deployment(
         request: Dict[str, str], _user: Dict[str, str] = auth_dependency

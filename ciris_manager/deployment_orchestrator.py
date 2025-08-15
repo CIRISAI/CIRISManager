@@ -386,6 +386,47 @@ class DeploymentOrchestrator:
         logger.info(f"Rejected staged deployment {deployment_id}: {reason}")
         return True
 
+    async def cancel_stuck_deployment(
+        self, deployment_id: str, reason: str = "Cancelled due to stuck state"
+    ) -> bool:
+        """
+        Cancel a stuck deployment to allow restarting.
+
+        Args:
+            deployment_id: ID of stuck deployment
+            reason: Reason for cancellation
+
+        Returns:
+            True if deployment was cancelled, False if not found
+        """
+        if deployment_id not in self.deployments:
+            return False
+
+        deployment = self.deployments[deployment_id]
+
+        # Clear current deployment if this is it
+        if self.current_deployment == deployment_id:
+            self.current_deployment = None
+            logger.info(f"Cleared current deployment lock for {deployment_id}")
+
+        # Update deployment status
+        deployment.status = "cancelled"
+        deployment.completed_at = datetime.now(timezone.utc).isoformat()
+        deployment.message = reason
+
+        # Save state
+        self._save_state()
+
+        # Audit the cancellation
+        from ciris_manager.audit import audit_deployment_action
+
+        audit_deployment_action(
+            deployment_id=deployment_id, action="deployment_cancelled", details={"reason": reason}
+        )
+
+        logger.info(f"Cancelled stuck deployment {deployment_id}: {reason}")
+        return True
+
     async def pause_deployment(self, deployment_id: str) -> bool:
         """
         Pause an active deployment.
