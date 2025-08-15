@@ -113,12 +113,14 @@ class TelemetryStorageBackend:
                     # Store container metrics
                     if snapshot.containers:
                         await self._store_container_metrics(
-                            conn, snapshot.containers, snapshot.timestamp
+                            conn, snapshot.containers, snapshot.timestamp, snapshot.snapshot_id
                         )
 
                     # Store agent metrics
                     if snapshot.agents:
-                        await self._store_agent_metrics(conn, snapshot.agents, snapshot.timestamp)
+                        await self._store_agent_metrics(
+                            conn, snapshot.agents, snapshot.timestamp, snapshot.snapshot_id
+                        )
 
                     # Store deployment metrics
                     if snapshot.deployments:
@@ -164,7 +166,7 @@ class TelemetryStorageBackend:
         )
 
     async def _store_container_metrics(
-        self, conn, containers: List[ContainerMetrics], timestamp: datetime
+        self, conn, containers: List[ContainerMetrics], timestamp: datetime, snapshot_id: str
     ) -> None:
         """Store container metrics."""
         # Prepare data for bulk insert
@@ -172,6 +174,7 @@ class TelemetryStorageBackend:
         for container in containers:
             records.append(
                 (
+                    snapshot_id,
                     timestamp,
                     container.container_id,
                     container.container_name,
@@ -199,24 +202,25 @@ class TelemetryStorageBackend:
         await conn.executemany(
             """
             INSERT INTO container_metrics (
-                time, container_id, container_name, image, image_digest,
+                snapshot_id, time, container_id, container_name, image, image_digest,
                 status, health_status, restart_count,
                 cpu_percent, memory_mb, memory_limit_mb, memory_percent,
                 disk_read_mb, disk_write_mb, network_rx_mb, network_tx_mb,
                 created_at, started_at, finished_at, exit_code, error_message
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
         """,
             records,
         )
 
     async def _store_agent_metrics(
-        self, conn, agents: List[AgentOperationalMetrics], timestamp: datetime
+        self, conn, agents: List[AgentOperationalMetrics], timestamp: datetime, snapshot_id: str
     ) -> None:
         """Store agent operational metrics."""
         records = []
         for agent in agents:
             records.append(
                 (
+                    snapshot_id,
                     timestamp,
                     agent.agent_id,
                     agent.agent_name,
@@ -237,11 +241,11 @@ class TelemetryStorageBackend:
         await conn.executemany(
             """
             INSERT INTO agent_metrics (
-                time, agent_id, agent_name, version, cognitive_state,
-                api_healthy, api_response_ms, uptime_seconds,
+                snapshot_id, time, agent_id, agent_name, version, cognitive_state,
+                api_healthy, api_response_time_ms, uptime_seconds,
                 incident_count_24h, message_count_24h, cost_cents_24h,
                 api_port, oauth_configured, oauth_providers
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         """,
             records,
         )
