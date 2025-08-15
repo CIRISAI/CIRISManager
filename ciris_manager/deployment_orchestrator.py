@@ -1924,13 +1924,15 @@ class DeploymentOrchestrator:
 
             logger.info(f"Recreating container for agent {agent_id} using docker-compose...")
 
-            # Run docker-compose up -d to recreate the container
+            # Run docker-compose up -d with --pull always to use the newly pulled image
             result = await asyncio.create_subprocess_exec(
                 "docker-compose",
                 "-f",
                 str(compose_file),
                 "up",
                 "-d",
+                "--pull",
+                "always",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(agent_dir),
@@ -1947,7 +1949,7 @@ class DeploymentOrchestrator:
             await asyncio.sleep(5)
 
             # Verify container is running
-            container_name = f"ciris-agent-{agent_id}"
+            container_name = f"ciris-{agent_id}"
             check_result = await asyncio.create_subprocess_exec(
                 "docker",
                 "inspect",
