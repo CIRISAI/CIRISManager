@@ -147,12 +147,13 @@ class TelemetryStorageBackend:
         await conn.execute(
             """
             INSERT INTO collection_runs (
-                snapshot_id, time, duration_ms,
+                run_id, snapshot_id, time, duration_ms,
                 containers_collected, agents_collected,
                 errors, success
-            ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
-            ON CONFLICT (snapshot_id) DO NOTHING
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+            ON CONFLICT (run_id) DO NOTHING
         """,
+            snapshot.snapshot_id,  # Use snapshot_id as run_id since it's unique
             snapshot.snapshot_id,
             snapshot.timestamp,
             snapshot.collection_duration_ms,
