@@ -219,7 +219,10 @@ class TestTelemetryStorageBackend:
     async def test_store_container_metrics(self, storage, mock_connection, sample_snapshot):
         """Test storing container metrics."""
         await storage._store_container_metrics(
-            mock_connection, sample_snapshot.containers, sample_snapshot.timestamp
+            mock_connection,
+            sample_snapshot.containers,
+            sample_snapshot.timestamp,
+            sample_snapshot.snapshot_id,
         )
 
         mock_connection.executemany.assert_called_once()
@@ -231,14 +234,18 @@ class TestTelemetryStorageBackend:
         # Verify data records
         records = call_args[0][1]
         assert len(records) == 1
-        assert records[0][1] == "abc123def456"  # container_id
-        assert records[0][2] == "ciris-agent-test"  # container_name
+        assert records[0][0] == sample_snapshot.snapshot_id  # snapshot_id
+        assert records[0][2] == "abc123def456"  # container_id
+        assert records[0][3] == "ciris-agent-test"  # container_name
 
     @pytest.mark.asyncio
     async def test_store_agent_metrics(self, storage, mock_connection, sample_snapshot):
         """Test storing agent metrics."""
         await storage._store_agent_metrics(
-            mock_connection, sample_snapshot.agents, sample_snapshot.timestamp
+            mock_connection,
+            sample_snapshot.agents,
+            sample_snapshot.timestamp,
+            sample_snapshot.snapshot_id,
         )
 
         mock_connection.executemany.assert_called_once()
@@ -250,8 +257,9 @@ class TestTelemetryStorageBackend:
         # Verify data records
         records = call_args[0][1]
         assert len(records) == 1
-        assert records[0][1] == "test-123"  # agent_id
-        assert records[0][4] == "WORK"  # cognitive_state
+        assert records[0][0] == sample_snapshot.snapshot_id  # snapshot_id
+        assert records[0][2] == "test-123"  # agent_id
+        assert records[0][5] == "WORK"  # cognitive_state
 
     @pytest.mark.asyncio
     async def test_store_deployments(self, storage, mock_connection, sample_snapshot):
