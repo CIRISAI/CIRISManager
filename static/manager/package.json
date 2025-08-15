@@ -1,0 +1,11 @@
+{
+  "name": "ciris-manager-ui",
+  "version": "1.0.0",
+  "description": "CIRIS Manager UI",
+  "scripts": {
+    "build-css": "npx tailwindcss -i ./src/input.css -o ./tailwind.min.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

@@ -2604,7 +2604,7 @@ function showPendingDeployments(data) {
             </div>
             
             <div class="flex gap-2">
-                <button onclick="launchDeployment('${deployment.deployment_id}')" 
+                <button onclick="executeDeploymentAction('launch', '${deployment.deployment_id}')" 
                         class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
                     🚀 Launch
                 </button>
@@ -2981,7 +2981,7 @@ async function updateDeploymentStatus() {
         const data = await response.json();
         const statusDiv = document.getElementById('deployment-status');
         
-        if (data.deployment_id) {
+        if (data && data.deployment_id) {
             statusDiv.innerHTML = `
                 <div class="space-y-2">
                     <div class="flex justify-between">
