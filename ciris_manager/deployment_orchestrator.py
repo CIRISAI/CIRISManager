@@ -69,9 +69,19 @@ class DeploymentOrchestrator:
                     # Restore deployments
                     for deployment_id, deployment_data in state.get("deployments", {}).items():
                         self.deployments[deployment_id] = DeploymentStatus(**deployment_data)
+                    # Restore pending deployments
+                    for deployment_id, deployment_data in state.get(
+                        "pending_deployments", {}
+                    ).items():
+                        self.pending_deployments[deployment_id] = DeploymentStatus(
+                            **deployment_data
+                        )
                     # Restore current deployment
                     self.current_deployment = state.get("current_deployment")
-                    logger.info(f"Loaded deployment state with {len(self.deployments)} deployments")
+                    logger.info(
+                        f"Loaded deployment state with {len(self.deployments)} deployments "
+                        f"and {len(self.pending_deployments)} pending deployments"
+                    )
 
                     # Check for in-progress deployments that need to be marked as failed
                     if self.current_deployment and self.current_deployment in self.deployments:
@@ -97,6 +107,10 @@ class DeploymentOrchestrator:
                 "deployments": {
                     deployment_id: deployment.model_dump()
                     for deployment_id, deployment in self.deployments.items()
+                },
+                "pending_deployments": {
+                    deployment_id: deployment.model_dump()
+                    for deployment_id, deployment in self.pending_deployments.items()
                 },
                 "current_deployment": self.current_deployment,
                 "saved_at": datetime.now(timezone.utc).isoformat(),
