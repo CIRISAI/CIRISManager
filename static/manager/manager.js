@@ -2354,8 +2354,13 @@ async function checkPendingDeployment() {
         console.log('Pending deployment data:', data);
         
         if (data.pending) {
-            console.log('Showing pending deployment');
-            showPendingDeployment(data);
+            console.log('Showing pending deployment:', data);
+            // Check if it's a failed deployment that needs clearing
+            if (data.status === 'failed') {
+                showFailedDeployment(data);
+            } else {
+                showPendingDeployment(data);
+            }
         } else {
             console.log('No pending deployment');
             hidePendingDeployment();
@@ -2396,6 +2401,49 @@ function hidePendingDeployment() {
     if (section) {
         section.classList.add('hidden');
     }
+}
+
+function showFailedDeployment(deploymentData) {
+    const section = document.getElementById('pending-deployment-section');
+    if (!section) return;
+    
+    // Update the section to show it's a failed deployment
+    const titleEl = section.querySelector('h3');
+    if (titleEl) {
+        titleEl.innerHTML = '<i class="fas fa-exclamation-circle text-red-500 mr-2"></i>Failed Deployment Blocking New Deployments';
+    }
+    
+    // Populate deployment details
+    document.getElementById('pending-agent-image').textContent = 
+        deploymentData.agent_image || 'N/A';
+    document.getElementById('pending-gui-image').textContent = 
+        deploymentData.gui_image || 'N/A';
+    document.getElementById('pending-strategy').textContent = 
+        deploymentData.strategy || 'canary';
+    document.getElementById('pending-message').textContent = 
+        deploymentData.message || 'Deployment failed';
+    document.getElementById('pending-staged-at').textContent = 
+        formatDate(deploymentData.staged_at);
+    document.getElementById('affected-agents-count').textContent = 
+        `${deploymentData.affected_agents || 0} agents were targeted`;
+    
+    // Hide launch/reject buttons and show clear/retry buttons
+    const buttonsContainer = section.querySelector('.flex.gap-2');
+    if (buttonsContainer) {
+        buttonsContainer.innerHTML = `
+            <button onclick="cancelDeployment('${deploymentData.deployment_id}')" 
+                    class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                <i class="fas fa-times mr-2"></i>Clear Failed Deployment
+            </button>
+            <button onclick="triggerNewDeployment()" 
+                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-redo mr-2"></i>Retry Deployment
+            </button>
+        `;
+    }
+    
+    // Show the section
+    section.classList.remove('hidden');
 }
 
 function setupDeploymentButtons(deploymentData) {

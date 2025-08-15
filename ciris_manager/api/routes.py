@@ -1221,8 +1221,9 @@ def create_routes(manager: Any) -> APIRouter:
         """
         Get pending deployment details if any.
 
-        Returns staged deployment waiting for operator approval.
+        Returns staged deployment waiting for operator approval or failed deployment blocking new ones.
         """
+        # First check for actual pending deployments
         pending = await deployment_orchestrator.get_pending_deployment()
         if pending:
             result = {
@@ -1241,6 +1242,28 @@ def create_routes(manager: Any) -> APIRouter:
                     }
                 )
             return result
+
+        # Check if there's a failed deployment blocking new ones
+        current = await deployment_orchestrator.get_current_deployment()
+        if current and current.status == "failed":
+            result = {
+                "pending": True,  # Still blocking, so return true
+                "deployment_id": current.deployment_id,
+                "status": "failed",
+                "staged_at": current.started_at,
+                "affected_agents": current.agents_total,
+                "message": current.message or "Deployment failed",
+            }
+            if current.notification:
+                result.update(
+                    {
+                        "agent_image": current.notification.agent_image,
+                        "gui_image": current.notification.gui_image,
+                        "strategy": current.notification.strategy,
+                    }
+                )
+            return result
+
         return {"pending": False}
 
     @router.post("/updates/launch")
