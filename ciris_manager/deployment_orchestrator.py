@@ -1357,8 +1357,8 @@ class DeploymentOrchestrator:
                         auth = get_agent_auth()
                         headers = auth.get_auth_headers(agent.agent_id)
 
-                        # Check health endpoint
-                        health_url = f"http://localhost:{agent.api_port}/v1/health"
+                        # Check health endpoint (using system/health which is the correct endpoint)
+                        health_url = f"http://localhost:{agent.api_port}/v1/system/health"
                         response = await client.get(health_url, headers=headers)
 
                         if response.status_code == 200:
@@ -1434,8 +1434,12 @@ class DeploymentOrchestrator:
                                         f"Agent {agent.agent_id} left WORK state, now in {cognitive_state}"
                                     )
 
+                except httpx.ConnectError as e:
+                    # Connection errors are expected when container is starting
+                    logger.debug(f"Agent {agent.agent_id} not ready yet: {e}")
                 except Exception as e:
-                    logger.error(f"Error checking agent {agent.agent_id} health: {e}")
+                    # Log other errors but don't fail the deployment
+                    logger.warning(f"Error checking agent {agent.agent_id} health: {e}")
 
             # Wait before next check
             await asyncio.sleep(10)
