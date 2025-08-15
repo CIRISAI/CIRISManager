@@ -115,7 +115,8 @@ class TestCanaryGroupHealth:
                         stability_minutes=0.01,  # 0.6 seconds
                     )
 
-                    assert result is True
+                    assert result[0] is True  # First element is success boolean
+                    assert result[1]["successful_agent"] == "test-agent"
                     assert call_count >= 3
 
     @pytest.mark.asyncio
@@ -147,7 +148,7 @@ class TestCanaryGroupHealth:
                     stability_minutes=0.01,
                 )
 
-                assert result is False
+                assert result[0] is False  # First element is success boolean
 
     @pytest.mark.asyncio
     async def test_agent_has_critical_incident_during_stability(self, orchestrator, sample_agent):
@@ -198,7 +199,7 @@ class TestCanaryGroupHealth:
                 )
 
                 # Should fail due to critical incident
-                assert result is False
+                assert result[0] is False  # First element is success boolean
 
     @pytest.mark.asyncio
     async def test_agent_leaves_work_state(self, orchestrator, sample_agent):
@@ -247,7 +248,7 @@ class TestCanaryGroupHealth:
                 )
 
                 # Should fail because agent left WORK state
-                assert result is False
+                assert result[0] is False  # First element is success boolean
 
     @pytest.mark.asyncio
     async def test_network_error_handling(self, orchestrator, sample_agent):
@@ -275,7 +276,7 @@ class TestCanaryGroupHealth:
                 )
 
                 # Should fail gracefully
-                assert result is False
+                assert result[0] is False  # First element is success boolean
 
     @pytest.mark.asyncio
     async def test_multiple_agents_one_succeeds(self, orchestrator):
@@ -359,7 +360,7 @@ class TestCanaryGroupHealth:
                     )
 
                     # Should succeed because at least one agent reached WORK
-                    assert result is True
+                    assert result[0] is True  # First element is success boolean
 
 
 class TestCanaryDeploymentFlow:

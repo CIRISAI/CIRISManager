@@ -100,7 +100,7 @@ class TestRollbackProposal:
             )
 
             # Should return False and propose rollback
-            assert result is False
+            assert result[0] is False  # First element is success boolean
             assert hasattr(orchestrator, "rollback_proposals")
             assert deployment_id in orchestrator.rollback_proposals
 
@@ -387,7 +387,7 @@ class TestImageCleanupIntegration:
                 img = Mock()
                 img.id = f"sha256:image{i}"
                 img.tags = [f"ghcr.io/cirisai/ciris-agent:v1.{i}.0"]
-                img.attrs = {"Created": f"2025-08-{10+i}T10:00:00Z"}
+                img.attrs = {"Created": f"2025-08-{10 + i}T10:00:00Z"}
                 mock_images.append(img)
 
             mock_docker.return_value.images.list.return_value = mock_images
