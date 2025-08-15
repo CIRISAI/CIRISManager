@@ -142,13 +142,15 @@ class TelemetryStorageBackend:
 
     async def _store_collection_run(self, conn, snapshot: TelemetrySnapshot) -> None:
         """Store collection run metadata."""
+        import json
+
         await conn.execute(
             """
             INSERT INTO collection_runs (
                 snapshot_id, time, duration_ms,
                 containers_collected, agents_collected,
                 errors, success
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
             ON CONFLICT (snapshot_id) DO NOTHING
         """,
             snapshot.snapshot_id,
@@ -156,7 +158,7 @@ class TelemetryStorageBackend:
             snapshot.collection_duration_ms,
             len(snapshot.containers),
             len(snapshot.agents),
-            snapshot.errors,
+            json.dumps(snapshot.errors) if snapshot.errors else "[]",
             len(snapshot.errors) == 0,
         )
 
