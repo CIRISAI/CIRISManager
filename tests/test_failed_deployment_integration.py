@@ -8,7 +8,7 @@ of a failed deployment.
 import pytest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 import tempfile
 
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
@@ -114,7 +114,7 @@ class TestFailedDeploymentIntegration:
             ]
             await orchestrator.start_deployment(new_notification, agents)
 
-        # Step 4: Clear the failed deployment
+        # Step 4: Clear the failed deployment - this should re-stage it
         success = await orchestrator.cancel_stuck_deployment(
             deployment_id, "User cleared failed deployment"
         )
@@ -124,26 +124,23 @@ class TestFailedDeploymentIntegration:
         assert orchestrator.current_deployment is None
         assert orchestrator.deployments[deployment_id].status == "cancelled"
 
-        # Step 5: Verify new deployment can now proceed
-        agents = [
-            AgentInfo(
-                agent_id="test-agent",
-                agent_name="Test Agent",
-                container_name="ciris-test-agent",
-                api_port=8001,
-            )
-        ]
+        # Verify a new pending deployment was created with the same notification
+        assert len(orchestrator.pending_deployments) == 1
+        new_pending_id = list(orchestrator.pending_deployments.keys())[0]
+        pending_deployment = orchestrator.pending_deployments[new_pending_id]
+        assert pending_deployment.status == "pending"
+        assert pending_deployment.notification == deployment.notification  # Same notification
+        assert pending_deployment.deployment_id != deployment_id  # New ID
+        assert "Ready to retry" in pending_deployment.message
 
-        # Mock the methods that would normally run
-        orchestrator._pull_images = AsyncMock(return_value={"success": True})
-        orchestrator._check_agents_need_update = AsyncMock(return_value=(agents, False))
-        orchestrator._run_deployment = AsyncMock()
+        # Step 5: Launch the re-staged deployment
+        success = await orchestrator.launch_staged_deployment(new_pending_id)
+        assert success is True
 
-        # Should succeed now
-        new_status = await orchestrator.start_deployment(new_notification, agents)
-        assert new_status is not None
-        assert new_status.deployment_id != deployment_id  # New deployment ID
-        assert orchestrator.current_deployment == new_status.deployment_id
+        # Verify the deployment is now active
+        assert orchestrator.current_deployment == new_pending_id
+        assert new_pending_id in orchestrator.deployments
+        assert orchestrator.deployments[new_pending_id].status == "in_progress"
 
     @pytest.mark.asyncio
     async def test_failed_deployment_persists_across_restart(self, temp_dir):
@@ -202,6 +199,58 @@ class TestFailedDeploymentIntegration:
         current = await orch2.get_current_deployment()
         assert current is not None
         assert current.status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_failed_deployment_retry_restaging(self, orchestrator):
+        """Test that cancelling a failed deployment re-stages it for retry."""
+
+        # Create a failed deployment
+        deployment_id = "test-retry-123"
+        notification = UpdateNotification(
+            agent_image="test:v1.4.1",
+            strategy="canary",
+            message="Original deployment",
+            version="1.4.1",
+            commit_sha="abc123",
+        )
+
+        failed_deployment = DeploymentStatus(
+            deployment_id=deployment_id,
+            notification=notification,
+            agents_total=2,
+            agents_updated=0,
+            agents_deferred=0,
+            agents_failed=2,
+            started_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            status="failed",
+            message="Deployment failed",
+        )
+
+        orchestrator.deployments[deployment_id] = failed_deployment
+        orchestrator.current_deployment = deployment_id
+
+        # Cancel the failed deployment
+        success = await orchestrator.cancel_stuck_deployment(deployment_id, "Clearing for retry")
+        assert success is True
+
+        # Verify the original deployment is cancelled
+        assert orchestrator.deployments[deployment_id].status == "cancelled"
+        assert "Re-staged as" in orchestrator.deployments[deployment_id].message
+
+        # Verify lock is cleared
+        assert orchestrator.current_deployment is None
+
+        # Verify a new pending deployment exists
+        assert len(orchestrator.pending_deployments) == 1
+        new_id = list(orchestrator.pending_deployments.keys())[0]
+        new_deployment = orchestrator.pending_deployments[new_id]
+
+        # Verify the new deployment has the same notification
+        assert new_deployment.notification == notification
+        assert new_deployment.status == "pending"
+        assert "Ready to retry" in new_deployment.message
+        assert new_deployment.deployment_id != deployment_id
 
     @pytest.mark.asyncio
     async def test_api_endpoint_integration(self, orchestrator):

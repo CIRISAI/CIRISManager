@@ -424,10 +424,38 @@ class DeploymentOrchestrator:
             self.current_deployment = None
             logger.info(f"Cleared current deployment lock for {deployment_id}")
 
-        # Update deployment status
-        deployment.status = "cancelled"
-        deployment.completed_at = datetime.now(timezone.utc).isoformat()
-        deployment.message = reason
+        # If this was a failed deployment, re-stage it as pending for retry
+        if deployment.status == "failed" and deployment.notification:
+            # Create a new pending deployment with the same notification
+            new_deployment_id = str(uuid4())
+            new_status = DeploymentStatus(
+                deployment_id=new_deployment_id,
+                notification=deployment.notification,  # Re-use the same notification
+                agents_total=deployment.agents_total,
+                agents_updated=0,
+                agents_deferred=0,
+                agents_failed=0,
+                started_at=None,  # Not started yet
+                completed_at=None,
+                status="pending",
+                message=f"Ready to retry: {deployment.notification.message}",
+                staged_at=datetime.now(timezone.utc).isoformat(),
+                canary_phase=None,
+            )
+
+            # Add to pending deployments
+            self.pending_deployments[new_deployment_id] = new_status
+            logger.info(f"Re-staged failed deployment as {new_deployment_id} for retry")
+
+            # Update the original deployment as cancelled
+            deployment.status = "cancelled"
+            deployment.completed_at = datetime.now(timezone.utc).isoformat()
+            deployment.message = f"{reason} - Re-staged as {new_deployment_id}"
+        else:
+            # Just cancel normally
+            deployment.status = "cancelled"
+            deployment.completed_at = datetime.now(timezone.utc).isoformat()
+            deployment.message = reason
 
         # Save state
         self._save_state()

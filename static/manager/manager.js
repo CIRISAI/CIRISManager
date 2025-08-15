@@ -1495,7 +1495,7 @@ async function cancelDeployment(deploymentId) {
         throw new Error('Deployment ID is required to cancel a deployment');
     }
     
-    if (!confirm('Clear this failed deployment? This will allow starting a new deployment.')) {
+    if (!confirm('Clear this failed deployment and prepare it for retry? The deployment will be re-staged and ready to launch.')) {
         console.log('User cancelled the clear operation');
         return;
     }
@@ -1519,7 +1519,7 @@ async function cancelDeployment(deploymentId) {
         if (response.ok) {
             const result = await response.json();
             console.log('Deployment successfully cancelled:', result);
-            alert('Deployment cleared successfully! You can now start a new deployment.');
+            alert('Failed deployment cleared! The deployment has been re-staged and is ready to launch. Check the "Pending Deployment" section.');
             await updateDeploymentTab();
         } else {
             const error = await response.json();
@@ -2514,12 +2514,8 @@ function showFailedDeployment(deploymentData) {
         console.log('Replacing buttons for failed deployment');
         buttonsContainer.innerHTML = `
             <button onclick="cancelDeployment('${deploymentData.deployment_id}')" 
-                    class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
-                <i class="fas fa-times mr-2"></i>Clear Failed Deployment
-            </button>
-            <button onclick="triggerNewDeployment()" 
                     class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-                <i class="fas fa-redo mr-2"></i>Retry Deployment
+                <i class="fas fa-redo mr-2"></i>Clear & Retry Deployment
             </button>
         `;
     } else {
@@ -2530,12 +2526,8 @@ function showFailedDeployment(deploymentData) {
             console.log('Found button container via launch button parent');
             launchBtn.parentElement.innerHTML = `
                 <button onclick="cancelDeployment('${deploymentData.deployment_id}')" 
-                        class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors">
-                    <i class="fas fa-times mr-2"></i>Clear Failed Deployment
-                </button>
-                <button onclick="triggerNewDeployment()" 
                         class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-                    <i class="fas fa-redo mr-2"></i>Retry Deployment
+                    <i class="fas fa-redo mr-2"></i>Clear & Retry Deployment
                 </button>
             `;
         } else {
