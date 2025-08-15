@@ -8,7 +8,7 @@ of a failed deployment.
 import pytest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import tempfile
 
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
@@ -133,9 +133,25 @@ class TestFailedDeploymentIntegration:
         assert pending_deployment.deployment_id != deployment_id  # New ID
         assert "Ready to retry" in pending_deployment.message
 
-        # Step 5: Launch the re-staged deployment
-        success = await orchestrator.launch_staged_deployment(new_pending_id)
-        assert success is True
+        # Step 5: Launch the re-staged deployment with mocked manager
+        with patch.object(orchestrator, "manager") as mock_manager:
+            # Mock the necessary attributes
+            mock_manager.agent_registry = MagicMock()
+            mock_discovery = MagicMock()
+            mock_discovery.discover_agents.return_value = [
+                AgentInfo(
+                    agent_id="test-agent",
+                    agent_name="Test Agent",
+                    container_name="ciris-test-agent",
+                    api_port=8001,
+                )
+            ]
+
+            with patch(
+                "ciris_manager.docker_discovery.DockerAgentDiscovery", return_value=mock_discovery
+            ):
+                success = await orchestrator.launch_staged_deployment(new_pending_id)
+                assert success is True
 
         # Verify the deployment is now active
         assert orchestrator.current_deployment == new_pending_id
