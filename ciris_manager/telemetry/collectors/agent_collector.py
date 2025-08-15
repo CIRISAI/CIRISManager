@@ -98,7 +98,13 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
         return metrics
 
     async def _collect_single_agent(self, agent) -> Optional[AgentOperationalMetrics]:
-        """Collect metrics from a single agent using unified telemetry endpoint."""
+        """Collect metrics from a single agent.
+
+        Tries endpoints in order:
+        1. /v1/telemetry/unified (v1.4.2+) - Rich unified telemetry
+        2. /v1/telemetry/llm/usage (v1.4.0-1.4.1) - LLM usage with costs
+        3. /v1/system/health (fallback) - Basic health metrics
+        """
         agent_id = agent.agent_id
         port = agent.api_port
 
@@ -110,40 +116,80 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
             except Exception as e:
                 logger.debug(f"No auth available for {agent_id}: {e}")
 
-        # Use unified telemetry endpoint which provides ALL metrics
         try:
             async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
                 start_time = asyncio.get_event_loop().time()
 
-                # Get unified telemetry with operational view (includes all metrics we need)
+                # Try unified telemetry first (v1.4.2+)
                 unified_url = f"http://localhost:{port}/v1/telemetry/unified?view=operational"
                 try:
                     response = await client.get(unified_url, headers=headers)
                     response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
 
-                    # VALIDATE AUTH IMMEDIATELY
-                    validate_auth_response(response, agent_id, "telemetry/unified")
+                    if response.status_code == 200:
+                        logger.debug(f"Agent {agent_id} supports unified telemetry (v1.4.2+)")
+                        result = self._parse_unified_response(agent, response, response_time_ms)
+                        validate_agent_metrics(result, f"unified({agent_id})")
+                        return result
+                    elif response.status_code == 404:
+                        # Endpoint doesn't exist, try older endpoints
+                        logger.debug(
+                            f"Agent {agent_id} doesn't support unified telemetry, trying LLM usage"
+                        )
+                    else:
+                        # Auth or other error
+                        validate_auth_response(response, agent_id, "telemetry/unified")
+
+                except httpx.RequestError:
+                    # Network error, try fallback
+                    logger.debug(f"Network error getting unified telemetry from {agent_id}")
+
+                # Try LLM usage endpoint (v1.4.0-1.4.1)
+                start_time = asyncio.get_event_loop().time()
+                llm_url = f"http://localhost:{port}/v1/telemetry/llm/usage"
+                try:
+                    response = await client.get(llm_url, headers=headers)
+                    response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
 
                     if response.status_code == 200:
-                        result = self._parse_unified_response(agent, response, response_time_ms)
-                        # VALIDATE METRICS IMMEDIATELY
-                        validate_agent_metrics(
-                            result, f"collector._collect_single_agent({agent_id})"
-                        )
+                        logger.debug(f"Agent {agent_id} using LLM usage endpoint (v1.4.0-1.4.1)")
+                        result = self._parse_llm_usage_response(agent, response, response_time_ms)
+                        validate_agent_metrics(result, f"llm_usage({agent_id})")
+                        return result
+                    elif response.status_code == 404:
+                        logger.debug(f"Agent {agent_id} doesn't support LLM usage, trying health")
+                    else:
+                        validate_auth_response(response, agent_id, "telemetry/llm/usage")
+
+                except httpx.RequestError:
+                    logger.debug(f"Network error getting LLM usage from {agent_id}")
+
+                # Final fallback to health endpoint
+                start_time = asyncio.get_event_loop().time()
+                health_url = f"http://localhost:{port}/v1/system/health"
+                try:
+                    response = await client.get(health_url, headers=headers)
+                    response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
+
+                    validate_auth_response(response, agent_id, "system/health")
+
+                    if response.status_code == 200:
+                        logger.debug(f"Agent {agent_id} using health endpoint (legacy)")
+                        result = self._parse_health_response(agent, response, response_time_ms)
+                        validate_agent_metrics(result, f"health({agent_id})")
                         return result
                     else:
                         logger.error(
-                            f"❌ FAILED to get telemetry from {agent_id}: HTTP {response.status_code}"
+                            f"❌ All telemetry endpoints failed for {agent_id}: HTTP {response.status_code}"
                         )
-                        logger.error(f"   Response: {response.text[:500]}")
                         return self._create_unhealthy_metrics(agent, response_time_ms)
 
                 except Exception as e:
-                    logger.error(f"❌ EXCEPTION getting telemetry from {agent_id}: {e}")
+                    logger.error(f"❌ EXCEPTION getting health from {agent_id}: {e}")
                     raise  # FAIL FAST AND LOUD
 
         except asyncio.TimeoutError:
-            logger.warning(f"Agent {agent_id} health timeout")
+            logger.warning(f"Agent {agent_id} timeout")
             return self._create_unhealthy_metrics(agent, None)
         except Exception as e:
             logger.warning(f"Failed to get metrics for {agent_id}: {e}")
