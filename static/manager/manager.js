@@ -2378,6 +2378,13 @@ function showPendingDeployment(deploymentData) {
     // Populate deployment details
     document.getElementById('pending-agent-image').textContent = 
         deploymentData.agent_image || 'N/A';
+    
+    // Add version to agent image if available
+    if (deploymentData.version) {
+        const agentImageEl = document.getElementById('pending-agent-image');
+        agentImageEl.innerHTML = `${deploymentData.agent_image || 'N/A'}<br><span class="text-blue-600 font-semibold">Version: ${deploymentData.version}</span>`;
+    }
+    
     document.getElementById('pending-gui-image').textContent = 
         deploymentData.gui_image || 'N/A';
     document.getElementById('pending-strategy').textContent = 
@@ -2416,6 +2423,13 @@ function showFailedDeployment(deploymentData) {
     // Populate deployment details
     document.getElementById('pending-agent-image').textContent = 
         deploymentData.agent_image || 'N/A';
+    
+    // Add version to agent image if available
+    if (deploymentData.version) {
+        const agentImageEl = document.getElementById('pending-agent-image');
+        agentImageEl.innerHTML = `${deploymentData.agent_image || 'N/A'}<br><span class="text-blue-600 font-semibold">Version: ${deploymentData.version}</span>`;
+    }
+    
     document.getElementById('pending-gui-image').textContent = 
         deploymentData.gui_image || 'N/A';
     document.getElementById('pending-strategy').textContent = 

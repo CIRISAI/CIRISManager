@@ -1239,6 +1239,8 @@ def create_routes(manager: Any) -> APIRouter:
                         "gui_image": pending.notification.gui_image,
                         "strategy": pending.notification.strategy,
                         "message": pending.notification.message,
+                        "version": pending.notification.version,
+                        "commit_sha": pending.notification.commit_sha,
                     }
                 )
             return result
@@ -1260,6 +1262,8 @@ def create_routes(manager: Any) -> APIRouter:
                         "agent_image": current.notification.agent_image,
                         "gui_image": current.notification.gui_image,
                         "strategy": current.notification.strategy,
+                        "version": current.notification.version,
+                        "commit_sha": current.notification.commit_sha,
                     }
                 )
             return result
