@@ -116,9 +116,14 @@ class TestDeploymentPersistence:
         # Create orchestrator with temp dir
         from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
 
-        orchestrator = DeploymentOrchestrator(manager=None)
+        # Mock the _load_state in __init__ to prevent loading existing state
+        with patch.object(DeploymentOrchestrator, "_load_state"):
+            orchestrator = DeploymentOrchestrator(manager=None)
         orchestrator.state_dir = temp_dir
         orchestrator.deployment_state_file = temp_dir / "deployment_state.json"
+        # Clear any state that might have been loaded
+        orchestrator.deployments = {}
+        orchestrator.current_deployment = None
 
         # Create state file
         state = {
@@ -360,7 +365,9 @@ class TestDeploymentPersistence:
         # First orchestrator instance
         from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
 
-        orch1 = DeploymentOrchestrator(manager=None)
+        # Mock _load_state to prevent loading existing state
+        with patch.object(DeploymentOrchestrator, "_load_state"):
+            orch1 = DeploymentOrchestrator(manager=None)
         orch1.state_dir = temp_dir
         orch1.deployment_state_file = temp_dir / "deployment_state.json"
         # Clear any loaded state
@@ -404,7 +411,8 @@ class TestDeploymentPersistence:
         orch1._save_state()
 
         # Create new orchestrator instance
-        orch2 = DeploymentOrchestrator(manager=None)
+        with patch.object(DeploymentOrchestrator, "_load_state"):
+            orch2 = DeploymentOrchestrator(manager=None)
         orch2.state_dir = temp_dir
         orch2.deployment_state_file = temp_dir / "deployment_state.json"
         # Clear any existing state before loading
