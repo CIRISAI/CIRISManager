@@ -1488,11 +1488,20 @@ async function copyToClipboard(elementId) {
 
 // Cancel a failed deployment to clear the lock
 async function cancelDeployment(deploymentId) {
+    console.log('cancelDeployment called with ID:', deploymentId);
+    
+    if (!deploymentId) {
+        console.error('ERROR: cancelDeployment called without deployment ID');
+        throw new Error('Deployment ID is required to cancel a deployment');
+    }
+    
     if (!confirm('Clear this failed deployment? This will allow starting a new deployment.')) {
+        console.log('User cancelled the clear operation');
         return;
     }
     
     try {
+        console.log('Sending cancel request for deployment:', deploymentId);
         const response = await fetch('/manager/v1/updates/cancel', {
             method: 'POST',
             headers: {
@@ -1505,29 +1514,64 @@ async function cancelDeployment(deploymentId) {
             })
         });
         
+        console.log('Cancel response status:', response.status);
+        
         if (response.ok) {
+            const result = await response.json();
+            console.log('Deployment successfully cancelled:', result);
             showToast('Deployment cleared. You can now start a new deployment.', 'success');
             await updateDeploymentTab();
         } else {
             const error = await response.json();
+            console.error('ERROR: Failed to cancel deployment:', error);
             showToast(error.detail || 'Failed to cancel deployment', 'error');
+            throw new Error(`Failed to cancel deployment: ${error.detail || response.status}`);
         }
     } catch (error) {
-        console.error('Error cancelling deployment:', error);
-        showToast('Failed to cancel deployment', 'error');
+        console.error('ERROR: Exception while cancelling deployment:', error);
+        showToast('Failed to cancel deployment: ' + error.message, 'error');
+        throw error; // Re-throw to make failures visible
     }
 }
 
 // Trigger a new deployment (retry)
 async function triggerNewDeployment() {
+    console.log('triggerNewDeployment called');
+    
+    // First, check if there's a failed deployment blocking us
+    try {
+        const checkResponse = await fetch('/manager/v1/updates/pending', {
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
+            }
+        });
+        
+        if (checkResponse.ok) {
+            const data = await checkResponse.json();
+            console.log('Current deployment state:', data);
+            
+            if (data.pending && data.status === 'failed') {
+                console.error('ERROR: Failed deployment is blocking. Must clear it first.');
+                showToast('Please clear the failed deployment first using the "Clear Failed Deployment" button', 'error');
+                return;
+            }
+        }
+    } catch (error) {
+        console.error('ERROR: Could not check deployment state:', error);
+    }
+    
     if (!confirm('Retry the deployment? This will trigger a new deployment with the latest images.')) {
+        console.log('User cancelled deployment retry');
         return;
     }
     
+    console.log('NOTE: Manual CD trigger required - no automatic webhook implemented yet');
     showToast('To retry deployment, the CD pipeline needs to be triggered again. You can also manually trigger from GitHub Actions.', 'info');
     
-    // Optionally, we could add an API call here to trigger a webhook
-    // or provide instructions for manual triggering
+    // TODO: Implement actual deployment trigger
+    // This would require an endpoint like /manager/v1/updates/trigger
+    // that either webhooks to GitHub Actions or directly starts a deployment
+    console.warn('WARNING: triggerNewDeployment does not actually trigger anything yet - manual CD trigger required');
 }
 
 // Notify Eric about OAuth setup request
@@ -2354,12 +2398,16 @@ async function checkPendingDeployment() {
         console.log('Pending deployment data:', data);
         
         if (data.pending) {
-            console.log('Showing pending deployment:', data);
             // Check if it's a failed deployment that needs clearing
             if (data.status === 'failed') {
+                console.log('Showing FAILED deployment:', data);
                 showFailedDeployment(data);
-            } else {
+            } else if (data.status === 'pending' || !data.status) {
+                console.log('Showing PENDING deployment:', data);
                 showPendingDeployment(data);
+            } else {
+                console.error('INVALID DEPLOYMENT STATUS:', data.status, 'Full data:', data);
+                throw new Error(`Invalid deployment status: ${data.status}. Expected 'pending' or 'failed'`);
             }
         } else {
             console.log('No pending deployment');
@@ -2372,8 +2420,17 @@ async function checkPendingDeployment() {
 }
 
 function showPendingDeployment(deploymentData) {
+    // FAIL FAST: Only handle pending deployments
+    if (deploymentData.status && deploymentData.status !== 'pending') {
+        console.error('ERROR: showPendingDeployment called with non-pending status:', deploymentData.status);
+        throw new Error(`showPendingDeployment called with status '${deploymentData.status}' - only 'pending' is allowed`);
+    }
+    
     const section = document.getElementById('pending-deployment-section');
-    if (!section) return;
+    if (!section) {
+        console.error('ERROR: pending-deployment-section not found in DOM');
+        throw new Error('pending-deployment-section element not found');
+    }
     
     // Populate deployment details
     document.getElementById('pending-agent-image').textContent = 
@@ -2411,8 +2468,17 @@ function hidePendingDeployment() {
 }
 
 function showFailedDeployment(deploymentData) {
+    // FAIL FAST: Only handle failed deployments
+    if (deploymentData.status !== 'failed') {
+        console.error('ERROR: showFailedDeployment called with non-failed status:', deploymentData.status);
+        throw new Error(`showFailedDeployment called with status '${deploymentData.status}' - only 'failed' is allowed`);
+    }
+    
     const section = document.getElementById('pending-deployment-section');
-    if (!section) return;
+    if (!section) {
+        console.error('ERROR: pending-deployment-section not found in DOM');
+        throw new Error('pending-deployment-section element not found');
+    }
     
     // Update the section to show it's a failed deployment
     const titleEl = section.querySelector('h3');
