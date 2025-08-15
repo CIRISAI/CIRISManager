@@ -28,6 +28,13 @@ class TestDeploymentOrchestrator:
         mock_manager.agent_registry = AgentRegistry(tmp_path / "metadata.json")
 
         orchestrator = DeploymentOrchestrator(manager=mock_manager)
+        # Use temporary directory for state to ensure isolation between tests
+        orchestrator.state_dir = tmp_path / "state"
+        orchestrator.state_dir.mkdir(exist_ok=True)
+        orchestrator.deployment_state_file = orchestrator.state_dir / "deployment_state.json"
+        # Clear any existing deployments to ensure clean state
+        orchestrator.deployments = {}
+        orchestrator.current_deployment = None
         # Mock the registry client to avoid real network calls
         orchestrator.registry_client = Mock()
         orchestrator.registry_client.resolve_image_digest = AsyncMock(return_value="sha256:test123")

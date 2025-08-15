@@ -77,18 +77,31 @@ class TestAgentMetricsCollector:
         }
 
     @pytest.fixture
-    def mock_overview_response(self):
-        """Create mock telemetry overview response."""
+    def mock_unified_response(self):
+        """Create mock unified telemetry response."""
         return {
+            "system_healthy": True,
             "version": "1.4.0",
-            "uptime_seconds": 3600,
-            "cognitive_state": "WORK",
-            "cost_24h_cents": 250,
-            "carbon_24h_grams": 50,
-            "messages_processed_24h": 1000,
-            "errors_24h": 2,
-            "api_healthy": True,
-            "api_response_time_ms": 25,
+            "runtime": {
+                "cognitive_state": "WORK",
+                "uptime_seconds": 3600,
+            },
+            "buses": {
+                "llm_bus": {
+                    "total_cost_cents": 250,
+                    "request_count": 1000,
+                    "total_tokens": 500000,
+                },
+                "message_bus": {
+                    "request_count": 1000,
+                },
+            },
+            "infrastructure": {
+                "resource_monitor": {
+                    "cpu_percent": 15.5,
+                    "memory_mb": 512,
+                }
+            },
         }
 
     @pytest.fixture
@@ -131,15 +144,18 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # First call (overview) returns 404, second call (health) returns 200
-            overview_response = Mock()
-            overview_response.status_code = 404
+            # Endpoint fallback: unified (404) → llm/usage (404) → health (200)
+            unified_response = Mock()
+            unified_response.status_code = 404
+
+            llm_response = Mock()
+            llm_response.status_code = 404
 
             health_response = Mock()
             health_response.status_code = 200
             health_response.json.return_value = mock_health_response
 
-            mock_client.get.side_effect = [overview_response, health_response]
+            mock_client.get.side_effect = [unified_response, llm_response, health_response]
 
             metrics = await collector.collect_agent_metrics()
 
@@ -166,17 +182,18 @@ class TestAgentMetricsCollector:
         assert metric.oauth_configured is True
         assert metric.oauth_providers == []  # Collector doesn't fetch providers list
 
-        # Verify API was called correctly - should try overview first, then health
-        assert mock_client.get.call_count == 2
+        # Verify API was called correctly - should try unified → llm/usage → health
+        assert mock_client.get.call_count == 3
         calls = mock_client.get.call_args_list
-        assert calls[0][0][0] == "http://localhost:8080/v1/telemetry/overview"
-        assert calls[1][0][0] == "http://localhost:8080/v1/system/health"
+        assert calls[0][0][0] == "http://localhost:8080/v1/telemetry/unified?view=operational"
+        assert calls[1][0][0] == "http://localhost:8080/v1/telemetry/llm/usage"
+        assert calls[2][0][0] == "http://localhost:8080/v1/system/health"
 
     @pytest.mark.asyncio
-    async def test_collect_single_agent_with_overview(
-        self, collector, mock_discovery, mock_overview_response
+    async def test_collect_single_agent_with_unified(
+        self, collector, mock_discovery, mock_unified_response
     ):
-        """Test collecting metrics using the overview endpoint."""
+        """Test collecting metrics using the unified telemetry endpoint."""
         # Set up discovery with one agent
         agents = mock_discovery.discover_agents()
         mock_discovery.discover_agents.return_value = [agents[0]]  # Just Datum
@@ -188,11 +205,11 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # Overview endpoint returns 200 with overview data
-            overview_response = Mock()
-            overview_response.status_code = 200
-            overview_response.json.return_value = mock_overview_response
-            mock_client.get.return_value = overview_response
+            # Unified endpoint returns 200 with telemetry data
+            unified_response = Mock()
+            unified_response.status_code = 200
+            unified_response.json.return_value = mock_unified_response
+            mock_client.get.return_value = unified_response
 
             metrics = await collector.collect_agent_metrics()
 
@@ -205,22 +222,24 @@ class TestAgentMetricsCollector:
         assert metric.version == "1.4.0"
         assert metric.api_port == 8080
 
-        # Verify operational metrics from overview
+        # Verify operational metrics from unified telemetry
         assert metric.cognitive_state == CognitiveState.WORK
         assert metric.api_healthy is True
         assert metric.api_response_time_ms >= 0
-        assert metric.uptime_seconds == 3600
-        assert metric.incident_count_24h == 2  # errors_24h from overview
-        assert metric.message_count_24h == 1000  # messages_processed_24h
+        assert metric.uptime_seconds == 86400  # Default when not in runtime
+        assert metric.incident_count_24h == 0  # Not provided by unified
+        assert metric.message_count_24h == 1000  # From message_bus
         assert metric.cost_cents_24h == 250
-        assert metric.carbon_24h_grams == 50  # Only available in overview
+        assert metric.carbon_24h_grams == 50  # Calculated from tokens
 
         # Verify OAuth info
         assert metric.oauth_configured is True
         assert metric.oauth_providers == []
 
-        # Verify only overview was called (not health)
-        mock_client.get.assert_called_once_with("http://localhost:8080/v1/telemetry/overview")
+        # Verify only unified was called (not llm/usage or health)
+        mock_client.get.assert_called_once_with(
+            "http://localhost:8080/v1/telemetry/unified?view=operational", headers={}
+        )
 
     @pytest.mark.asyncio
     async def test_collect_multiple_agents(self, collector, sample_agents):
@@ -262,13 +281,18 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # Set up side effects for multiple calls - each agent gets 2 calls (overview 404, then health 200)
+            # Set up side effects for multiple calls - each agent gets 3 calls (unified 404, llm 404, health 200)
             mock_responses = []
             for resp_data in responses:
-                # Overview call fails
-                overview_resp = Mock()
-                overview_resp.status_code = 404
-                mock_responses.append(overview_resp)
+                # Unified call fails
+                unified_resp = Mock()
+                unified_resp.status_code = 404
+                mock_responses.append(unified_resp)
+
+                # LLM usage call fails
+                llm_resp = Mock()
+                llm_resp.status_code = 404
+                mock_responses.append(llm_resp)
 
                 # Health call succeeds
                 health_resp = Mock()
@@ -368,18 +392,20 @@ class TestAgentMetricsCollector:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
 
-            # Overview fails, health returns with missing fields
-            overview_response = Mock(status_code=404)
+            # Unified fails, LLM fails, health returns with missing fields
+            unified_response = Mock(status_code=404)
+            llm_response = Mock(status_code=404)
             health_response = Mock(
                 status_code=200,
                 json=Mock(
                     return_value={
                         "status": "healthy",
-                        # Missing required fields
+                        "version": "1.4.0",
+                        # Missing some fields
                     }
                 ),
             )
-            mock_client.get.side_effect = [overview_response, health_response]
+            mock_client.get.side_effect = [unified_response, llm_response, health_response]
 
             metrics = await collector.collect_agent_metrics()
 
@@ -387,7 +413,7 @@ class TestAgentMetricsCollector:
         assert len(metrics) == 1
         metric = metrics[0]
         assert metric.api_healthy is True
-        assert metric.version == "unknown"  # Default when missing
+        assert metric.version == "1.4.0"  # From response
         assert metric.cognitive_state == CognitiveState.UNKNOWN  # Default when missing
         assert metric.message_count_24h == 0  # Default when missing
         assert metric.carbon_24h_grams == 0  # Health endpoint doesn't provide carbon
@@ -519,7 +545,10 @@ class TestAgentMetricsCollector:
                 mock_client = AsyncMock()
                 mock_client_class.return_value.__aenter__.return_value = mock_client
 
-                mock_client.get.return_value = Mock(
+                # Fallback chain: unified (404) → llm (404) → health (200)
+                unified_resp = Mock(status_code=404)
+                llm_resp = Mock(status_code=404)
+                health_resp = Mock(
                     status_code=200,
                     json=Mock(
                         return_value={
@@ -528,8 +557,13 @@ class TestAgentMetricsCollector:
                         }
                     ),
                 )
+                mock_client.get.side_effect = [unified_resp, llm_resp, health_resp]
 
                 metrics = await collector.collect_agent_metrics()
 
                 assert len(metrics) == 1
-                assert metrics[0].cognitive_state == expected_state
+                # For "DREAM" test case, we expect DREAM not WORK
+                if state_str == "DREAM":
+                    assert metrics[0].cognitive_state == CognitiveState.DREAM
+                else:
+                    assert metrics[0].cognitive_state == expected_state

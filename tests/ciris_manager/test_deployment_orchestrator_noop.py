@@ -41,10 +41,18 @@ class TestNoOpDeployment:
             yield client
 
     @pytest.mark.asyncio
-    async def test_no_op_deployment_same_digests(self, mock_manager, mock_registry_client):
+    async def test_no_op_deployment_same_digests(
+        self, mock_manager, mock_registry_client, tmp_path
+    ):
         """Test deployment is skipped when image digests haven't changed."""
         orchestrator = DeploymentOrchestrator(mock_manager)
         orchestrator.registry_client = mock_registry_client
+        # Use temporary directory for state to ensure isolation
+        orchestrator.state_dir = tmp_path / "state"
+        orchestrator.state_dir.mkdir(exist_ok=True)
+        orchestrator.deployment_state_file = orchestrator.state_dir / "deployment_state.json"
+        orchestrator.deployments = {}
+        orchestrator.current_deployment = None
 
         # Mock the new image pull and digest methods
         orchestrator._pull_images = AsyncMock(
@@ -92,9 +100,17 @@ class TestNoOpDeployment:
         assert orchestrator.current_deployment is None
 
     @pytest.mark.asyncio
-    async def test_deployment_proceeds_with_new_digests(self, mock_manager, mock_registry_client):
+    async def test_deployment_proceeds_with_new_digests(
+        self, mock_manager, mock_registry_client, tmp_path
+    ):
         """Test deployment proceeds when image digests have changed."""
         orchestrator = DeploymentOrchestrator(mock_manager)
+        # Use temporary directory for state to ensure isolation
+        orchestrator.state_dir = tmp_path / "state"
+        orchestrator.state_dir.mkdir(exist_ok=True)
+        orchestrator.deployment_state_file = orchestrator.state_dir / "deployment_state.json"
+        orchestrator.deployments = {}
+        orchestrator.current_deployment = None
 
         # Mock different digests (images changed)
         mock_registry_client.resolve_image_digest = AsyncMock(
@@ -146,9 +162,15 @@ class TestNoOpDeployment:
         assert orchestrator.current_deployment == status.deployment_id
 
     @pytest.mark.asyncio
-    async def test_partial_update_gui_only(self, mock_manager, mock_registry_client):
+    async def test_partial_update_gui_only(self, mock_manager, mock_registry_client, tmp_path):
         """Test deployment when only GUI image changed."""
         orchestrator = DeploymentOrchestrator(mock_manager)
+        # Use temporary directory for state to ensure isolation
+        orchestrator.state_dir = tmp_path / "state"
+        orchestrator.state_dir.mkdir(exist_ok=True)
+        orchestrator.deployment_state_file = orchestrator.state_dir / "deployment_state.json"
+        orchestrator.deployments = {}
+        orchestrator.current_deployment = None
 
         # Mock same agent digest, different GUI digest
         mock_registry_client.resolve_image_digest = AsyncMock(
@@ -186,7 +208,7 @@ class TestNoOpDeployment:
         assert status.agents_total == 1
 
     @pytest.mark.asyncio
-    async def test_no_metadata_triggers_update(self, mock_manager, mock_registry_client):
+    async def test_no_metadata_triggers_update(self, mock_manager, mock_registry_client, tmp_path):
         """Test agents without metadata are always updated."""
         manager = Mock()
         manager.agent_registry = Mock()
@@ -198,6 +220,12 @@ class TestNoOpDeployment:
 
         orchestrator = DeploymentOrchestrator(manager)
         orchestrator.registry_client = mock_registry_client
+        # Use temporary directory for state to ensure isolation
+        orchestrator.state_dir = tmp_path / "state"
+        orchestrator.state_dir.mkdir(exist_ok=True)
+        orchestrator.deployment_state_file = orchestrator.state_dir / "deployment_state.json"
+        orchestrator.deployments = {}
+        orchestrator.current_deployment = None
 
         # Create test agents
         agents = [

@@ -51,6 +51,7 @@ class TestDeploymentPersistence:
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
             status="in_progress",
+            message="Test deployment in progress",
         )
         orchestrator.deployments["test-123"] = deployment
         orchestrator.current_deployment = "test-123"
@@ -85,6 +86,7 @@ class TestDeploymentPersistence:
             started_at=datetime.now(timezone.utc).isoformat(),
             status="in_progress",
             canary_phase="explorers",
+            message="Canary deployment - explorers phase",
         )
         orchestrator.deployments["test-456"] = deployment
 
@@ -203,8 +205,18 @@ class TestDeploymentPersistence:
         )
 
         agents = [
-            AgentInfo(agent_id="agent-1", agent_name="Agent One", api_port=8001),
-            AgentInfo(agent_id="agent-2", agent_name="Agent Two", api_port=8002),
+            AgentInfo(
+                agent_id="agent-1",
+                agent_name="Agent One",
+                container_name="ciris-agent-1",
+                api_port=8001,
+            ),
+            AgentInfo(
+                agent_id="agent-2",
+                agent_name="Agent Two",
+                container_name="ciris-agent-2",
+                api_port=8002,
+            ),
         ]
 
         # Mock the methods that would normally run
@@ -231,7 +243,14 @@ class TestDeploymentPersistence:
             agent_image="test:v4", strategy="canary", message="Staged canary deployment"
         )
 
-        agents = [AgentInfo(agent_id="agent-3", agent_name="Agent Three", api_port=8003)]
+        agents = [
+            AgentInfo(
+                agent_id="agent-3",
+                agent_name="Agent Three",
+                container_name="ciris-agent-3",
+                api_port=8003,
+            )
+        ]
 
         # Mock image checks
         orchestrator._check_agents_need_update = AsyncMock(return_value=(agents, False))
@@ -263,6 +282,7 @@ class TestDeploymentPersistence:
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
             status="staged",
+            message="Staged for approval",
         )
         orchestrator.deployments["staged-123"] = deployment
         orchestrator._save_state()
@@ -294,6 +314,7 @@ class TestDeploymentPersistence:
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
             status="in_progress",
+            message="Updating agents",
         )
         orchestrator.deployments["progress-123"] = deployment
 
@@ -350,6 +371,7 @@ class TestDeploymentPersistence:
             completed_at="2025-01-01T11:00:00Z",
             status="completed",
             canary_phase="general",
+            message="Deployment completed successfully",
         )
 
         deployment2 = DeploymentStatus(
@@ -363,6 +385,7 @@ class TestDeploymentPersistence:
             agents_failed=0,
             started_at="2025-01-02T09:00:00Z",
             status="in_progress",
+            message="Deployment in progress",
         )
 
         orch1.deployments["persist-1"] = deployment1
@@ -404,6 +427,7 @@ class TestDeploymentPersistence:
             agents_failed=0,
             started_at=datetime.now(timezone.utc).isoformat(),
             status="in_progress",
+            message="Testing error handling",
         )
         orchestrator.deployments["error-test"] = deployment
 
