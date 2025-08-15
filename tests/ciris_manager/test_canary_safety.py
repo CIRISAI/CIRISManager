@@ -455,7 +455,9 @@ class TestCanaryDeploymentFlow:
         )
 
         # Mock health check to always fail
-        orchestrator._check_canary_group_health = AsyncMock(return_value=False)
+        orchestrator._check_canary_group_health = AsyncMock(
+            return_value=(False, {"failed": True, "reason": "test"})
+        )
 
         # Mock audit
         with patch("ciris_manager.audit.audit_deployment_action"):
@@ -574,7 +576,17 @@ class TestCanaryDeploymentFlow:
         )
 
         # Mock health check to always succeed
-        orchestrator._check_canary_group_health = AsyncMock(return_value=True)
+        orchestrator._check_canary_group_health = AsyncMock(
+            return_value=(
+                True,
+                {
+                    "successful_agent": "test-agent",
+                    "time_to_work_minutes": 1.0,
+                    "stability_duration_minutes": 0.5,
+                    "version": "2.0.0",
+                },
+            )
+        )
 
         with patch("ciris_manager.audit.audit_deployment_action"):
             deployment_id = "test-deploy"

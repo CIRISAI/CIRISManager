@@ -417,7 +417,17 @@ class TestDeploymentOrchestrator:
             # agents 3-9 remain unassigned
 
         # Mock the health check to always succeed
-        orchestrator._check_canary_group_health = AsyncMock(return_value=True)
+        orchestrator._check_canary_group_health = AsyncMock(
+            return_value=(
+                True,
+                {
+                    "successful_agent": "agent-0",
+                    "time_to_work_minutes": 1.0,
+                    "stability_duration_minutes": 0.5,
+                    "version": "2.0.0",
+                },
+            )
+        )
 
         with patch.object(
             orchestrator, "_update_agent_group", new_callable=AsyncMock
