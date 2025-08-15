@@ -2616,7 +2616,7 @@ function showPendingDeployments(data) {
                         class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
                     💬 Agent Messages
                 </button>
-                <button onclick="rejectDeployment('${deployment.deployment_id}')" 
+                <button onclick="executeDeploymentAction('reject', '${deployment.deployment_id}')" 
                         class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
                     ❌ Reject
                 </button>
@@ -3021,6 +3021,10 @@ async function updateDeploymentStatus() {
         }
     } catch (error) {
         console.error('Error fetching deployment status:', error);
+        const statusDiv = document.getElementById('deployment-status');
+        if (statusDiv) {
+            statusDiv.innerHTML = '<p class="text-gray-600">No active deployment</p>';
+        }
     }
 }
 
