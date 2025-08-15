@@ -500,7 +500,18 @@ class TestCanaryDeploymentFlow:
 
         # Mock health check: explorer succeeds, early adopter fails
         orchestrator._check_canary_group_health = AsyncMock(
-            side_effect=[True, False]  # Explorer succeeds, early adopter fails
+            side_effect=[
+                (
+                    True,
+                    {
+                        "successful_agent": "explorer-1",
+                        "time_to_work_minutes": 1.0,
+                        "stability_duration_minutes": 0.5,
+                        "version": "2.0.0",
+                    },
+                ),
+                (False, {"failed": True, "reason": "test"}),
+            ]
         )
 
         with patch("ciris_manager.audit.audit_deployment_action"):
@@ -539,7 +550,27 @@ class TestCanaryDeploymentFlow:
 
         # Mock health check: explorer and early adopter succeed, general fails
         orchestrator._check_canary_group_health = AsyncMock(
-            side_effect=[True, True, False]  # Explorer and early adopter succeed, general fails
+            side_effect=[
+                (
+                    True,
+                    {
+                        "successful_agent": "explorer-1",
+                        "time_to_work_minutes": 1.0,
+                        "stability_duration_minutes": 0.5,
+                        "version": "2.0.0",
+                    },
+                ),
+                (
+                    True,
+                    {
+                        "successful_agent": "early-1",
+                        "time_to_work_minutes": 1.0,
+                        "stability_duration_minutes": 0.5,
+                        "version": "2.0.0",
+                    },
+                ),
+                (False, {"failed": True, "reason": "test"}),
+            ]
         )
 
         with patch("ciris_manager.audit.audit_deployment_action"):
