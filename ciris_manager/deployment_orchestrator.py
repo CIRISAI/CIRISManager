@@ -1131,16 +1131,17 @@ class DeploymentOrchestrator:
         Args:
             agent_id: ID of the agent
         Returns:
-            Canary group name: 'explorer', 'early_adopter', 'general', or None
+            Canary group name: 'explorer', 'early_adopter', or 'general'
         """
         if not self.manager or not self.manager.agent_registry:
-            return None
+            return "general"
 
         # Get from agent registry metadata
         try:
             agent_metadata = self.manager.agent_registry.get_agent_metadata(agent_id)
             if agent_metadata:
-                return agent_metadata.get("metadata", {}).get("canary_group", "general")
+                canary_group = agent_metadata.get("metadata", {}).get("canary_group", "general")
+                return str(canary_group) if canary_group else "general"
         except Exception:
             pass
 
@@ -1178,7 +1179,7 @@ class DeploymentOrchestrator:
         )
 
         # Build preview data
-        preview = {
+        preview: Dict[str, Any] = {
             "deployment_id": deployment_id,
             "version": deployment.notification.version or "unknown",
             "total_agents": len(all_agents),
