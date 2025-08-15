@@ -1666,6 +1666,15 @@ class DeploymentOrchestrator:
 
                                         incidents = telemetry_data.get("recent_incidents", [])
 
+                                        # Handle case where incidents might be an int (count) instead of list
+                                        if isinstance(incidents, int):
+                                            incidents = []  # No incidents if it's just a count
+                                        elif not isinstance(incidents, list):
+                                            logger.warning(
+                                                f"Unexpected incidents type for {agent.agent_id}: {type(incidents)}"
+                                            )
+                                            incidents = []
+
                                         # Check for critical incidents in the last stability_minutes
                                         recent_critical = False
                                         cutoff_time = datetime.now(timezone.utc).timestamp() - (
