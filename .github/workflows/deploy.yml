@@ -214,6 +214,7 @@ jobs:
             # Create or update environment file for systemd service
             echo "# Auto-generated environment file for CIRISManager" > /etc/ciris-manager/environment
             echo "TELEMETRY_DATABASE_URL=postgresql://ciris:${POSTGRES_PASSWORD}@localhost:5432/telemetry" >> /etc/ciris-manager/environment
+            echo "CIRIS_DEPLOY_TOKEN=${{ secrets.CIRIS_DEPLOY_TOKEN }}" >> /etc/ciris-manager/environment
             chmod 600 /etc/ciris-manager/environment
             
             # Start or restart PostgreSQL container
