@@ -15,6 +15,10 @@ from ciris_manager.telemetry.schemas import (
     AgentOperationalMetrics,
     CognitiveState,
 )
+from ciris_manager.telemetry.debug_helpers import (
+    validate_agent_metrics,
+    validate_auth_response,
+)
 from ciris_manager.docker_discovery import DockerAgentDiscovery
 from ciris_manager.agent_auth import get_agent_auth
 
@@ -94,7 +98,7 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
         return metrics
 
     async def _collect_single_agent(self, agent) -> Optional[AgentOperationalMetrics]:
-        """Collect metrics from a single agent."""
+        """Collect metrics from a single agent using unified telemetry endpoint."""
         agent_id = agent.agent_id
         port = agent.api_port
 
@@ -106,36 +110,37 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
             except Exception as e:
                 logger.debug(f"No auth available for {agent_id}: {e}")
 
-        # Try overview endpoint first, fallback to health
+        # Use unified telemetry endpoint which provides ALL metrics
         try:
             async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
                 start_time = asyncio.get_event_loop().time()
 
-                # Try /v1/telemetry/overview first
-                overview_url = f"http://localhost:{port}/v1/telemetry/overview"
+                # Get unified telemetry with operational view (includes all metrics we need)
+                unified_url = f"http://localhost:{port}/v1/telemetry/unified?view=operational"
                 try:
-                    response = await client.get(overview_url, headers=headers)
+                    response = await client.get(unified_url, headers=headers)
                     response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
 
+                    # VALIDATE AUTH IMMEDIATELY
+                    validate_auth_response(response, agent_id, "telemetry/unified")
+
                     if response.status_code == 200:
-                        return self._parse_overview_response(agent, response, response_time_ms)
-                    else:
-                        logger.debug(
-                            f"Agent {agent_id} overview returned {response.status_code}, trying health"
+                        result = self._parse_unified_response(agent, response, response_time_ms)
+                        # VALIDATE METRICS IMMEDIATELY
+                        validate_agent_metrics(
+                            result, f"collector._collect_single_agent({agent_id})"
                         )
+                        return result
+                    else:
+                        logger.error(
+                            f"❌ FAILED to get telemetry from {agent_id}: HTTP {response.status_code}"
+                        )
+                        logger.error(f"   Response: {response.text[:500]}")
+                        return self._create_unhealthy_metrics(agent, response_time_ms)
+
                 except Exception as e:
-                    logger.debug(f"Agent {agent_id} overview failed: {e}, trying health")
-
-                # Fallback to /v1/system/health
-                health_url = f"http://localhost:{port}/v1/system/health"
-                response = await client.get(health_url, headers=headers)
-                response_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
-
-                if response.status_code != 200:
-                    logger.warning(f"Agent {agent_id} health returned {response.status_code}")
-                    return self._create_unhealthy_metrics(agent, response_time_ms)
-
-                return self._parse_health_response(agent, response, response_time_ms)
+                    logger.error(f"❌ EXCEPTION getting telemetry from {agent_id}: {e}")
+                    raise  # FAIL FAST AND LOUD
 
         except asyncio.TimeoutError:
             logger.warning(f"Agent {agent_id} health timeout")
@@ -161,6 +166,139 @@ class AgentMetricsCollector(BaseCollector[AgentOperationalMetrics]):
             cost_cents_24h=0,
             carbon_24h_grams=0,
             api_port=agent.api_port or 0,
+            oauth_configured=agent.has_oauth,
+            oauth_providers=[],
+        )
+
+    def _parse_unified_response(
+        self, agent, response, response_time_ms: int
+    ) -> AgentOperationalMetrics:
+        """Parse response from /v1/telemetry/unified endpoint."""
+        agent_id = agent.agent_id
+        port = agent.api_port
+
+        # Parse unified telemetry response
+        data = response.json()
+
+        # Handle wrapped response format
+        if "data" in data:
+            data = data["data"]
+
+        # Extract metrics from unified telemetry
+        # The unified endpoint provides ALL metrics in a structured format
+
+        # Get system health and uptime
+        system_healthy = data.get("system_healthy", False)
+        uptime_seconds = 86400  # Default if not available
+
+        # Infrastructure metrics available at data["infrastructure"] if needed
+
+        # Get bus metrics for LLM usage
+        buses = data.get("buses", {})
+        llm_bus = buses.get("llm_bus", {})
+
+        # Extract cost and usage metrics from LLM bus
+        total_cost_cents = 0
+        total_requests = 0
+        total_tokens = 0
+
+        if llm_bus:
+            # Get cost directly from the bus metrics
+            total_cost_cents = llm_bus.get("total_cost_cents", 0)
+            total_requests = llm_bus.get("request_count", 0)
+            total_tokens = llm_bus.get("total_tokens", 0)
+
+            # If cost is still 0, calculate from model costs
+            if total_cost_cents == 0 and "model_costs" in llm_bus:
+                for model, cost_data in llm_bus.get("model_costs", {}).items():
+                    total_cost_cents += cost_data.get("cost_cents", 0)
+
+        # Get message bus for message counts
+        message_bus = buses.get("message_bus", {})
+        message_count = message_bus.get("request_count", 0) if message_bus else total_requests
+
+        # Calculate carbon footprint (rough estimate: 0.0001g CO2 per token)
+        carbon_grams = total_tokens * 0.0001 if total_tokens else 0
+
+        # Get cognitive state from runtime if available
+        cognitive_state = CognitiveState.WORK  # Default
+        runtime = data.get("runtime", {})
+        if runtime and "cognitive_state" in runtime:
+            cognitive_state = self._parse_cognitive_state(runtime["cognitive_state"])
+
+        # Get version from metadata
+        version = data.get("version", agent.version or "unknown")
+
+        # Log what we got
+        logger.info(
+            f"📊 {agent_id} unified telemetry: "
+            f"cost={total_cost_cents} cents, "
+            f"requests={total_requests}, "
+            f"messages={message_count}, "
+            f"tokens={total_tokens}, "
+            f"healthy={system_healthy}"
+        )
+
+        return AgentOperationalMetrics(
+            agent_id=agent_id,
+            agent_name=agent.agent_name,
+            version=version,
+            cognitive_state=cognitive_state,
+            api_healthy=system_healthy,
+            api_response_time_ms=response_time_ms,
+            uptime_seconds=uptime_seconds,
+            incident_count_24h=0,  # Could extract from error tracking if available
+            message_count_24h=message_count,
+            cost_cents_24h=total_cost_cents,
+            carbon_24h_grams=int(carbon_grams),
+            api_port=port,
+            oauth_configured=agent.has_oauth,
+            oauth_providers=[],
+        )
+
+    def _parse_llm_usage_response(
+        self, agent, response, response_time_ms: int
+    ) -> AgentOperationalMetrics:
+        """Parse response from /v1/telemetry/llm/usage endpoint (legacy)."""
+        agent_id = agent.agent_id
+        port = agent.api_port
+
+        # Parse LLM usage response
+        data = response.json()
+
+        # Handle wrapped response format
+        if "data" in data:
+            data = data["data"]
+
+        # Extract cost and message data from LLM usage
+        total_cost_cents = data.get("total_cost_cents", 0)
+        total_requests = data.get("total_requests", 0)
+        total_tokens = data.get("total_tokens", 0)
+
+        # Calculate carbon footprint (rough estimate: 0.0001g CO2 per token)
+        carbon_grams = total_tokens * 0.0001 if total_tokens else 0
+
+        # Log what we got
+        logger.info(
+            f"📊 {agent_id} LLM usage: cost={total_cost_cents} cents, requests={total_requests}, tokens={total_tokens}"
+        )
+
+        # Get uptime from somewhere else if needed
+        uptime_seconds = 86400  # Default to 1 day if not available
+
+        return AgentOperationalMetrics(
+            agent_id=agent_id,
+            agent_name=agent.agent_name,
+            version=agent.version or "unknown",
+            cognitive_state=CognitiveState.WORK,  # Default to WORK
+            api_healthy=True,
+            api_response_time_ms=response_time_ms,
+            uptime_seconds=uptime_seconds,
+            incident_count_24h=0,
+            message_count_24h=total_requests,  # Use requests as proxy for messages
+            cost_cents_24h=total_cost_cents,
+            carbon_24h_grams=int(carbon_grams),
+            api_port=port,
             oauth_configured=agent.has_oauth,
             oauth_providers=[],
         )
