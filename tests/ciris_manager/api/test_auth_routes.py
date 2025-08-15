@@ -94,7 +94,7 @@ class TestURLHelpers:
         request.url.hostname = "agents.ciris.ai"
 
         url = _get_callback_url(request)
-        assert url == "https://agents.ciris.ai/manager/oauth/callback"
+        assert url == "https://agents.ciris.ai/manager/v1/oauth/callback"
 
     def test_get_redirect_uri_with_custom(self):
         """Test redirect URI with custom parameter."""
