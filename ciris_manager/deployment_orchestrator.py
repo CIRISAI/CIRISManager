@@ -1148,6 +1148,70 @@ class DeploymentOrchestrator:
 
         return "general"  # Default to general if not specified
 
+    async def get_shutdown_reasons_preview(self, deployment_id: str) -> Dict[str, Any]:
+        """
+        Get a preview of shutdown reasons that will be sent to each agent.
+
+        Args:
+            deployment_id: Deployment ID
+
+        Returns:
+            Dict with shutdown reasons for each agent group
+        """
+        if deployment_id not in self.pending_deployments:
+            return {"error": "Deployment not found"}
+
+        deployment = self.pending_deployments[deployment_id]
+        notification = deployment.notification
+
+        if not notification:
+            return {"error": "No notification in deployment"}
+
+        # Build base reason
+        if notification.version and not notification.version.startswith(("v", "1", "2", "3")):
+            base_reason = f"Runtime: CD update to commit {notification.version[:7]}"
+        elif notification.version:
+            base_reason = f"Runtime: CD update to version {notification.version}"
+        else:
+            base_reason = "Runtime: CD update requested"
+
+        reasons = {
+            "explorers": f"{base_reason} (deployment {deployment_id[:8]})",
+            "early_adopters": f"{base_reason} (deployment {deployment_id[:8]})",
+            "general": f"{base_reason} (deployment {deployment_id[:8]})",
+        }
+
+        # Early adopters will see explorer results (if explorers exist)
+        if self.manager and hasattr(self.manager, "agent_registry"):
+            groups = self.manager.agent_registry.get_agents_by_canary_group()
+
+            if groups.get("explorer"):
+                # Simulate successful explorer
+                reasons["early_adopters"] = (
+                    f"{base_reason} | Prior groups: Explorers: 1/1 succeeded "
+                    f"(avg 2.5min to WORK) (deployment {deployment_id[:8]})"
+                )
+
+                # General will see both
+                reasons["general"] = (
+                    f"{base_reason} | Prior groups: Explorers: 1/1 succeeded (avg 2.5min to WORK) | "
+                    f"Early adopters: 1/1 succeeded (avg 2.0min to WORK) (deployment {deployment_id[:8]})"
+                )
+            elif groups.get("early_adopter"):
+                # No explorers, so early adopters get no peer info
+                # General only sees early adopters
+                reasons["general"] = (
+                    f"{base_reason} | Prior groups: Early adopters: 1/1 succeeded "
+                    f"(avg 2.0min to WORK) (deployment {deployment_id[:8]})"
+                )
+
+        return {
+            "deployment_id": deployment_id,
+            "version": notification.version,
+            "shutdown_reasons": reasons,
+            "note": "These are example reasons. Actual times and success counts will vary based on deployment results.",
+        }
+
     async def get_deployment_preview(self, deployment_id: str) -> Dict[str, Any]:
         """
         Get a preview of what a deployment will do without launching it.
@@ -1494,7 +1558,7 @@ class DeploymentOrchestrator:
         phase_name: str,
         wait_for_work_minutes: int = 5,
         stability_minutes: int = 1,
-    ) -> bool:
+    ) -> tuple[bool, Dict[str, Any]]:
         """
         Check if at least one agent in the canary group has reached WORK state
         and has no incidents for the stability period.
@@ -1507,7 +1571,7 @@ class DeploymentOrchestrator:
             stability_minutes: Time agent must be stable in WORK state
 
         Returns:
-            True if at least one agent is stable in WORK state, False otherwise
+            Tuple of (success, results_dict) where results_dict contains timing info
         """
         logger.info(
             f"Deployment {deployment_id}: Waiting for {phase_name} agents to reach WORK state"
@@ -1602,7 +1666,20 @@ class DeploymentOrchestrator:
                                                 f"Agent {agent.agent_id} is stable in WORK state "
                                                 f"for {work_duration:.1f} minutes with no critical incidents"
                                             )
-                                            return True
+                                            # Calculate time to reach WORK
+                                            time_to_work = (
+                                                agents_in_work[agent.agent_id] - start_time
+                                            ).total_seconds() / 60
+
+                                            results = {
+                                                "successful_agent": agent.agent_id,
+                                                "time_to_work_minutes": round(time_to_work, 1),
+                                                "stability_duration_minutes": round(
+                                                    work_duration, 1
+                                                ),
+                                                "version": version,
+                                            }
+                                            return True, results
                             else:
                                 # Agent not in WORK state, remove from tracking
                                 if agent.agent_id in agents_in_work:
@@ -1634,7 +1711,7 @@ class DeploymentOrchestrator:
             affected_agents=agents,
         )
 
-        return False
+        return False, {"failed": True, "reason": "timeout"}
 
     async def _run_canary_deployment(
         self,
@@ -1654,6 +1731,12 @@ class DeploymentOrchestrator:
             agents: List of agents
         """
         status = self.deployments[deployment_id]
+
+        # Track peer results from previous phases
+        peer_results = {
+            "explorers": {"total": 0, "successful": 0, "failed": 0, "time_to_work": []},
+            "early_adopters": {"total": 0, "successful": 0, "failed": 0, "time_to_work": []},
+        }
 
         # Get agents organized by their pre-assigned canary groups
         explorers = []
@@ -1715,12 +1798,23 @@ class DeploymentOrchestrator:
                 action="canary_phase_started",
                 details={"phase": "explorers", "agent_count": len(explorers)},
             )
-            await self._update_agent_group(deployment_id, notification, explorers)
+            # First group - no peer results to share
+            await self._update_agent_group(deployment_id, notification, explorers, None)
 
             # Wait for at least one explorer to reach WORK state and be stable
-            if not await self._check_canary_group_health(
+            success, results = await self._check_canary_group_health(
                 deployment_id, explorers, "explorer", wait_for_work_minutes=5, stability_minutes=1
-            ):
+            )
+
+            if success:
+                # Update peer results
+                peer_results["explorers"]["total"] = len(explorers)
+                peer_results["explorers"]["successful"] = 1
+                peer_results["explorers"]["time_to_work"].append(
+                    results.get("time_to_work_minutes", 0)
+                )
+
+            if not success:
                 status.message = "Explorer phase failed - no agents reached stable WORK state"
                 status.status = "failed"
                 # Clear the deployment lock on failure
@@ -1755,16 +1849,30 @@ class DeploymentOrchestrator:
                 action="canary_phase_started",
                 details={"phase": "early_adopters", "agent_count": len(early_adopters)},
             )
-            await self._update_agent_group(deployment_id, notification, early_adopters)
+            # Only pass peer results if explorers ran first
+            peer_results_to_pass = peer_results if explorers else None
+            await self._update_agent_group(
+                deployment_id, notification, early_adopters, peer_results_to_pass
+            )
 
             # Wait for at least one early adopter to reach WORK state and be stable
-            if not await self._check_canary_group_health(
+            success, results = await self._check_canary_group_health(
                 deployment_id,
                 early_adopters,
                 "early adopter",
                 wait_for_work_minutes=5,
                 stability_minutes=1,
-            ):
+            )
+
+            if success:
+                # Update peer results
+                peer_results["early_adopters"]["total"] = len(early_adopters)
+                peer_results["early_adopters"]["successful"] = 1
+                peer_results["early_adopters"]["time_to_work"].append(
+                    results.get("time_to_work_minutes", 0)
+                )
+
+            if not success:
                 status.message = "Early adopter phase failed - no agents reached stable WORK state"
                 status.status = "failed"
                 # Clear the deployment lock on failure
@@ -1801,12 +1909,13 @@ class DeploymentOrchestrator:
                 action="canary_phase_started",
                 details={"phase": "general", "agent_count": len(general)},
             )
-            await self._update_agent_group(deployment_id, notification, general)
+            await self._update_agent_group(deployment_id, notification, general, peer_results)
 
             # For general population, just log if they don't reach WORK state (don't fail deployment)
-            if await self._check_canary_group_health(
+            success, results = await self._check_canary_group_health(
                 deployment_id, general, "general", wait_for_work_minutes=5, stability_minutes=1
-            ):
+            )
+            if success:
                 logger.info(
                     f"Deployment {deployment_id}: General phase agents reached stable WORK state"
                 )
@@ -1843,6 +1952,7 @@ class DeploymentOrchestrator:
         deployment_id: str,
         notification: UpdateNotification,
         agents: List[AgentInfo],
+        peer_results: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Update a group of agents.
@@ -1857,7 +1967,7 @@ class DeploymentOrchestrator:
 
         for agent in agents:
             task = asyncio.create_task(
-                self._update_single_agent(deployment_id, notification, agent)
+                self._update_single_agent(deployment_id, notification, agent, peer_results)
             )
             tasks.append(task)
 
@@ -1889,6 +1999,7 @@ class DeploymentOrchestrator:
         deployment_id: str,
         notification: UpdateNotification,
         agent: AgentInfo,
+        peer_results: Optional[Dict[str, Any]] = None,
     ) -> AgentUpdateResponse:
         """
         Update a single agent.
@@ -1935,6 +2046,34 @@ class DeploymentOrchestrator:
                 else:
                     # No version provided
                     reason = "Runtime: CD update requested"
+
+                # Add peer results if available (but NOT for the first group)
+                if peer_results:
+                    # Build peer summary
+                    peer_info = []
+
+                    if peer_results.get("explorers", {}).get("total", 0) > 0:
+                        exp = peer_results["explorers"]
+                        if exp.get("successful", 0) > 0:
+                            avg_time = sum(exp.get("time_to_work", [])) / len(
+                                exp.get("time_to_work", [1])
+                            )
+                            peer_info.append(
+                                f"Explorers: {exp['successful']}/{exp['total']} succeeded (avg {avg_time:.1f}min to WORK)"
+                            )
+
+                    if peer_results.get("early_adopters", {}).get("total", 0) > 0:
+                        ea = peer_results["early_adopters"]
+                        if ea.get("successful", 0) > 0:
+                            avg_time = sum(ea.get("time_to_work", [])) / len(
+                                ea.get("time_to_work", [1])
+                            )
+                            peer_info.append(
+                                f"Early adopters: {ea['successful']}/{ea['total']} succeeded (avg {avg_time:.1f}min to WORK)"
+                            )
+
+                    if peer_info:
+                        reason = f"{reason} | Prior groups: {' | '.join(peer_info)}"
 
                 # Add deployment ID for context
                 reason = f"{reason} (deployment {deployment_id[:8]})"

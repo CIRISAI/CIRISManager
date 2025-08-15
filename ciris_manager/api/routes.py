@@ -1352,6 +1352,13 @@ def create_routes(manager: Any) -> APIRouter:
         preview = await deployment_orchestrator.get_deployment_preview(deployment_id)
         return preview
 
+    @router.get("/updates/shutdown-reasons/{deployment_id}")
+    async def get_shutdown_reasons(
+        deployment_id: str, _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """Get the shutdown reasons that will be sent to each agent."""
+        return await deployment_orchestrator.get_shutdown_reasons_preview(deployment_id)
+
     @router.post("/updates/launch")
     async def launch_deployment(
         request: Dict[str, str], _user: Dict[str, str] = auth_dependency

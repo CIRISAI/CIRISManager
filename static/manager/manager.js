@@ -1308,6 +1308,91 @@ function formatVersionDisplay(imageTag) {
     }
 }
 
+// Show shutdown reasons modal
+async function showShutdownReasons(deploymentId) {
+    try {
+        const response = await fetch(`/manager/v1/updates/shutdown-reasons/${deploymentId}`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to get shutdown reasons: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Create modal
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        modal.onclick = (e) => {
+            if (e.target === modal) modal.remove();
+        };
+        
+        const content = document.createElement('div');
+        content.className = 'bg-white rounded-lg shadow-xl max-w-4xl max-h-[80vh] overflow-hidden';
+        
+        content.innerHTML = `
+            <div class="p-6 border-b">
+                <h2 class="text-2xl font-bold text-gray-800">Agent Shutdown Messages</h2>
+                <p class="text-sm text-gray-600 mt-2">
+                    Messages that will be sent to agents when they are notified to shutdown for update
+                </p>
+                <p class="text-xs text-yellow-600 mt-2">
+                    ${data.note || ''}
+                </p>
+            </div>
+            <div class="p-6 overflow-y-auto max-h-[60vh]">
+                <div class="space-y-4">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <h3 class="font-semibold text-blue-800 mb-2">🚀 Explorers (First Group)</h3>
+                        <code class="block bg-white p-3 rounded border border-blue-200 text-sm whitespace-pre-wrap break-all">
+${data.shutdown_reasons.explorers}
+                        </code>
+                        <p class="text-xs text-blue-600 mt-2">
+                            ℹ️ First group receives no peer information
+                        </p>
+                    </div>
+                    
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <h3 class="font-semibold text-green-800 mb-2">🌟 Early Adopters</h3>
+                        <code class="block bg-white p-3 rounded border border-green-200 text-sm whitespace-pre-wrap break-all">
+${data.shutdown_reasons.early_adopters}
+                        </code>
+                        <p class="text-xs text-green-600 mt-2">
+                            ℹ️ Receives explorer results if explorers exist
+                        </p>
+                    </div>
+                    
+                    <div class="bg-purple-50 p-4 rounded-lg">
+                        <h3 class="font-semibold text-purple-800 mb-2">👥 General Population</h3>
+                        <code class="block bg-white p-3 rounded border border-purple-200 text-sm whitespace-pre-wrap break-all">
+${data.shutdown_reasons.general}
+                        </code>
+                        <p class="text-xs text-purple-600 mt-2">
+                            ℹ️ Receives results from all prior groups
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 border-t bg-gray-50">
+                <button onclick="this.closest('.fixed').remove()" 
+                        class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
+                    Close
+                </button>
+            </div>
+        `;
+        
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+    } catch (error) {
+        console.error('Error fetching shutdown reasons:', error);
+        alert(`Failed to get shutdown reasons: ${error.message}`);
+    }
+}
+
 // Format date
 function formatDate(dateString) {
     if (!dateString || dateString === 'never') return 'Unknown';
@@ -2526,6 +2611,10 @@ function showPendingDeployments(data) {
                 <button onclick="fetchDeploymentPreview('${deployment.deployment_id}')" 
                         class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
                     👁️ Preview
+                </button>
+                <button onclick="showShutdownReasons('${deployment.deployment_id}')" 
+                        class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
+                    💬 Agent Messages
                 </button>
                 <button onclick="rejectDeployment('${deployment.deployment_id}')" 
                         class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
