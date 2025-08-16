@@ -2609,6 +2609,7 @@ class DeploymentOrchestrator:
                     await rm_result.communicate()
 
                     # Run new container with updated image
+                    # Use host network to match nginx configuration
                     run_result = await asyncio.create_subprocess_exec(
                         "docker",
                         "run",
@@ -2617,10 +2618,8 @@ class DeploymentOrchestrator:
                         container_name,
                         "--restart",
                         "unless-stopped",
-                        "-p",
-                        "3001:3000",  # GUI port mapping
                         "--network",
-                        "ciris-network",
+                        "host",  # Use host network to match nginx
                         gui_image,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
