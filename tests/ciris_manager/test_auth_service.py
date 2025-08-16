@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import jwt
 import tempfile
 from pathlib import Path
+import os
 
 from ciris_manager.api.auth_service import AuthService, InMemorySessionStore, SQLiteUserStore
 
@@ -147,7 +148,7 @@ class TestAuthService:
                 oauth_provider=mock_oauth_provider,
                 session_store=session_store,
                 user_store=user_store,
-                jwt_secret="test-secret",
+                jwt_secret=os.environ.get("TEST_JWT_SECRET", "test-jwt-secret-for-testing-only"),
                 jwt_expiration_hours=1,
             )
             yield service
@@ -265,7 +266,11 @@ class TestAuthService:
         token = auth_service.create_jwt_token(payload)
 
         # Verify token can be decoded
-        decoded = jwt.decode(token, "test-secret", algorithms=["HS256"])
+        decoded = jwt.decode(
+            token,
+            os.environ.get("TEST_JWT_SECRET", "test-jwt-secret-for-testing-only"),
+            algorithms=["HS256"],
+        )
 
         assert decoded["user_id"] == 1
         assert decoded["email"] == "test@ciris.ai"
@@ -285,7 +290,11 @@ class TestAuthService:
         """Test verifying expired JWT token."""
         # Create expired token
         payload = {"user_id": 1, "exp": datetime.utcnow() - timedelta(hours=1)}
-        token = jwt.encode(payload, "test-secret", algorithm="HS256")
+        token = jwt.encode(
+            payload,
+            os.environ.get("TEST_JWT_SECRET", "test-jwt-secret-for-testing-only"),
+            algorithm="HS256",
+        )
 
         # Should return None
         result = auth_service.verify_jwt_token(token)

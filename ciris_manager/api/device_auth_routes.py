@@ -14,6 +14,7 @@ import logging
 
 from .auth_routes import get_auth_service
 from .auth_service import AuthService
+from ciris_manager.utils.log_sanitizer import sanitize_for_log, sanitize_email
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +81,8 @@ def create_device_auth_routes() -> APIRouter:
         user_code = generate_user_code()
 
         logger.info(
-            f"Device code requested - user_code: {user_code}, "
-            f"device_code: {device_code[:10]}..., client_id: {device_request.client_id}"
+            f"Device code requested - user_code: {sanitize_for_log(user_code)}, "
+            f"device_code: {device_code[:10]}..., client_id: {sanitize_for_log(device_request.client_id)}"
         )
 
         # Store device code info
@@ -421,7 +422,7 @@ def create_device_auth_routes() -> APIRouter:
     ) -> Dict[str, Any]:
         """Verify device code and authorize."""
         user_code = body.get("user_code", "")
-        logger.info(f"Device verification attempt for user_code: {user_code}")
+        logger.info(f"Device verification attempt for user_code: {sanitize_for_log(user_code)}")
 
         if not auth_service:
             logger.error("Auth service not configured")
@@ -444,8 +445,7 @@ def create_device_auth_routes() -> APIRouter:
 
         # Sanitize email for logging to prevent log injection
         email = user.get("email", "unknown")
-        # Replace any control characters that could affect log parsing
-        safe_email = "".join(c if c.isprintable() and c not in "\r\n" else "?" for c in email)
+        safe_email = sanitize_email(email)
         logger.info(f"User {safe_email} attempting to verify device code")
 
         # Verify user is from @ciris.ai domain in production
@@ -476,8 +476,8 @@ def create_device_auth_routes() -> APIRouter:
         device_info["user"] = user
 
         logger.info(
-            f"Device authorized successfully - user_code: {user_code}, "
-            f"device_code: {device_code[:10]}..., user: {user.get('email', 'unknown')}"
+            f"Device authorized successfully - user_code: {sanitize_for_log(user_code)}, "
+            f"device_code: {device_code[:10]}..., user: {sanitize_email(user.get('email', 'unknown'))}"
         )
 
         return {"status": "authorized", "message": "Device authorized successfully"}

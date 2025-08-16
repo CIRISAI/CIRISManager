@@ -392,8 +392,20 @@ def create_routes(manager: Any) -> APIRouter:
             import yaml
 
             try:
+                # Validate template name to prevent path traversal
+                import re
+
+                if not re.match(r"^[a-zA-Z0-9_-]+$", agent_request.template):
+                    raise HTTPException(status_code=400, detail="Invalid template name")
+
                 templates_dir = Path(manager.config.manager.templates_directory)
                 template_file = templates_dir / f"{agent_request.template}.yaml"
+
+                # Ensure the resolved path is within the templates directory
+                template_file = template_file.resolve()
+                templates_dir_resolved = templates_dir.resolve()
+                if not str(template_file).startswith(str(templates_dir_resolved)):
+                    raise HTTPException(status_code=400, detail="Invalid template path")
 
                 if template_file.exists():
                     with open(template_file, "r") as f:
@@ -2258,9 +2270,8 @@ def create_routes(manager: Any) -> APIRouter:
         from ciris_manager.telemetry.api import create_telemetry_router
 
         # Try to use PostgreSQL if available
-        database_url: Optional[str] = os.environ.get(
-            "TELEMETRY_DATABASE_URL", "postgresql://ciris:changeme@localhost:5432/telemetry"
-        )
+        # Database URL must be provided via environment variable for security
+        database_url: Optional[str] = os.environ.get("TELEMETRY_DATABASE_URL")
 
         # Check if database is accessible
         # For now, just check if asyncpg is available

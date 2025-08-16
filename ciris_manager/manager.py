@@ -24,6 +24,7 @@ from ciris_manager.compose_generator import ComposeGenerator
 from ciris_manager.nginx_manager import NginxManager
 from ciris_manager.docker_image_cleanup import DockerImageCleanup
 from ciris_manager.logging_config import log_agent_operation
+from ciris_manager.utils.log_sanitizer import sanitize_agent_id
 
 logger = logging.getLogger(__name__)
 agent_logger = logging.getLogger("ciris_manager.agent_lifecycle")
@@ -137,7 +138,9 @@ class CIRISManager:
                 if agent_info:
                     # Ensure port manager knows about this allocation
                     self.port_manager.allocate_port(agent_id)
-                    logger.info(f"Found existing agent: {agent_id} on port {agent_info.port}")
+                    logger.info(
+                        f"Found existing agent: {sanitize_agent_id(agent_id)} on port {agent_info.port}"
+                    )
 
     async def create_agent(
         self,
@@ -197,7 +200,7 @@ class CIRISManager:
 
         # Generate service token for secure manager-to-agent communication
         service_token = self._generate_service_token()
-        logger.info(f"Generated service token for agent {agent_id}")
+        logger.info(f"Generated service token for agent {sanitize_agent_id(agent_id)}")
 
         # Encrypt token for storage
         from ciris_manager.crypto import get_token_encryption
@@ -246,12 +249,14 @@ class CIRISManager:
         )
 
         # Start the agent FIRST so Docker discovery can find it
-        agent_logger.info(f"Starting container for agent {agent_id}")
+        agent_logger.info(f"Starting container for agent {sanitize_agent_id(agent_id)}")
         try:
             await self._start_agent(agent_id, compose_path)
-            agent_logger.info(f"✅ Container started for agent {agent_id}")
+            agent_logger.info(f"✅ Container started for agent {sanitize_agent_id(agent_id)}")
         except Exception as e:
-            agent_logger.error(f"❌ Failed to start container for {agent_id}: {e}")
+            agent_logger.error(
+                f"❌ Failed to start container for {sanitize_agent_id(agent_id)}: {e}"
+            )
             # Clean up on failure
             self.agent_registry.unregister_agent(agent_id)
             self.port_manager.release_port(agent_id)
@@ -261,19 +266,23 @@ class CIRISManager:
         await asyncio.sleep(2)
 
         # NOW update nginx routing after container is running
-        agent_logger.info(f"Updating nginx configuration for agent {agent_id}")
+        agent_logger.info(f"Updating nginx configuration for agent {sanitize_agent_id(agent_id)}")
         try:
             await self._add_nginx_route(agent_id, allocated_port)
-            agent_logger.info(f"✅ Nginx routes added for agent {agent_id}")
+            agent_logger.info(f"✅ Nginx routes added for agent {sanitize_agent_id(agent_id)}")
         except Exception as e:
-            agent_logger.error(f"❌ Failed to add nginx routes for {agent_id}: {e}")
+            agent_logger.error(
+                f"❌ Failed to add nginx routes for {sanitize_agent_id(agent_id)}: {e}"
+            )
             # Container started but nginx failed - log but don't fail the creation
             agent_logger.warning(
                 f"Agent {agent_id} created but nginx routing failed - agent may not be accessible via gateway"
             )
 
         duration_ms = int((time.time() - start_time) * 1000)
-        agent_logger.info(f"✅ Agent {agent_id} created successfully in {duration_ms}ms")
+        agent_logger.info(
+            f"✅ Agent {sanitize_agent_id(agent_id)} created successfully in {duration_ms}ms"
+        )
 
         log_agent_operation(
             operation="create_complete",
