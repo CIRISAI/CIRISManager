@@ -732,7 +732,10 @@ class DeploymentOrchestrator:
         agents: List[AgentInfo],
     ) -> str:
         """
-        Stage ALL deployments for human review - no automatic deployments.
+        Evaluate deployment and either stage for review or execute immediately.
+
+        GUI-only deployments with immediate strategy are executed right away.
+        All other deployments are staged for human review.
 
         Args:
             notification: Update notification
@@ -741,7 +744,26 @@ class DeploymentOrchestrator:
         Returns:
             Deployment ID
         """
-        # ALWAYS stage for human review - no exceptions
+        # Check if this is a GUI-only deployment with immediate strategy
+        if (
+            notification.strategy == "immediate"
+            and notification.gui_image
+            and not notification.agent_image
+        ):
+            # Check if GUI actually needs updating
+            agents_needing_update, nginx_needs_update = await self._check_agents_need_update(
+                notification, agents
+            )
+
+            if nginx_needs_update and not agents_needing_update:
+                logger.info(
+                    f"GUI-only immediate deployment - executing now: {notification.message}"
+                )
+                # Start the deployment immediately for GUI-only updates
+                status = await self.start_deployment(notification, agents)
+                return status.deployment_id
+
+        # All other deployments are staged for human review
         logger.info(f"Staging deployment for human review: {notification.message}")
         return await self.stage_deployment(notification, agents)
 
