@@ -5,7 +5,7 @@ Keep it simple. Keep it typed. Keep it working.
 """
 
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AgentInfo(BaseModel):
@@ -123,8 +123,8 @@ class CreateAgentRequest(BaseModel):
 class UpdateNotification(BaseModel):
     """CD update notification from GitHub Actions."""
 
-    agent_image: str = Field(
-        ..., description="New agent image (e.g., ghcr.io/cirisai/ciris-agent:latest)"
+    agent_image: Optional[str] = Field(
+        None, description="New agent image (e.g., ghcr.io/cirisai/ciris-agent:latest)"
     )
     gui_image: Optional[str] = Field(None, description="New GUI image if updated")
     nginx_image: Optional[str] = Field(None, description="New nginx image if updated")
@@ -137,6 +137,15 @@ class UpdateNotification(BaseModel):
     version: Optional[str] = Field(None, description="Semantic version if available")
     changelog: Optional[str] = Field(None, description="Full commit messages from release")
     risk_level: Optional[str] = Field("unknown", description="Risk assessment: low, medium, high")
+
+    @model_validator(mode="after")
+    def validate_at_least_one_image(self) -> "UpdateNotification":
+        """Ensure at least one image is provided."""
+        if not any([self.agent_image, self.gui_image, self.nginx_image]):
+            raise ValueError(
+                "At least one of agent_image, gui_image, or nginx_image must be provided"
+            )
+        return self
 
 
 class DeploymentStatus(BaseModel):
