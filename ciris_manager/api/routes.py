@@ -1254,6 +1254,26 @@ def create_routes(manager: Any) -> APIRouter:
             logger.error(f"Failed to process update notification: {e}")
             raise HTTPException(status_code=500, detail="Failed to process update")
 
+    @router.get("/updates/events/{deployment_id}")
+    async def get_deployment_events(
+        deployment_id: str, _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """Get timeline of events for a specific deployment."""
+        deployment = deployment_orchestrator.deployments.get(
+            deployment_id
+        ) or deployment_orchestrator.pending_deployments.get(deployment_id)
+
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+
+        return {
+            "deployment_id": deployment_id,
+            "status": deployment.status,
+            "events": deployment.events if hasattr(deployment, "events") else [],
+            "started_at": deployment.started_at,
+            "completed_at": deployment.completed_at,
+        }
+
     @router.get("/updates/status", response_model=Optional[DeploymentStatus])
     async def get_deployment_status(
         deployment_id: Optional[str] = None, _user: Dict[str, str] = auth_dependency

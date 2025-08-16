@@ -170,6 +170,7 @@ class DeploymentStatus(BaseModel):
         description="Deployment status: pending, in_progress, paused, completed, failed, cancelled, rejected, rolling_back, rolled_back",
     )
     message: str = Field(..., description="Current status message")
+    events: List[dict] = Field(default_factory=list, description="Timeline of deployment events")
 
 
 class AgentUpdateResponse(BaseModel):

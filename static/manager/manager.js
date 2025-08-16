@@ -3002,6 +3002,15 @@ async function updateDeploymentStatus() {
                     ${data.message ? `<div class="text-sm text-gray-600 italic">${data.message}</div>` : ''}
                 </div>
                 
+                <!-- Event Timeline -->
+                <div id="deployment-events-${data.deployment_id}" class="mt-4">
+                    <button onclick="toggleDeploymentEvents('${data.deployment_id}')" 
+                            class="text-sm text-blue-600 hover:text-blue-800">
+                        <i class="fas fa-clock-rotate-left"></i> Show Event Timeline
+                    </button>
+                    <div id="events-content-${data.deployment_id}" class="hidden mt-2"></div>
+                </div>
+                
                 <!-- Action Buttons for Failed Deployments -->
                 ${data.status === 'failed' ? `
                     <div class="flex gap-2 pt-3 border-t mt-3">
@@ -3026,6 +3035,111 @@ async function updateDeploymentStatus() {
             statusDiv.innerHTML = '<p class="text-gray-600">No active deployment</p>';
         }
     }
+}
+
+async function toggleDeploymentEvents(deploymentId) {
+    const contentDiv = document.getElementById(`events-content-${deploymentId}`);
+    const button = event.target.closest('button');
+    
+    if (contentDiv.classList.contains('hidden')) {
+        // Fetch and show events
+        try {
+            const response = await fetch(`/manager/v1/updates/events/${deploymentId}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                displayDeploymentEvents(contentDiv, data.events || []);
+                contentDiv.classList.remove('hidden');
+                button.innerHTML = '<i class="fas fa-clock-rotate-left"></i> Hide Event Timeline';
+            }
+        } catch (error) {
+            console.error('Error fetching deployment events:', error);
+        }
+    } else {
+        // Hide events
+        contentDiv.classList.add('hidden');
+        button.innerHTML = '<i class="fas fa-clock-rotate-left"></i> Show Event Timeline';
+    }
+}
+
+function displayDeploymentEvents(container, events) {
+    if (!events || events.length === 0) {
+        container.innerHTML = '<p class="text-sm text-gray-500">No events recorded</p>';
+        return;
+    }
+    
+    const eventHtml = events.map(event => {
+        const time = new Date(event.timestamp).toLocaleTimeString();
+        const eventIcon = getEventIcon(event.type);
+        const eventColor = getEventColor(event.type);
+        
+        return `
+            <div class="flex items-start space-x-3 py-2 border-b border-gray-100 last:border-0">
+                <div class="flex-shrink-0 w-8 h-8 rounded-full ${eventColor} flex items-center justify-center">
+                    <i class="${eventIcon} text-white text-xs"></i>
+                </div>
+                <div class="flex-grow">
+                    <div class="text-sm font-medium">${event.message}</div>
+                    <div class="text-xs text-gray-500">${time}</div>
+                    ${event.details ? `
+                        <div class="text-xs text-gray-600 mt-1">
+                            ${formatEventDetails(event.details)}
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.innerHTML = `
+        <div class="bg-gray-50 rounded-lg p-3 max-h-64 overflow-y-auto">
+            ${eventHtml}
+        </div>
+    `;
+}
+
+function getEventIcon(type) {
+    const icons = {
+        'staged': 'fas fa-inbox',
+        'phase_started': 'fas fa-play',
+        'phase_complete': 'fas fa-check-circle',
+        'agent_stable': 'fas fa-heartbeat',
+        'agent_updated': 'fas fa-sync',
+        'deployment_complete': 'fas fa-flag-checkered',
+        'error': 'fas fa-exclamation-triangle',
+        'warning': 'fas fa-exclamation-circle'
+    };
+    return icons[type] || 'fas fa-info-circle';
+}
+
+function getEventColor(type) {
+    const colors = {
+        'staged': 'bg-blue-500',
+        'phase_started': 'bg-indigo-500',
+        'phase_complete': 'bg-green-500',
+        'agent_stable': 'bg-emerald-500',
+        'agent_updated': 'bg-purple-500',
+        'deployment_complete': 'bg-green-600',
+        'error': 'bg-red-500',
+        'warning': 'bg-yellow-500'
+    };
+    return colors[type] || 'bg-gray-500';
+}
+
+function formatEventDetails(details) {
+    if (!details) return '';
+    
+    const parts = [];
+    if (details.agent_id) parts.push(`Agent: ${details.agent_id}`);
+    if (details.phase) parts.push(`Phase: ${details.phase}`);
+    if (details.version) parts.push(`Version: ${details.version}`);
+    if (details.time_to_work) parts.push(`Time to WORK: ${details.time_to_work} min`);
+    
+    return parts.join(' • ');
 }
 
 async function updateDeploymentHistory() {

@@ -135,6 +135,25 @@ class DeploymentOrchestrator:
             f"Deployment state saved: {len(self.deployments)} deployments, {len(self.pending_deployments)} pending"
         )
 
+    def _add_event(
+        self, deployment_id: str, event_type: str, message: str, details: Optional[dict] = None
+    ) -> None:
+        """Add an event to deployment timeline."""
+        deployment = self.deployments.get(deployment_id) or self.pending_deployments.get(
+            deployment_id
+        )
+        if deployment:
+            event = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "type": event_type,
+                "message": message,
+            }
+            if details:
+                event["details"] = details
+            deployment.events.append(event)
+            # Save state after adding event
+            self._save_state()
+
     async def start_deployment(
         self,
         notification: UpdateNotification,
@@ -307,6 +326,14 @@ class DeploymentOrchestrator:
         )
 
         self.pending_deployments[deployment_id] = status
+
+        # Add staging event
+        self._add_event(
+            deployment_id,
+            "staged",
+            "Deployment staged for review",
+            {"affected_agents": agents_total, "gui_update": nginx_needs_update},
+        )
 
         # Track staged versions as n+1
         tracker = get_version_tracker()
@@ -1714,6 +1741,20 @@ class DeploymentOrchestrator:
                                                 f"Agent {agent.agent_id} is stable in WORK state "
                                                 f"for {work_duration:.1f} minutes with no critical incidents"
                                             )
+
+                                            # Add event for agent reaching stable WORK
+                                            self._add_event(
+                                                deployment_id,
+                                                "agent_stable",
+                                                f"{agent.agent_name} reached stable WORK state",
+                                                {
+                                                    "agent_id": agent.agent_id,
+                                                    "phase": phase_name,
+                                                    "time_to_work": round(work_duration, 1),
+                                                    "version": version,
+                                                },
+                                            )
+
                                             # Calculate time to reach WORK
                                             time_to_work = (
                                                 agents_in_work[agent.agent_id] - start_time
@@ -1881,6 +1922,12 @@ class DeploymentOrchestrator:
             logger.info(
                 f"Deployment {deployment_id}: Explorer phase successful, proceeding to early adopters"
             )
+            self._add_event(
+                deployment_id,
+                "phase_complete",
+                "Explorer phase completed successfully",
+                {"phase": "explorers", "results": results if results else {}},
+            )
         else:
             logger.info(f"Deployment {deployment_id}: No explorer agents assigned, skipping phase")
 
@@ -1938,6 +1985,15 @@ class DeploymentOrchestrator:
 
             logger.info(
                 f"Deployment {deployment_id}: Early adopter phase successful, proceeding to general"
+            )
+            self._add_event(
+                deployment_id,
+                "phase_complete",
+                "Early adopter phase completed successfully",
+                {
+                    "phase": "early_adopters",
+                    "results": results if results else {},
+                },
             )
         else:
             logger.info(
