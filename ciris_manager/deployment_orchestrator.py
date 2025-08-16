@@ -2587,27 +2587,47 @@ class DeploymentOrchestrator:
                 for container_name in gui_containers:
                     logger.info(f"Updating GUI container: {container_name}")
 
-                    # Use docker-compose to recreate the GUI service with new image
-                    # Set the new image via environment variable
-                    compose_env = {**os.environ, "CIRIS_GUI_IMAGE": gui_image}
-
-                    compose_result = await asyncio.create_subprocess_exec(
-                        "docker-compose",
-                        "-f",
-                        "/opt/ciris-manager/docker-compose.yml",
-                        "up",
-                        "-d",
-                        "--force-recreate",
-                        "--no-deps",
-                        "gui",  # Use service name, not container name
+                    # GUI is a standalone container, not managed by docker-compose
+                    # Stop the existing container
+                    stop_result = await asyncio.create_subprocess_exec(
+                        "docker",
+                        "stop",
+                        container_name,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
-                        cwd="/opt/ciris-manager",
-                        env=compose_env,
                     )
-                    stdout, stderr = await compose_result.communicate()
+                    await stop_result.communicate()
 
-                    if compose_result.returncode != 0:
+                    # Remove the old container
+                    rm_result = await asyncio.create_subprocess_exec(
+                        "docker",
+                        "rm",
+                        container_name,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    await rm_result.communicate()
+
+                    # Run new container with updated image
+                    run_result = await asyncio.create_subprocess_exec(
+                        "docker",
+                        "run",
+                        "-d",
+                        "--name",
+                        container_name,
+                        "--restart",
+                        "unless-stopped",
+                        "-p",
+                        "3001:3000",  # GUI port mapping
+                        "--network",
+                        "ciris_network",
+                        gui_image,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, stderr = await run_result.communicate()
+
+                    if run_result.returncode != 0:
                         logger.error(f"Failed to recreate GUI container: {stderr.decode()}")
                         success = False
                     else:
@@ -2767,8 +2787,8 @@ class DeploymentOrchestrator:
         """
         try:
             # Store in a metadata file for infrastructure containers
-            # Use the manager's data directory which should be writable
-            metadata_file = Path(f"/opt/ciris-manager/data/{container_type}_versions.json")
+            # Use /tmp for now as it's always writable
+            metadata_file = Path(f"/tmp/ciris_manager_{container_type}_versions.json")
             metadata_file.parent.mkdir(parents=True, exist_ok=True)
 
             versions = {}
