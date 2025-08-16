@@ -1409,7 +1409,13 @@ class DeploymentOrchestrator:
                 logger.info("GUI/nginx image unchanged")
 
         # Check each agent to see if it needs updating based on version
-        agents_needing_update = []
+        agents_needing_update: List[AgentInfo] = []
+
+        # Only check agents if an agent_image was provided
+        if not notification.agent_image:
+            logger.info("No agent_image in notification, skipping agent checks")
+            return agents_needing_update, nginx_needs_update
+
         target_version = notification.version
 
         if not target_version:
