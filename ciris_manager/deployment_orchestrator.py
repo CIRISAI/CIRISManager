@@ -2594,7 +2594,7 @@ class DeploymentOrchestrator:
                     compose_result = await asyncio.create_subprocess_exec(
                         "docker-compose",
                         "-f",
-                        "/opt/ciris/docker-compose.yml",
+                        "/opt/ciris-manager/docker-compose.yml",
                         "up",
                         "-d",
                         "--force-recreate",
@@ -2602,7 +2602,7 @@ class DeploymentOrchestrator:
                         "gui",  # Use service name, not container name
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
-                        cwd="/opt/ciris",
+                        cwd="/opt/ciris-manager",
                         env=compose_env,
                     )
                     stdout, stderr = await compose_result.communicate()
@@ -2767,7 +2767,8 @@ class DeploymentOrchestrator:
         """
         try:
             # Store in a metadata file for infrastructure containers
-            metadata_file = Path(f"/opt/ciris/metadata/{container_type}_versions.json")
+            # Use the manager's data directory which should be writable
+            metadata_file = Path(f"/opt/ciris-manager/data/{container_type}_versions.json")
             metadata_file.parent.mkdir(parents=True, exist_ok=True)
 
             versions = {}
