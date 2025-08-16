@@ -1418,7 +1418,9 @@ class DeploymentOrchestrator:
         nginx_needs_update = False
 
         if notification.gui_image:
-            new_gui_digest = await self._get_local_image_digest(notification.gui_image)
+            # Normalize image name to lowercase for Docker compatibility
+            gui_image = notification.gui_image.lower()
+            new_gui_digest = await self._get_local_image_digest(gui_image)
             logger.info(f"New GUI image digest: {new_gui_digest}")
 
             # Check if GUI container needs updating by comparing digests
@@ -2533,6 +2535,8 @@ class DeploymentOrchestrator:
 
             # Update GUI container
             if gui_image:
+                # Normalize image name to lowercase for Docker compatibility
+                gui_image = gui_image.lower()
                 logger.info(f"Updating GUI container to {gui_image}")
                 # Store previous image for rollback capability
                 await self._store_container_version("gui", gui_image)
@@ -2579,33 +2583,10 @@ class DeploymentOrchestrator:
                 for container_name in gui_containers:
                     logger.info(f"Updating GUI container: {container_name}")
 
-                    # Use docker-compose up to update with new image
-                    compose_result = await asyncio.create_subprocess_exec(
-                        "docker-compose",
-                        "-f",
-                        "/opt/ciris/docker-compose.yml",
-                        "up",
-                        "-d",
-                        "--no-deps",
-                        "gui",
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                        env={**os.environ, "CIRIS_GUI_IMAGE": gui_image},
-                    )
-                    stdout, stderr = await compose_result.communicate()
+                    # Use docker-compose to recreate the GUI service with new image
+                    # Set the new image via environment variable
+                    compose_env = {**os.environ, "CIRIS_GUI_IMAGE": gui_image}
 
-                    # Remove the container
-                    rm_result = await asyncio.create_subprocess_exec(
-                        "docker",
-                        "rm",
-                        container_name,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
-                    await rm_result.communicate()
-
-                    # Docker compose or the container manager should recreate it with the new image
-                    # If using docker-compose, we need to recreate the service
                     compose_result = await asyncio.create_subprocess_exec(
                         "docker-compose",
                         "-f",
@@ -2613,16 +2594,20 @@ class DeploymentOrchestrator:
                         "up",
                         "-d",
                         "--force-recreate",
-                        container_name,
+                        "--no-deps",
+                        "gui",  # Use service name, not container name
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                         cwd="/opt/ciris",
+                        env=compose_env,
                     )
                     stdout, stderr = await compose_result.communicate()
 
                     if compose_result.returncode != 0:
                         logger.error(f"Failed to recreate GUI container: {stderr.decode()}")
                         success = False
+                    else:
+                        logger.info(f"Successfully updated GUI container with image {gui_image}")
 
             # Update nginx container if specified
             if nginx_image:
