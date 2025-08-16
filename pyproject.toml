@@ -76,6 +76,7 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+exclude = ["g.py", "tools/grace/"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
