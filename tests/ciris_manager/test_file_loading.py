@@ -220,7 +220,8 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=myapp_db
 DB_USER=admin
-DB_PASSWORD="p@ssw0rd!123"  # nosec B105 - Test data only, not real password
+# nosec B105 - Test data only, not real password
+DB_PASSWORD="p@ssw0rd!123"
 
 # Redis Configuration
 REDIS_HOST=127.0.0.1
