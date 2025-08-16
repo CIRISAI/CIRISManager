@@ -277,17 +277,31 @@ class DeploymentOrchestrator:
             notification, agents
         )
 
+        # Set appropriate counts based on what's being updated
+        if nginx_needs_update and not agents_needing_update:
+            # GUI-only update
+            agents_total = 0  # No agents affected
+            message = f"GUI Update: {notification.message}"
+        elif agents_needing_update:
+            # Agent update (possibly with GUI)
+            agents_total = len(agents_needing_update)
+            message = f"Staged: {notification.message}"
+        else:
+            # No actual updates needed
+            agents_total = 0
+            message = "No changes detected"
+
         status = DeploymentStatus(
             deployment_id=deployment_id,
             notification=notification,
-            agents_total=len(agents_needing_update),
+            agents_total=agents_total,
             agents_updated=0,
             agents_deferred=0,
             agents_failed=0,
             started_at=None,  # Not started yet
             completed_at=None,
             status="pending",
-            message=f"Staged: {notification.message}",
+            message=message,
             staged_at=datetime.now(timezone.utc).isoformat(),
             canary_phase=None,
         )

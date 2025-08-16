@@ -1212,11 +1212,20 @@ def create_routes(manager: Any) -> APIRouter:
             if deployment_id in deployment_orchestrator.pending_deployments:
                 staged_status = deployment_orchestrator.pending_deployments[deployment_id]
                 logger.info(f"Staged deployment {deployment_id} for human review")
+
+                # Determine deployment type for clearer messaging
+                deployment_type = "Update"
+                if "GUI" in staged_status.message:
+                    deployment_type = "GUI Update"
+                elif staged_status.agents_total > 0:
+                    deployment_type = "Agent Update"
+
                 return {
                     "deployment_id": deployment_id,
                     "status": "staged",
-                    "message": "Deployment staged for human review (Wisdom-Based Deferral)",
+                    "message": f"{deployment_type} staged for human review (Wisdom-Based Deferral)",
                     "agents_affected": staged_status.agents_total,
+                    "deployment_type": deployment_type.lower().replace(" ", "_"),
                 }
             else:
                 deploy_status: Optional[DeploymentStatus] = deployment_orchestrator.deployments.get(
