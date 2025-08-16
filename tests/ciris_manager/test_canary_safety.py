@@ -39,7 +39,7 @@ class TestCanaryGroupHealth:
         """Create a sample agent."""
         agent = Mock(spec=AgentInfo)
         agent.agent_id = "test-agent"
-        agent.name = "Test Agent"
+        agent.agent_name = "Test Agent"  # Changed from 'name' to 'agent_name'
         agent.api_port = 8080
         agent.is_running = True
         return agent
@@ -52,7 +52,7 @@ class TestCanaryGroupHealth:
         # Register agent with service token so auth works
         orchestrator.manager.agent_registry.register_agent(
             sample_agent.agent_id,
-            sample_agent.name,
+            sample_agent.agent_name,  # Changed from 'name' to 'agent_name'
             sample_agent.api_port,
             "test",
             "test.yml",
@@ -286,20 +286,20 @@ class TestCanaryGroupHealth:
         # Create multiple agents
         agent1 = Mock(spec=AgentInfo)
         agent1.agent_id = "agent-1"
-        agent1.name = "Agent 1"
+        agent1.agent_name = "Agent 1"  # Changed from 'name' to 'agent_name'
         agent1.api_port = 8081
         agent1.is_running = True
 
         agent2 = Mock(spec=AgentInfo)
         agent2.agent_id = "agent-2"
-        agent2.name = "Agent 2"
+        agent2.agent_name = "Agent 2"  # Changed from 'name' to 'agent_name'
         agent2.api_port = 8082
         agent2.is_running = True
 
         # Register agents with service tokens
         orchestrator.manager.agent_registry.register_agent(
             agent1.agent_id,
-            agent1.name,
+            agent1.agent_name,  # Changed from 'name' to 'agent_name'
             agent1.api_port,
             "test",
             "test.yml",
@@ -307,7 +307,7 @@ class TestCanaryGroupHealth:
         )
         orchestrator.manager.agent_registry.register_agent(
             agent2.agent_id,
-            agent2.name,
+            agent2.agent_name,  # Changed from 'name' to 'agent_name'
             agent2.api_port,
             "test",
             "test.yml",
