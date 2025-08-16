@@ -23,6 +23,7 @@ from ciris_manager.models import (
 )
 from ciris_manager.docker_registry import DockerRegistryClient
 from ciris_manager.version_tracker import get_version_tracker
+from ciris_manager.utils.log_sanitizer import sanitize_agent_id, sanitize_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -891,7 +892,7 @@ class DeploymentOrchestrator:
         )
 
         logger.warning(
-            f"Rollback proposed for deployment {deployment_id}: {reason}. "
+            f"Rollback proposed for deployment {sanitize_for_log(deployment_id)}: {sanitize_for_log(reason)}. "
             f"Awaiting operator decision."
         )
 
@@ -1816,7 +1817,9 @@ class DeploymentOrchestrator:
                     logger.debug(f"Agent {agent.agent_id} not ready yet: {e}")
                 except Exception as e:
                     # Log other errors but don't fail the deployment
-                    logger.warning(f"Error checking agent {agent.agent_id} health: {e}")
+                    logger.warning(
+                        f"Error checking agent {sanitize_agent_id(agent.agent_id)} health: {e}"
+                    )
 
             # Wait before next check
             await asyncio.sleep(10)
@@ -2059,7 +2062,7 @@ class DeploymentOrchestrator:
                 )
             else:
                 logger.warning(
-                    f"Deployment {deployment_id}: Some general phase agents did not reach stable WORK state"
+                    f"Deployment {sanitize_for_log(deployment_id)}: Some general phase agents did not reach stable WORK state"
                 )
         else:
             logger.info(f"Deployment {deployment_id}: No general agents assigned, skipping phase")

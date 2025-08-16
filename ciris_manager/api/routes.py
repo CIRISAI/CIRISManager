@@ -15,6 +15,7 @@ from pathlib import Path
 from .auth import get_current_user_dependency as get_current_user
 from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.utils.log_sanitizer import sanitize_agent_id
 from .rate_limit import create_limit
 
 logger = logging.getLogger(__name__)
@@ -698,7 +699,7 @@ def create_routes(manager: Any) -> APIRouter:
                         }
                     else:
                         logger.warning(
-                            f"Agent {agent_id} returned {response.status_code} for shutdown request"
+                            f"Agent {sanitize_agent_id(agent_id)} returned {response.status_code} for shutdown request"
                         )
                         return {
                             "status": "accepted",
