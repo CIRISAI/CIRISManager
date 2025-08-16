@@ -143,7 +143,7 @@ class DeploymentOrchestrator:
             deployment_id
         )
         if deployment:
-            event = {
+            event: dict[str, Any] = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "type": event_type,
                 "message": message,
