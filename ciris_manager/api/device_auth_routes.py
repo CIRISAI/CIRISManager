@@ -98,8 +98,9 @@ def create_device_auth_routes() -> APIRouter:
         _user_codes[user_code] = device_code
 
         # Determine base URL
+        # Use HTTP for localhost (safe for local development) and HTTPS for production
         if request.url.hostname in ["localhost", "127.0.0.1"]:
-            base_url = f"http://{request.url.netloc}"
+            base_url = f"http://{request.url.netloc}"  # nosec B201 - HTTP is safe for localhost
         else:
             base_url = "https://agents.ciris.ai"
 

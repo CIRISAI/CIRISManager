@@ -1826,7 +1826,7 @@ class DeploymentOrchestrator:
 
         # Timeout reached - propose rollback to operator
         logger.warning(
-            f"Deployment {deployment_id}: No {phase_name} agents reached stable WORK state "
+            f"Deployment {sanitize_for_log(deployment_id)}: No {sanitize_for_log(phase_name)} agents reached stable WORK state "
             f"within {wait_for_work_minutes} minutes"
         )
 

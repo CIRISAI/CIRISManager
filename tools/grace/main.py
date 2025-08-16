@@ -395,22 +395,28 @@ class Grace:
             output = result.stdout + result.stderr
 
             # Parse test results
+            # Extract test counts using simple string operations to avoid regex DoS
             if "passed" in output:
-                import re
-
-                # Extract test counts
-                match = re.search(r"(\d+) passed", output)
-                if match:
-                    passed = match.group(1)
-                    message.append(f"✅ Tests: {passed} passed")
+                for word in output.split():
+                    if word.isdigit():
+                        idx = output.index(word)
+                        if (
+                            idx + len(word) < len(output)
+                            and output[idx : idx + 20].find("passed") != -1
+                        ):
+                            message.append(f"✅ Tests: {word} passed")
+                            break
 
             if "failed" in output:
-                import re
-
-                match = re.search(r"(\d+) failed", output)
-                if match:
-                    failed = match.group(1)
-                    message.append(f"❌ Tests: {failed} failed")
+                for word in output.split():
+                    if word.isdigit():
+                        idx = output.index(word)
+                        if (
+                            idx + len(word) < len(output)
+                            and output[idx : idx + 20].find("failed") != -1
+                        ):
+                            message.append(f"❌ Tests: {word} failed")
+                            break
 
             # Extract coverage
             if "TOTAL" in output:
