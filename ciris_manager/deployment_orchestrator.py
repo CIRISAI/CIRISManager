@@ -1065,11 +1065,13 @@ class DeploymentOrchestrator:
         try:
             # Pull agent image if specified
             if notification.agent_image:
-                logger.info(f"Pulling agent image: {notification.agent_image}")
+                # Normalize image name to lowercase for Docker
+                agent_image = notification.agent_image.lower()
+                logger.info(f"Pulling agent image: {agent_image}")
                 process = await asyncio.create_subprocess_exec(
                     "docker",
                     "pull",
-                    notification.agent_image,
+                    agent_image,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -1087,11 +1089,13 @@ class DeploymentOrchestrator:
 
             # Pull GUI image if specified
             if notification.gui_image:
-                logger.info(f"Pulling GUI image: {notification.gui_image}")
+                # Normalize image name to lowercase for Docker
+                gui_image = notification.gui_image.lower()
+                logger.info(f"Pulling GUI image: {gui_image}")
                 process = await asyncio.create_subprocess_exec(
                     "docker",
                     "pull",
-                    notification.gui_image,
+                    gui_image,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
