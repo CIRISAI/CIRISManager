@@ -87,8 +87,12 @@ def create_routes(manager: Any) -> APIRouter:
     # Initialize deployment orchestrator
     deployment_orchestrator = DeploymentOrchestrator(manager)
 
-    # Deployment token for CD authentication
-    DEPLOY_TOKEN = os.getenv("CIRIS_DEPLOY_TOKEN")
+    # Deployment tokens for CD authentication (repo-specific)
+    DEPLOY_TOKENS = {
+        "agent": os.getenv("CIRIS_AGENT_DEPLOY_TOKEN"),
+        "gui": os.getenv("CIRIS_GUI_DEPLOY_TOKEN"),
+        "legacy": os.getenv("CIRIS_DEPLOY_TOKEN"),  # Backwards compatibility
+    }
 
     # Check if we're in dev mode - if so, create a mock user dependency
     auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
@@ -105,9 +109,9 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Special auth for deployment endpoints
     async def deployment_auth(authorization: Optional[str] = Header(None)) -> Dict[str, str]:
-        """Verify deployment token for CD operations."""
-        if not DEPLOY_TOKEN:
-            raise HTTPException(status_code=500, detail="Deployment token not configured")
+        """Verify deployment token for CD operations and identify the source."""
+        if not any(DEPLOY_TOKENS.values()):
+            raise HTTPException(status_code=500, detail="Deployment tokens not configured")
 
         if not authorization:
             raise HTTPException(status_code=401, detail="Missing authorization header")
@@ -118,10 +122,23 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=401, detail="Invalid authorization format")
 
         token = parts[1]
-        if token != DEPLOY_TOKEN:
+
+        # Identify which repo this token belongs to
+        source_repo = None
+        for repo_type, repo_token in DEPLOY_TOKENS.items():
+            if repo_token and token == repo_token:
+                source_repo = repo_type
+                break
+
+        if not source_repo:
             raise HTTPException(status_code=401, detail="Invalid deployment token")
 
-        return {"id": "github-actions", "email": "cd@ciris.ai", "name": "GitHub Actions CD"}
+        return {
+            "id": "github-actions",
+            "email": "cd@ciris.ai",
+            "name": "GitHub Actions CD",
+            "source_repo": source_repo,  # Track which repo is making the request
+        }
 
     # Manager UI Routes - Protected by OAuth
     @router.get("/", response_model=None)
@@ -1156,6 +1173,32 @@ def create_routes(manager: Any) -> APIRouter:
         CIRISManager evaluates and stages if needed (Wisdom-Based Deferral).
         """
         try:
+            # Validate repo authorization for the provided images
+            source_repo = _user.get("source_repo", "legacy")
+
+            # Enforce repo-specific image restrictions
+            if source_repo == "agent":
+                # Agent repo can only update agent images
+                if notification.gui_image or notification.nginx_image:
+                    raise HTTPException(
+                        status_code=403, detail="Agent repository can only update agent images"
+                    )
+                if not notification.agent_image:
+                    raise HTTPException(
+                        status_code=400, detail="Agent repository must provide agent_image"
+                    )
+            elif source_repo == "gui":
+                # GUI repo can only update GUI images
+                if notification.agent_image or notification.nginx_image:
+                    raise HTTPException(
+                        status_code=403, detail="GUI repository can only update GUI images"
+                    )
+                if not notification.gui_image:
+                    raise HTTPException(
+                        status_code=400, detail="GUI repository must provide gui_image"
+                    )
+            # Legacy token can update anything (backwards compatibility)
+
             # Get current agents with runtime status
             from ciris_manager.docker_discovery import DockerAgentDiscovery
 
