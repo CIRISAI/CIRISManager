@@ -2620,7 +2620,7 @@ class DeploymentOrchestrator:
                         "-p",
                         "3001:3000",  # GUI port mapping
                         "--network",
-                        "ciris_network",
+                        "ciris-network",
                         gui_image,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
