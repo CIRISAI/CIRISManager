@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CIRIS Dashboard - Live System Metrics</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com"></script><!-- Tailwind CSS doesn't provide SRI hashes -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+            integrity="sha384-vxfkwUgSZpxlqJcGdVT7mQVcZVNQjl5GOH7mFHd4MQVEk0OxtQn3g7ui1NUtNqKl"
+            crossorigin="anonymous"></script>
     <style>
         .tab-active {
             border-bottom: 2px solid #3b82f6;
@@ -439,7 +441,9 @@
     </div>
 
     <!-- Include axios (required by telemetry SDK) -->
-    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.2/dist/axios.min.js"
+            integrity="sha384-Y/hJjp3L0AIS/MF5VxSzB6WCB9u10wG6ckEH0GH2LpwTJe4HiIkKe8V3TtEMxe7z"
+            crossorigin="anonymous"></script>
     
     <!-- Include the telemetry SDK -->
     <script src="/static/ciristelemetry-sdk.min.js"></script>

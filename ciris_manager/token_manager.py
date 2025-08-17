@@ -197,14 +197,17 @@ class TokenManager:
         if agent.service_token:
             backup_file = self.backup_dir / f"{agent_id}_{datetime.now().isoformat()}.token"
             try:
-                with open(backup_file, "w") as f:
-                    json.dump(
-                        {
-                            "agent_id": agent_id,
-                            "token": agent.service_token,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        },
-                        f,
+                import aiofiles  # type: ignore
+
+                async with aiofiles.open(backup_file, "w") as f:
+                    await f.write(
+                        json.dumps(
+                            {
+                                "agent_id": agent_id,
+                                "token": agent.service_token,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            }
+                        )
                     )
                 result.old_token_backed_up = True
                 logger.info(f"Backed up token for {agent_id} to {backup_file}")
@@ -260,16 +263,18 @@ class TokenManager:
             env_content = []
 
             if env_file.exists():
-                with open(env_file, "r") as f:
-                    lines = f.readlines()
+                import aiofiles  # type: ignore
+
+                async with aiofiles.open(env_file, "r") as f:
+                    lines = await f.readlines()
                     for line in lines:
                         if not line.startswith("CIRIS_SERVICE_TOKEN="):
                             env_content.append(line)
 
             env_content.append(f"CIRIS_SERVICE_TOKEN={token}\n")
 
-            with open(env_file, "w") as f:
-                f.writelines(env_content)
+            async with aiofiles.open(env_file, "w") as f:
+                await f.writelines(env_content)
 
             # Restart container
             cmd = ["docker-compose", "-f", str(compose_path), "up", "-d", "--force-recreate"]

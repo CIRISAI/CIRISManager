@@ -164,8 +164,9 @@ class TestTelemetryIntegration:
         telemetry_service.orchestrator.collectors["docker"] = mock_docker
         telemetry_service.orchestrator.collectors["agents"] = mock_agents
 
-        # Start service
-        asyncio.create_task(telemetry_service.start())
+        # Start service (store task to prevent garbage collection)
+        start_task = asyncio.create_task(telemetry_service.start())
+        _ = start_task  # Keep reference to prevent GC
 
         # Let it run for a bit
         await asyncio.sleep(2.5)  # Should complete 2 collection cycles
@@ -301,8 +302,9 @@ class TestTelemetryIntegration:
             assert service.storage == mock_storage
             mock_storage.connect.assert_called_once()
 
-            # Start the service to set _running flag
-            asyncio.create_task(service.start())
+            # Start the service to set _running flag (store task to prevent garbage collection)
+            start_task = asyncio.create_task(service.start())
+            _ = start_task  # Keep reference to prevent GC
             await asyncio.sleep(0.1)  # Let it start
 
             # Mock collectors

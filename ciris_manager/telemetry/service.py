@@ -155,7 +155,12 @@ class TelemetryService:
 
         def signal_handler(signum, frame):
             logger.info(f"Received signal {signum}, initiating shutdown")
-            asyncio.create_task(self.stop())
+            # Store task to prevent garbage collection
+            if not hasattr(self, "_background_tasks"):
+                self._background_tasks = set()
+            task = asyncio.create_task(self.stop())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         signal.signal(signal.SIGTERM, signal_handler)
         signal.signal(signal.SIGINT, signal_handler)

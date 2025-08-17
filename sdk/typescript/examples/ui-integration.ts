@@ -201,7 +201,7 @@ class TelemetryDashboard {
     );
   }
 
-  stopStreaming() {
+  stopMetricsStreaming() {
     this.stopStreaming?.();
   }
 

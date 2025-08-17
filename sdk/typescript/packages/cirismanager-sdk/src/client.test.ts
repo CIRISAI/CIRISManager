@@ -51,7 +51,7 @@ describe('CIRISManagerClient', () => {
 
     it('should add auth token if provided', () => {
       mockedAxios.create.mockClear();
-      new CIRISManagerClient({
+      const client = new CIRISManagerClient({
         token: 'test-token'
       });
 
@@ -67,7 +67,7 @@ describe('CIRISManagerClient', () => {
 
     it('should use default baseURL if not provided', () => {
       mockedAxios.create.mockClear();
-      new CIRISManagerClient();
+      const client = new CIRISManagerClient();
 
       expect(mockedAxios.create).toHaveBeenCalledWith(
         expect.objectContaining({
