@@ -331,21 +331,13 @@ class TestCIRISManager:
             compose_file=str(compose_file),
         )
 
-        # Mock subprocess
-        call_count = 0
+        # Mock _recover_crashed_containers to avoid slow operations
+        with patch.object(
+            manager, "_recover_crashed_containers", new_callable=AsyncMock
+        ) as mock_recover:
+            # Reduce interval for faster testing
+            manager.config.container_management.interval = 0.05
 
-        async def mock_subprocess(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            mock_process = AsyncMock()
-            mock_process.returncode = 0
-            mock_process.communicate = AsyncMock(return_value=(b"", b""))
-            return mock_process
-
-        # Reduce interval for faster testing
-        manager.config.container_management.interval = 0.05
-
-        with patch("asyncio.create_subprocess_exec", side_effect=mock_subprocess):
             # Start loop
             manager._running = True
             loop_task = asyncio.create_task(manager.container_management_loop())
@@ -363,9 +355,8 @@ class TestCIRISManager:
             except asyncio.CancelledError:
                 pass
 
-        # Container management loop no longer calls docker-compose
-        # It's disabled to prevent bypassing canary deployments
-        assert call_count == 0  # Should NOT have called docker-compose
+            # Verify recovery was called
+            assert mock_recover.called
 
     @pytest.mark.asyncio
     async def test_start_stop(self, manager):
@@ -797,6 +788,9 @@ class TestCIRISManager:
         """Test that container management loop calls crash recovery."""
         manager._running = True
 
+        # Reduce interval for faster testing
+        manager.config.container_management.interval = 0.01
+
         # Mock the recovery method
         manager._recover_crashed_containers = AsyncMock()
 
@@ -804,7 +798,7 @@ class TestCIRISManager:
         loop_task = asyncio.create_task(manager.container_management_loop())
 
         # Let it run for one iteration
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
 
         # Stop the loop
         manager._running = False

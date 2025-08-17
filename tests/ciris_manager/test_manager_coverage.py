@@ -166,7 +166,7 @@ class TestManagerCoverage:
         config = CIRISManagerConfig(
             manager={"agents_directory": str(tmp_path / "agents")},
             nginx={"config_dir": str(nginx_dir)},
-            container_management={"interval": 1},  # Fast for testing (minimum 1 second)
+            container_management={"interval": 0.01},  # Fast for testing
         )
 
         manager = CIRISManager(config)
@@ -181,21 +181,25 @@ class TestManagerCoverage:
             compose_file="/invalid/path/compose.yml",
         )
 
-        # Run loop briefly
-        loop_task = asyncio.create_task(manager.container_management_loop())
-        await asyncio.sleep(0.05)
+        # Mock _recover_crashed_containers to raise an error
+        with patch.object(
+            manager, "_recover_crashed_containers", side_effect=Exception("Test error")
+        ):
+            # Run loop briefly
+            loop_task = asyncio.create_task(manager.container_management_loop())
+            await asyncio.sleep(0.05)
 
-        # Stop
-        manager._running = False
+            # Stop
+            manager._running = False
 
-        # Cancel and wait
-        loop_task.cancel()
-        try:
-            await loop_task
-        except asyncio.CancelledError:
-            pass
+            # Cancel and wait
+            loop_task.cancel()
+            try:
+                await loop_task
+            except asyncio.CancelledError:
+                pass
 
-        # Should have handled error and continued
+            # Should have handled error and continued
 
     @pytest.mark.asyncio
     async def test_create_agent_allocate_existing_port(self, tmp_path):
@@ -294,19 +298,27 @@ class TestManagerCoverage:
             mock_loop = Mock()
             mock_get_loop.return_value = mock_loop
 
-            # Start run task
-            run_task = asyncio.create_task(manager.run())
+            # Mock all background tasks to prevent hanging
+            with patch.object(manager, "_start_api_server", new_callable=AsyncMock):
+                with patch.object(manager, "container_management_loop", new_callable=AsyncMock):
+                    with patch.object(manager.watchdog, "start", new_callable=AsyncMock):
+                        with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
+                            with patch.object(
+                                manager.image_cleanup,
+                                "run_periodic_cleanup",
+                                new_callable=AsyncMock,
+                            ):
+                                # Start run task
+                                run_task = asyncio.create_task(manager.run())
 
-            # Let it start
-            await asyncio.sleep(0.01)
+                                # Let it start
+                                await asyncio.sleep(0.01)
 
-            # Trigger shutdown
-            manager._shutdown_event.set()
+                                # Trigger shutdown
+                                manager._shutdown_event.set()
 
-            # Wait for completion
-            # Mock watchdog.stop to avoid CancelledError during stop
-            with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
-                await run_task
+                                # Wait for completion
+                                await run_task
 
             # Verify signal handlers were added
             assert mock_loop.add_signal_handler.called

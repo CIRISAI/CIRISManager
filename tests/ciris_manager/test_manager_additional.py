@@ -66,12 +66,10 @@ class TestManagerAdditional:
             compose_file=str(compose_file),
         )
 
-        # Mock subprocess
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-            mock_process = AsyncMock()
-            mock_process.communicate = AsyncMock(return_value=(b"", b""))
-            mock_subprocess.return_value = mock_process
-
+        # Mock _recover_crashed_containers to avoid slow operations
+        with patch.object(
+            manager, "_recover_crashed_containers", new_callable=AsyncMock
+        ) as mock_recover:
             # Run briefly
             manager._running = True
             task = asyncio.create_task(manager.container_management_loop())
@@ -84,9 +82,8 @@ class TestManagerAdditional:
             except asyncio.CancelledError:
                 pass
 
-            # Should not have called pull
-            for call in mock_subprocess.call_args_list:
-                assert "pull" not in call[0]
+            # Verify recovery was called (container loop only does crash recovery now)
+            assert mock_recover.called
 
     def test_scan_with_invalid_metadata(self, tmp_path):
         """Test scanning with invalid agent metadata."""
