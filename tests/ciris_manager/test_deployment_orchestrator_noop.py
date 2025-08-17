@@ -249,8 +249,8 @@ class TestNoOpDeployment:
         orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest")
         orchestrator._get_container_image_digest = AsyncMock(return_value=None)  # No current digest
 
-        # Mock the background deployment task
-        orchestrator._run_deployment = Mock()
+        # Mock the background deployment task (async method)
+        orchestrator._run_deployment = AsyncMock()
 
         # Create test agents
         agents = [
