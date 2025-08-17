@@ -314,7 +314,9 @@ class TestPeriodicCollector:
 
         assert task1 == task2  # Same task
 
-        await periodic.stop()
+        # Stop will re-raise CancelledError now
+        with pytest.raises(asyncio.CancelledError):
+            await periodic.stop()
 
     @pytest.mark.asyncio
     async def test_get_last_snapshot(self):
@@ -326,7 +328,10 @@ class TestPeriodicCollector:
 
         await periodic.start()
         await asyncio.sleep(0.15)
-        await periodic.stop()
+
+        # Stop will re-raise CancelledError now
+        with pytest.raises(asyncio.CancelledError):
+            await periodic.stop()
 
         last = periodic.get_last_snapshot()
         assert last is not None

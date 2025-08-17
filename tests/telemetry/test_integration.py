@@ -171,8 +171,9 @@ class TestTelemetryIntegration:
         # Let it run for a bit
         await asyncio.sleep(2.5)  # Should complete 2 collection cycles
 
-        # Stop service
-        await telemetry_service.stop()
+        # Stop service - will re-raise CancelledError now
+        with pytest.raises(asyncio.CancelledError):
+            await telemetry_service.stop()
 
         # Verify collections happened (check collect_with_timeout calls)
         assert mock_docker.collect_with_timeout.call_count >= 2

@@ -1,1 +1,2 @@
 types-python-dateutil
+types-aiofiles

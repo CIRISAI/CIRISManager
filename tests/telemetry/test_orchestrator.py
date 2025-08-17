@@ -418,7 +418,9 @@ class TestContinuousTelemetryCollector:
         # Let it run briefly
         await asyncio.sleep(0.1)
 
-        await continuous_collector.stop()
+        # Stop will re-raise CancelledError now
+        with pytest.raises(asyncio.CancelledError):
+            await continuous_collector.stop()
         assert not continuous_collector.is_running
 
     @pytest.mark.asyncio

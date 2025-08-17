@@ -2,6 +2,7 @@
 Unit tests for deployment orchestrator persistence functionality.
 """
 
+import aiofiles  # type: ignore[import]
 import json
 import tempfile
 from datetime import datetime, timezone
@@ -246,8 +247,9 @@ class TestDeploymentPersistence:
         # Verify state was saved
         assert orchestrator.deployment_state_file.exists()
 
-        with open(orchestrator.deployment_state_file) as f:
-            state = json.load(f)
+        async with aiofiles.open(orchestrator.deployment_state_file) as f:
+            content = await f.read()
+            state = json.loads(content)
 
         assert status.deployment_id in state["deployments"]
         assert state["current_deployment"] == status.deployment_id
@@ -305,8 +307,9 @@ class TestDeploymentPersistence:
             await orchestrator.reject_staged_deployment("staged-123", "Testing rejection")
 
         # Verify state was saved with rejection
-        with open(orchestrator.deployment_state_file) as f:
-            state = json.load(f)
+        async with aiofiles.open(orchestrator.deployment_state_file) as f:
+            content = await f.read()
+            state = json.loads(content)
 
         assert state["deployments"]["staged-123"]["status"] == "rejected"
         assert state["deployments"]["staged-123"]["message"] == "Testing rejection"
@@ -354,8 +357,9 @@ class TestDeploymentPersistence:
         orchestrator._save_state()
 
         # Verify counts were persisted
-        with open(orchestrator.deployment_state_file) as f:
-            state = json.load(f)
+        async with aiofiles.open(orchestrator.deployment_state_file) as f:
+            content = await f.read()
+            state = json.loads(content)
 
         deployment_state = state["deployments"]["progress-123"]
         assert deployment_state["agents_updated"] == 1
