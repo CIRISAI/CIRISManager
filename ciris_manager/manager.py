@@ -116,6 +116,7 @@ class CIRISManager:
 
         self._running = False
         self._shutdown_event = asyncio.Event()
+        self._start_time: Optional[datetime] = None
 
         # Track background tasks to prevent garbage collection
         self._background_tasks: set = set()
@@ -524,6 +525,7 @@ class CIRISManager:
         logger.info("Starting CIRISManager...")
 
         self._running = True
+        self._start_time = datetime.now(timezone.utc)
 
         # Generate initial nginx config
         logger.info("Updating nginx configuration on startup...")
@@ -803,8 +805,33 @@ class CIRISManager:
 
     def get_status(self) -> dict:
         """Get current manager status."""
+        uptime_seconds = None
+        if self._start_time:
+            delta = datetime.now(timezone.utc) - self._start_time
+            uptime_seconds = int(delta.total_seconds())
+
+        # Get system metrics
+        system_metrics = {}
+        try:
+            import psutil
+
+            system_metrics = {
+                "cpu_percent": psutil.cpu_percent(interval=0.1),
+                "memory_percent": psutil.virtual_memory().percent,
+                "disk_percent": psutil.disk_usage("/").percent,
+                "load_average": list(psutil.getloadavg())
+                if hasattr(psutil, "getloadavg")
+                else None,
+            }
+        except ImportError:
+            pass  # psutil not installed
+        except Exception as e:
+            logger.debug(f"Could not get system metrics: {e}")
+
         return {
             "running": self._running,
+            "uptime_seconds": uptime_seconds,
+            "start_time": self._start_time.isoformat() if self._start_time else None,
             "config": self.config.model_dump(),
             "watchdog_status": self.watchdog.get_status(),
             "components": {
@@ -812,6 +839,7 @@ class CIRISManager:
                 "api_server": "running" if self._running else "stopped",
                 "nginx": "enabled" if self.config.nginx.enabled else "disabled",
             },
+            "system_metrics": system_metrics,
         }
 
 

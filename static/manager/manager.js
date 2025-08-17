@@ -147,24 +147,128 @@ function renderStatus() {
         return;
     }
 
+    // Format uptime
+    let uptimeStr = 'N/A';
+    if (managerStatus.uptime_seconds) {
+        const days = Math.floor(managerStatus.uptime_seconds / 86400);
+        const hours = Math.floor((managerStatus.uptime_seconds % 86400) / 3600);
+        const minutes = Math.floor((managerStatus.uptime_seconds % 3600) / 60);
+        
+        if (days > 0) {
+            uptimeStr = `${days}d ${hours}h ${minutes}m`;
+        } else if (hours > 0) {
+            uptimeStr = `${hours}h ${minutes}m`;
+        } else {
+            uptimeStr = `${minutes}m`;
+        }
+    }
+
+    // Format start time
+    let startTimeStr = 'N/A';
+    if (managerStatus.start_time) {
+        const startDate = new Date(managerStatus.start_time);
+        startTimeStr = startDate.toLocaleString();
+    }
+
+    // Status badge color
+    const statusColor = managerStatus.status === 'running' ? 'green' : 'red';
+
     container.innerHTML = `
-        <div class="space-y-2">
-            <div><strong>Status:</strong> ${managerStatus.status}</div>
-            <div><strong>Version:</strong> ${managerStatus.version || '1.0.0'}</div>
-            <div><strong>Auth Mode:</strong> ${managerStatus.auth_mode || 'production'}</div>
-            <div class="pt-2">
-                <strong>Components:</strong>
-                <ul class="list-disc list-inside mt-1">
-                    ${Object.entries(managerStatus.components || {}).map(([key, value]) =>
-                        `<li>${key}: ${value}</li>`
-                    ).join('')}
-                </ul>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-3">
+                <div class="flex items-center gap-2">
+                    <strong>Status:</strong> 
+                    <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-${statusColor}-100 text-${statusColor}-800">
+                        ${managerStatus.status}
+                    </span>
+                </div>
+                <div><strong>Version:</strong> ${managerStatus.version || '2.2.0'}</div>
+                <div><strong>Auth Mode:</strong> ${managerStatus.auth_mode || 'production'}</div>
+                <div><strong>Uptime:</strong> ${uptimeStr}</div>
+                <div><strong>Started:</strong> ${startTimeStr}</div>
+            </div>
+            <div>
+                <div class="mb-2"><strong>Components:</strong></div>
+                <div class="space-y-1">
+                    ${Object.entries(managerStatus.components || {}).map(([key, value]) => {
+                        const isRunning = value === 'running' || value === 'enabled';
+                        const icon = isRunning ? '✅' : '❌';
+                        const color = isRunning ? 'text-green-600' : 'text-red-600';
+                        return `
+                            <div class="flex items-center gap-2">
+                                <span class="${color}">${icon}</span>
+                                <span class="capitalize">${key.replace('_', ' ')}:</span>
+                                <span class="text-gray-600">${value}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
             </div>
         </div>
     `;
     
+    // Display system health metrics if available
+    if (managerStatus.system_metrics) {
+        renderSystemHealth(managerStatus.system_metrics);
+    }
+    
     // Fetch and display version summary
     fetchVersionSummary();
+}
+
+// Render system health metrics
+function renderSystemHealth(metrics) {
+    const container = document.getElementById('system-health');
+    if (!container) return;
+    
+    const cpuColor = metrics.cpu_percent > 80 ? 'red' : metrics.cpu_percent > 50 ? 'yellow' : 'green';
+    const memColor = metrics.memory_percent > 80 ? 'red' : metrics.memory_percent > 50 ? 'yellow' : 'green';
+    const diskColor = metrics.disk_percent > 80 ? 'red' : metrics.disk_percent > 50 ? 'yellow' : 'green';
+    
+    container.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white p-3 rounded border border-gray-200">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium">CPU Usage</span>
+                    <span class="text-sm font-bold text-${cpuColor}-600">${metrics.cpu_percent?.toFixed(1) || 'N/A'}%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-${cpuColor}-500 h-2 rounded-full" style="width: ${metrics.cpu_percent || 0}%"></div>
+                </div>
+            </div>
+            
+            <div class="bg-white p-3 rounded border border-gray-200">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium">Memory Usage</span>
+                    <span class="text-sm font-bold text-${memColor}-600">${metrics.memory_percent?.toFixed(1) || 'N/A'}%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-${memColor}-500 h-2 rounded-full" style="width: ${metrics.memory_percent || 0}%"></div>
+                </div>
+            </div>
+            
+            <div class="bg-white p-3 rounded border border-gray-200">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium">Disk Usage</span>
+                    <span class="text-sm font-bold text-${diskColor}-600">${metrics.disk_percent?.toFixed(1) || 'N/A'}%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-${diskColor}-500 h-2 rounded-full" style="width: ${metrics.disk_percent || 0}%"></div>
+                </div>
+            </div>
+        </div>
+        
+        ${metrics.load_average ? `
+            <div class="mt-4 p-3 bg-white rounded border border-gray-200">
+                <div class="text-sm font-medium mb-1">Load Average</div>
+                <div class="flex gap-4 text-sm">
+                    <span>1 min: <strong>${metrics.load_average[0]?.toFixed(2)}</strong></span>
+                    <span>5 min: <strong>${metrics.load_average[1]?.toFixed(2)}</strong></span>
+                    <span>15 min: <strong>${metrics.load_average[2]?.toFixed(2)}</strong></span>
+                </div>
+            </div>
+        ` : ''}
+    `;
 }
 
 // Fetch version summary for agents
@@ -189,26 +293,55 @@ async function fetchVersionSummary() {
         versionSummaryDiv.innerHTML = `
             <h3 class="text-lg font-semibold mb-2">Agent Versions</h3>
             <div class="bg-gray-50 p-4 rounded-lg">
-                <div class="mb-3">
-                    <strong>Total Agents:</strong> ${data.total_agents}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-white p-3 rounded border border-gray-200">
+                        <div class="text-2xl font-bold text-blue-600">${data.total_agents}</div>
+                        <div class="text-sm text-gray-600">Total Agents</div>
+                    </div>
+                    <div class="bg-white p-3 rounded border border-gray-200">
+                        <div class="text-2xl font-bold text-green-600">${Object.keys(data.version_summary || {}).length}</div>
+                        <div class="text-sm text-gray-600">Unique Versions</div>
+                    </div>
                 </div>
-                <div>
-                    <strong>Version Distribution:</strong>
-                    <ul class="list-disc list-inside mt-2">
-                        ${Object.entries(data.version_summary || {}).map(([version, count]) =>
-                            `<li>${version}: ${count} agent${count !== 1 ? 's' : ''}</li>`
-                        ).join('')}
-                    </ul>
+                
+                <div class="mb-4">
+                    <strong class="block mb-2">Version Distribution:</strong>
+                    <div class="space-y-2">
+                        ${Object.entries(data.version_summary || {}).map(([version, count]) => {
+                            const percentage = ((count / data.total_agents) * 100).toFixed(1);
+                            return `
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-1">
+                                        <div class="flex justify-between mb-1">
+                                            <span class="text-sm font-medium">${version}</span>
+                                            <span class="text-sm text-gray-600">${count} agent${count !== 1 ? 's' : ''} (${percentage}%)</span>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-2">
+                                            <div class="bg-blue-600 h-2 rounded-full" style="width: ${percentage}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
                 </div>
+                
                 ${data.agents && data.agents.length > 0 ? `
-                    <div class="mt-4">
-                        <strong>Agent Details:</strong>
-                        <div class="mt-2 space-y-1">
+                    <div class="border-t pt-4">
+                        <strong class="block mb-2">Agent Details:</strong>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                             ${data.agents.map(agent => `
-                                <div class="text-sm">
-                                    <span class="font-medium">${escapeHtml(agent.agent_name)}:</span>
-                                    <span class="text-gray-600">v${escapeHtml(agent.version)}</span>
-                                    ${agent.codename !== 'unknown' ? `<span class="text-gray-500">(${escapeHtml(agent.codename)})</span>` : ''}
+                                <div class="flex items-center gap-2 p-2 bg-white rounded border border-gray-100">
+                                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                        <span class="text-xs font-bold text-blue-600">${agent.agent_name.charAt(0).toUpperCase()}</span>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="font-medium text-sm">${escapeHtml(agent.agent_name)}</div>
+                                        <div class="text-xs text-gray-600">
+                                            v${escapeHtml(agent.version)}
+                                            ${agent.codename !== 'unknown' ? `<span class="text-gray-500">(${escapeHtml(agent.codename)})</span>` : ''}
+                                        </div>
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>

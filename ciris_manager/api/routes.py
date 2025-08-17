@@ -47,9 +47,12 @@ class StatusResponse(BaseModel):
     """Response model for manager status."""
 
     status: str
-    version: str = "1.0.0"
+    version: str = "2.2.0"
     components: Dict[str, str]
     auth_mode: Optional[str] = None
+    uptime_seconds: Optional[int] = None
+    start_time: Optional[str] = None
+    system_metrics: Optional[Dict[str, Any]] = None
 
 
 class TemplateListResponse(BaseModel):
@@ -317,6 +320,9 @@ def create_routes(manager: Any) -> APIRouter:
             status="running" if status["running"] else "stopped",
             components=status["components"],
             auth_mode=auth_mode,
+            uptime_seconds=status.get("uptime_seconds"),
+            start_time=status.get("start_time"),
+            system_metrics=status.get("system_metrics"),
         )
 
     @router.get("/agents", response_model=AgentListResponse)
