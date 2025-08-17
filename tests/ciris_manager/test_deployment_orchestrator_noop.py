@@ -205,12 +205,15 @@ class TestNoOpDeployment:
             strategy="immediate",
         )
 
+        # Mock _update_nginx_container since GUI needs updating
+        orchestrator._update_nginx_container = AsyncMock(return_value=True)
+
         # Start deployment
         status = await orchestrator.start_deployment(notification, agents)
 
-        # Verify deployment started (GUI changed)
-        assert status.status == "in_progress"
-        assert status.agents_total == 1
+        # Verify deployment completed immediately (GUI-only update with immediate strategy)
+        assert status.status == "completed"
+        assert status.agents_total == 0  # No agents affected in GUI-only update
 
     @pytest.mark.asyncio
     async def test_no_metadata_triggers_update(self, mock_manager, mock_registry_client, tmp_path):
@@ -248,17 +251,20 @@ class TestNoOpDeployment:
             )
         ]
 
-        # Create notification
+        # Create notification - using canary strategy for agent updates
         notification = UpdateNotification(
             agent_image="ghcr.io/cirisai/ciris-agent:latest",
             gui_image="ghcr.io/cirisai/ciris-gui:latest",
             message="First deployment",
-            strategy="immediate",
+            strategy="canary",  # Agent updates must use canary, not immediate
         )
+
+        # Mock the background deployment task
+        orchestrator._run_deployment = Mock()
 
         # Start deployment
         status = await orchestrator.start_deployment(notification, agents)
 
-        # Verify deployment started (no previous digests)
+        # Verify deployment started (no previous digests means agents need updating)
         assert status.status == "in_progress"
         assert status.agents_total == 1

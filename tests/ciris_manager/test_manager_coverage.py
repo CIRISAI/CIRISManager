@@ -166,7 +166,7 @@ class TestManagerCoverage:
         config = CIRISManagerConfig(
             manager={"agents_directory": str(tmp_path / "agents")},
             nginx={"config_dir": str(nginx_dir)},
-            container_management={"interval": 0.01},  # Fast for testing
+            container_management={"interval": 1},  # Minimum valid interval
         )
 
         manager = CIRISManager(config)
