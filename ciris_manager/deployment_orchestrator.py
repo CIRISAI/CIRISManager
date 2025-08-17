@@ -1769,85 +1769,114 @@ class DeploymentOrchestrator:
                                 ).total_seconds() / 60
 
                                 if work_duration >= stability_minutes:
-                                    # Check for recent incidents
-                                    telemetry_url = (
-                                        f"http://localhost:{agent.api_port}/v1/telemetry/overview"
-                                    )
-                                    telemetry_response = await client.get(
-                                        telemetry_url, headers=headers
-                                    )
+                                    # Agent has been in WORK state for required duration
+                                    # Try to check telemetry for incidents, but don't block on it
+                                    recent_critical = False
+                                    telemetry_checked = False
 
-                                    if telemetry_response.status_code == 200:
-                                        telemetry_data = telemetry_response.json()
-                                        if isinstance(telemetry_data, dict) and telemetry_data.get(
-                                            "data"
-                                        ):
-                                            telemetry_data = telemetry_data["data"]
-
-                                        incidents = telemetry_data.get("recent_incidents", [])
-
-                                        # Handle case where incidents might be an int (count) instead of list
-                                        if isinstance(incidents, int):
-                                            incidents = []  # No incidents if it's just a count
-                                        elif not isinstance(incidents, list):
-                                            logger.warning(
-                                                f"Unexpected incidents type for {agent.agent_id}: {type(incidents)}"
-                                            )
-                                            incidents = []
-
-                                        # Check for critical incidents in the last stability_minutes
-                                        recent_critical = False
-                                        cutoff_time = datetime.now(timezone.utc).timestamp() - (
-                                            stability_minutes * 60
+                                    try:
+                                        telemetry_url = f"http://localhost:{agent.api_port}/v1/telemetry/overview"
+                                        telemetry_response = await client.get(
+                                            telemetry_url, headers=headers, timeout=5.0
                                         )
 
-                                        for incident in incidents:
-                                            if incident.get("severity") in ["critical", "high"]:
-                                                incident_time = incident.get("timestamp", 0)
-                                                if isinstance(incident_time, str):
-                                                    # Parse ISO timestamp
-                                                    from dateutil import parser
+                                        if telemetry_response.status_code == 200:
+                                            telemetry_data = telemetry_response.json()
+                                            if isinstance(
+                                                telemetry_data, dict
+                                            ) and telemetry_data.get("data"):
+                                                telemetry_data = telemetry_data["data"]
 
-                                                    incident_time = parser.parse(
-                                                        incident_time
-                                                    ).timestamp()
-                                                if incident_time > cutoff_time:
-                                                    recent_critical = True
-                                                    break
+                                            incidents = telemetry_data.get("recent_incidents", [])
 
-                                        if not recent_critical:
-                                            logger.info(
-                                                f"Agent {agent.agent_id} is stable in WORK state "
-                                                f"for {work_duration:.1f} minutes with no critical incidents"
+                                            # Handle case where incidents might be an int (count) instead of list
+                                            if isinstance(incidents, int):
+                                                incidents = []  # No incidents if it's just a count
+                                            elif not isinstance(incidents, list):
+                                                logger.warning(
+                                                    f"Unexpected incidents type for {agent.agent_id}: {type(incidents)}"
+                                                )
+                                                incidents = []
+
+                                            # Check for critical incidents in the last stability_minutes
+                                            cutoff_time = datetime.now(timezone.utc).timestamp() - (
+                                                stability_minutes * 60
                                             )
 
-                                            # Add event for agent reaching stable WORK
-                                            self._add_event(
-                                                deployment_id,
-                                                "agent_stable",
-                                                f"{agent.agent_name} reached stable WORK state",
-                                                {
-                                                    "agent_id": agent.agent_id,
-                                                    "phase": phase_name,
-                                                    "time_to_work": round(work_duration, 1),
-                                                    "version": version,
-                                                },
+                                            for incident in incidents:
+                                                if incident.get("severity") in ["critical", "high"]:
+                                                    incident_time = incident.get("timestamp", 0)
+                                                    if isinstance(incident_time, str):
+                                                        # Parse ISO timestamp
+                                                        from dateutil import parser
+
+                                                        incident_time = parser.parse(
+                                                            incident_time
+                                                        ).timestamp()
+                                                    if incident_time > cutoff_time:
+                                                        recent_critical = True
+                                                        break
+
+                                            telemetry_checked = True
+                                        else:
+                                            logger.warning(
+                                                f"Telemetry endpoint returned {telemetry_response.status_code} "
+                                                f"for agent {agent.agent_id}, proceeding without incident check"
                                             )
+                                    except Exception as e:
+                                        # Telemetry check failed, but agent is in WORK state
+                                        logger.warning(
+                                            f"Could not check telemetry for agent {agent.agent_id}: {e}. "
+                                            f"Proceeding based on WORK state alone."
+                                        )
 
-                                            # Calculate time to reach WORK
-                                            time_to_work = (
-                                                agents_in_work[agent.agent_id] - start_time
-                                            ).total_seconds() / 60
+                                    # If there were critical incidents, skip this agent
+                                    if recent_critical:
+                                        logger.warning(
+                                            f"Agent {agent.agent_id} has recent critical incidents, "
+                                            f"continuing to monitor"
+                                        )
+                                        continue
 
-                                            results = {
-                                                "successful_agent": agent.agent_id,
-                                                "time_to_work_minutes": round(time_to_work, 1),
-                                                "stability_duration_minutes": round(
-                                                    work_duration, 1
-                                                ),
-                                                "version": version,
-                                            }
-                                            return True, results
+                                    # Agent is stable in WORK state (with or without telemetry confirmation)
+                                    if telemetry_checked:
+                                        logger.info(
+                                            f"Agent {agent.agent_id} is stable in WORK state "
+                                            f"for {work_duration:.1f} minutes with no critical incidents"
+                                        )
+                                    else:
+                                        logger.info(
+                                            f"Agent {agent.agent_id} is stable in WORK state "
+                                            f"for {work_duration:.1f} minutes (telemetry unavailable)"
+                                        )
+
+                                    # Add event for agent reaching stable WORK
+                                    self._add_event(
+                                        deployment_id,
+                                        "agent_stable",
+                                        f"{agent.agent_name} reached stable WORK state",
+                                        {
+                                            "agent_id": agent.agent_id,
+                                            "phase": phase_name,
+                                            "time_to_work": round(work_duration, 1),
+                                            "version": version,
+                                            "telemetry_checked": telemetry_checked,
+                                        },
+                                    )
+
+                                    # Calculate time to reach WORK
+                                    time_to_work = (
+                                        agents_in_work[agent.agent_id] - start_time
+                                    ).total_seconds() / 60
+
+                                    results = {
+                                        "successful_agent": agent.agent_id,
+                                        "time_to_work_minutes": round(time_to_work, 1),
+                                        "stability_duration_minutes": round(work_duration, 1),
+                                        "version": version,
+                                        "telemetry_available": telemetry_checked,
+                                    }
+                                    return True, results
                             else:
                                 # Agent not in WORK state, remove from tracking
                                 if agent.agent_id in agents_in_work:
