@@ -3,7 +3,7 @@ Test enhanced settings functionality for agent configuration.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, mock_open
+from unittest.mock import Mock, AsyncMock, patch
 import yaml
 from fastapi.testclient import TestClient
 
@@ -71,7 +71,13 @@ class TestEnhancedSettings:
             }
         }
 
-        with patch("builtins.open", mock_open(read_data=yaml.dump(compose_data))):
+        # Create an async mock for aiofiles.open
+        mock_file = AsyncMock()
+        mock_file.read = AsyncMock(return_value=yaml.dump(compose_data))
+        mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+        mock_file.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("aiofiles.open", return_value=mock_file):
             with patch("pathlib.Path.exists", return_value=True):
                 response = client.get("/manager/v1/agents/test-agent/config")
 
@@ -105,22 +111,25 @@ class TestEnhancedSettings:
             }
         }
 
-        # Create a mock that handles multiple file operations
-        import io
+        yaml_content = yaml.dump(compose_data)
+        call_count = [0]
 
-        open_count = [0]
-
-        def multi_mock_open(*args, **kwargs):
-            open_count[0] += 1
-            if open_count[0] == 1:
-                # First call - reading
-                return io.StringIO(yaml.dump(compose_data))
+        # Mock async file operations
+        # Note: side_effect expects a sync function, not async
+        def mock_aiofiles_open(path, mode="r", *args, **kwargs):
+            call_count[0] += 1
+            mock_file = AsyncMock()
+            if mode == "r" or call_count[0] == 1:
+                # Reading the compose file
+                mock_file.read = AsyncMock(return_value=yaml_content)
             else:
-                # Second call - writing
-                return io.StringIO()
+                # Writing the compose file
+                mock_file.write = AsyncMock()
+            mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+            mock_file.__aexit__ = AsyncMock(return_value=None)
+            return mock_file
 
-        # The update_agent_config endpoint opens file twice: once to read, once to write
-        with patch("builtins.open", multi_mock_open):
+        with patch("aiofiles.open", side_effect=mock_aiofiles_open):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                     with patch("shutil.copy2"):  # Mock the backup operation
@@ -151,7 +160,13 @@ class TestEnhancedSettings:
             "wa_review_completed": False,  # No WA review
         }
 
-        with patch("builtins.open", mock_open(read_data=yaml.dump(template_data))):
+        # Create an async mock for aiofiles.open
+        mock_file = AsyncMock()
+        mock_file.read = AsyncMock(return_value=yaml.dump(template_data))
+        mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+        mock_file.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("aiofiles.open", return_value=mock_file):
             with patch("pathlib.Path.exists", return_value=True):
                 response = client.post("/manager/v1/agents", json=request_data)
 
@@ -173,7 +188,13 @@ class TestEnhancedSettings:
             "wa_review_completed": True,  # WA review confirmed
         }
 
-        with patch("builtins.open", mock_open(read_data=yaml.dump(template_data))):
+        # Create an async mock for aiofiles.open
+        mock_file = AsyncMock()
+        mock_file.read = AsyncMock(return_value=yaml.dump(template_data))
+        mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+        mock_file.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("aiofiles.open", return_value=mock_file):
             with patch("pathlib.Path.exists", return_value=True):
                 response = client.post("/manager/v1/agents", json=request_data)
 
@@ -195,7 +216,13 @@ class TestEnhancedSettings:
             "wa_review_completed": False,  # No WA review needed
         }
 
-        with patch("builtins.open", mock_open(read_data=yaml.dump(template_data))):
+        # Create an async mock for aiofiles.open
+        mock_file = AsyncMock()
+        mock_file.read = AsyncMock(return_value=yaml.dump(template_data))
+        mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+        mock_file.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("aiofiles.open", return_value=mock_file):
             with patch("pathlib.Path.exists", return_value=True):
                 response = client.post("/manager/v1/agents", json=request_data)
 
@@ -209,7 +236,13 @@ class TestEnhancedSettings:
             "stewardship": {"stewardship_tier": 4},
         }
 
-        with patch("builtins.open", mock_open(read_data=yaml.dump(template_data))):
+        # Create an async mock for aiofiles.open
+        mock_file = AsyncMock()
+        mock_file.read = AsyncMock(return_value=yaml.dump(template_data))
+        mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+        mock_file.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("aiofiles.open", return_value=mock_file):
             with patch("pathlib.Path.exists", return_value=True):
                 response = client.get("/manager/v1/templates/echo/details")
 
@@ -228,30 +261,25 @@ class TestEnhancedSettings:
             }
         }
 
-        # Create a mock that properly handles multiple file operations
-        import io
-        from unittest.mock import MagicMock
+        yaml_content = yaml.dump(compose_data)
+        call_count = [0]
 
-        open_count = [0]
-
-        def multi_mock_open(*args, **kwargs):
-            """Handle multiple open calls."""
-            open_count[0] += 1
-
-            # First call is read, second is write
-            if open_count[0] == 1:
+        # Mock async file operations
+        # Note: side_effect expects a sync function, not async
+        def mock_aiofiles_open(path, mode="r", *args, **kwargs):
+            call_count[0] += 1
+            mock_file = AsyncMock()
+            if mode == "r" or call_count[0] == 1:
                 # Reading the compose file
-                file_obj = io.StringIO(yaml.dump(compose_data))
+                mock_file.read = AsyncMock(return_value=yaml_content)
             else:
                 # Writing the compose file
-                file_obj = io.StringIO()
+                mock_file.write = AsyncMock()
+            mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+            mock_file.__aexit__ = AsyncMock(return_value=None)
+            return mock_file
 
-            mock = MagicMock(return_value=file_obj)
-            mock.__enter__ = MagicMock(return_value=file_obj)
-            mock.__exit__ = MagicMock(return_value=None)
-            return file_obj
-
-        with patch("builtins.open", multi_mock_open):
+        with patch("aiofiles.open", side_effect=mock_aiofiles_open):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                     with patch("shutil.copy2"):  # Mock the backup operation
@@ -280,30 +308,25 @@ class TestEnhancedSettings:
             }
         }
 
-        # Create a mock that properly handles multiple file operations
-        import io
-        from unittest.mock import MagicMock
+        yaml_content = yaml.dump(compose_data)
+        call_count = [0]
 
-        open_count = [0]
-
-        def multi_mock_open(*args, **kwargs):
-            """Handle multiple open calls."""
-            open_count[0] += 1
-
-            # First call is read, second is write
-            if open_count[0] == 1:
+        # Mock async file operations
+        # Note: side_effect expects a sync function, not async
+        def mock_aiofiles_open(path, mode="r", *args, **kwargs):
+            call_count[0] += 1
+            mock_file = AsyncMock()
+            if mode == "r" or call_count[0] == 1:
                 # Reading the compose file
-                file_obj = io.StringIO(yaml.dump(compose_data))
+                mock_file.read = AsyncMock(return_value=yaml_content)
             else:
                 # Writing the compose file
-                file_obj = io.StringIO()
+                mock_file.write = AsyncMock()
+            mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+            mock_file.__aexit__ = AsyncMock(return_value=None)
+            return mock_file
 
-            mock = MagicMock(return_value=file_obj)
-            mock.__enter__ = MagicMock(return_value=file_obj)
-            mock.__exit__ = MagicMock(return_value=None)
-            return file_obj
-
-        with patch("builtins.open", multi_mock_open):
+        with patch("aiofiles.open", side_effect=mock_aiofiles_open):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                     with patch("shutil.copy2"):  # Mock the backup operation

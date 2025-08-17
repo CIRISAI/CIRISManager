@@ -3,7 +3,7 @@ Test file loading functionality for environment variables.
 """
 
 import pytest
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock, AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from ciris_manager.api.routes import create_routes
@@ -352,8 +352,14 @@ WA_USER_IDS=user1,user2
 OAUTH_CALLBACK_BASE_URL=https://agents.ciris.ai
 """
 
+        # Create an async mock for aiofiles.open
+        mock_file = AsyncMock()
+        mock_file.read = AsyncMock(return_value=production_env)
+        mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+        mock_file.__aexit__ = AsyncMock(return_value=None)
+
         with patch("pathlib.Path.exists", return_value=True):
-            with patch("builtins.open", mock_open(read_data=production_env)):
+            with patch("aiofiles.open", return_value=mock_file):
                 response = client.get("/manager/v1/env/default")
 
         assert response.status_code == 200

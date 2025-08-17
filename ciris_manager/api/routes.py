@@ -2319,12 +2319,18 @@ def create_routes(manager: Any) -> APIRouter:
             collection_interval=60,  # Collect every 60 seconds
         )
 
-        # Start the telemetry service
+        # Start the telemetry service only if there's a running event loop
         import asyncio
 
-        task = asyncio.create_task(telemetry_service.start())
-        background_tasks.add(task)
-        task.add_done_callback(background_tasks.discard)
+        try:
+            asyncio.get_running_loop()  # Check if there's a running loop
+            task = asyncio.create_task(telemetry_service.start())
+            background_tasks.add(task)
+            task.add_done_callback(background_tasks.discard)
+        except RuntimeError:
+            # No running event loop yet (e.g., during tests)
+            # The service will be started later when the app runs
+            logger.debug("Telemetry service will be started when event loop is available")
 
         telemetry_router = create_telemetry_router(telemetry_service)
         router.include_router(telemetry_router, tags=["telemetry"])
