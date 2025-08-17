@@ -12,6 +12,7 @@ import httpx
 import logging
 import os
 from pathlib import Path
+import aiofiles  # type: ignore
 from .auth import get_current_user_dependency as get_current_user
 from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
 from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
@@ -412,8 +413,9 @@ def create_routes(manager: Any) -> APIRouter:
                     raise HTTPException(status_code=400, detail="Invalid template path")
 
                 if template_file.exists():
-                    with open(template_file, "r") as f:
-                        template_data = yaml.safe_load(f)
+                    async with aiofiles.open(template_file, "r") as f:
+                        content = await f.read()
+                        template_data = yaml.safe_load(content)
                     stewardship_tier = template_data.get("stewardship", {}).get(
                         "stewardship_tier", 1
                     )
@@ -823,8 +825,9 @@ def create_routes(manager: Any) -> APIRouter:
                 )
 
             # Read docker-compose.yml
-            with open(compose_path, "r") as f:
-                compose_data = yaml.safe_load(f)
+            async with aiofiles.open(compose_path, "r") as f:
+                content = await f.read()
+                compose_data = yaml.safe_load(content)
 
             # Extract environment variables
             environment = {}
@@ -839,8 +842,9 @@ def create_routes(manager: Any) -> APIRouter:
                         for env_file in env_files:
                             env_file_path = compose_path.parent / env_file
                             if env_file_path.exists():
-                                with open(env_file_path, "r") as ef:
-                                    for line in ef:
+                                async with aiofiles.open(env_file_path, "r") as ef:
+                                    content = await ef.read()
+                                    for line in content.split("\n"):
                                         line = line.strip()
                                         if line and not line.startswith("#") and "=" in line:
                                             key, value = line.split("=", 1)
@@ -902,8 +906,9 @@ def create_routes(manager: Any) -> APIRouter:
                 )
 
             # Read current docker-compose.yml
-            with open(compose_path, "r") as f:
-                compose_data = yaml.safe_load(f)
+            async with aiofiles.open(compose_path, "r") as f:
+                content = await f.read()
+                compose_data = yaml.safe_load(content)
 
             # Update environment variables
             if "environment" in config_update:
@@ -944,8 +949,9 @@ def create_routes(manager: Any) -> APIRouter:
             shutil.copy2(str(compose_path), str(backup_path))
 
             # Write updated docker-compose.yml
-            with open(compose_path, "w") as f:
-                yaml.dump(compose_data, f, default_flow_style=False, sort_keys=False)
+            content = yaml.dump(compose_data, default_flow_style=False, sort_keys=False)
+            async with aiofiles.open(compose_path, "w") as f:
+                await f.write(content)
 
             # Recreate container with new config
             agent_dir = Path("/opt/ciris/agents") / agent_id
@@ -1093,8 +1099,9 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=404, detail=f"Template '{template_name}' not found")
 
         try:
-            with open(template_file, "r") as f:
-                template_data = yaml.safe_load(f)
+            async with aiofiles.open(template_file, "r") as f:
+                content = await f.read()
+                template_data = yaml.safe_load(content)
 
             # Extract stewardship tier from stewardship section
             stewardship_tier = template_data.get("stewardship", {}).get("stewardship_tier", 1)
@@ -1118,8 +1125,8 @@ def create_routes(manager: Any) -> APIRouter:
         env_file_path = Path("/home/ciris/.env")
         if env_file_path.exists():
             try:
-                with open(env_file_path, "r") as f:
-                    content = f.read()
+                async with aiofiles.open(env_file_path, "r") as f:
+                    content = await f.read()
                 # Filter out sensitive values and keep only keys we want to expose
                 lines = []
                 sensitive_keys = {

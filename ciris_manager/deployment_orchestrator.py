@@ -43,6 +43,9 @@ class DeploymentOrchestrator:
         self.deployment_paused: Dict[str, bool] = {}  # Track paused deployments
         self.manager = manager
 
+        # Track background tasks to prevent garbage collection
+        self._background_tasks: set = set()
+
         # Set up persistent storage
         self.state_dir = Path("/var/lib/ciris-manager")
         try:
@@ -298,9 +301,11 @@ class DeploymentOrchestrator:
             self._save_state()
 
             # Start deployment in background with only agents that need updates
-            asyncio.create_task(
+            task = asyncio.create_task(
                 self._run_deployment(deployment_id, notification, agents_needing_update)
             )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
             return status
 
@@ -459,9 +464,11 @@ class DeploymentOrchestrator:
             )
 
             # Start deployment in background
-            asyncio.create_task(
+            task = asyncio.create_task(
                 self._run_deployment(deployment_id, deployment.notification, agents_needing_update)
             )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
             logger.info(f"Launched staged deployment {deployment_id}")
             return True
@@ -623,7 +630,11 @@ class DeploymentOrchestrator:
                 deployment.notification.metadata["rollback_targets"] = target_versions
 
         # Start rollback process
-        asyncio.create_task(self._rollback_agents(deployment, target_version, target_versions))
+        task = asyncio.create_task(
+            self._rollback_agents(deployment, target_version, target_versions)
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
         logger.info(f"Initiated rollback for deployment {deployment_id} to {target_version}")
         return True
@@ -2144,6 +2155,8 @@ class DeploymentOrchestrator:
                 self._update_single_agent(deployment_id, notification, agent, peer_results)
             )
             tasks.append(task)
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         # Run updates in parallel
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -2790,7 +2803,9 @@ class DeploymentOrchestrator:
             )
 
             # Schedule image cleanup to remove versions older than n-2
-            asyncio.create_task(self._trigger_image_cleanup())
+            task = asyncio.create_task(self._trigger_image_cleanup())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         except Exception as e:
             logger.error(f"Failed to update agent metadata: {e}")

@@ -267,7 +267,8 @@ class PeriodicCollector(ABC):
             try:
                 await self._task
             except asyncio.CancelledError:
-                pass
+                # Re-raise CancelledError after cleanup
+                raise
 
         logger.info(f"Stopped periodic collection for {self.collector.name}")
 

@@ -117,6 +117,9 @@ class CIRISManager:
         self._running = False
         self._shutdown_event = asyncio.Event()
 
+        # Track background tasks to prevent garbage collection
+        self._background_tasks: set = set()
+
     def _scan_existing_agents(self) -> None:
         """Scan agent directories to rebuild registry on startup."""
         if not self.agents_dir.exists():
@@ -529,20 +532,28 @@ class CIRISManager:
             logger.error("Failed to update nginx configuration on startup")
 
         # Start the new container management loop
-        asyncio.create_task(self.container_management_loop())
+        task = asyncio.create_task(self.container_management_loop())
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
         # Start watchdog
         await self.watchdog.start()
 
         # Start API server if configured
         if hasattr(self.config.manager, "port") and self.config.manager.port:
-            asyncio.create_task(self._start_api_server())
+            task = asyncio.create_task(self._start_api_server())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         # Start periodic Docker image cleanup (runs every 24 hours)
-        asyncio.create_task(self.image_cleanup.run_periodic_cleanup(interval_hours=24))
+        task = asyncio.create_task(self.image_cleanup.run_periodic_cleanup(interval_hours=24))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
         # Run initial cleanup on startup
-        asyncio.create_task(self._run_initial_cleanup())
+        task = asyncio.create_task(self._run_initial_cleanup())
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
         logger.info("CIRISManager started successfully")
 
