@@ -104,19 +104,31 @@ class DeploymentOrchestrator:
 
     def _save_state(self) -> None:
         """Save deployment state synchronously (for compatibility)."""
-        # Use asyncio.run if not in event loop, otherwise create task
+        # For now, use synchronous implementation to avoid test failures
         try:
-            asyncio.get_running_loop()
-            # We're in an async context, create a task
-            # Store task to prevent garbage collection
-            if not hasattr(self, "_background_tasks"):
-                self._background_tasks = set()
-            task = asyncio.create_task(self._save_state_async())
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
-        except RuntimeError:
-            # No event loop, run synchronously
-            asyncio.run(self._save_state_async())
+            state = {
+                "deployments": {
+                    deployment_id: deployment.model_dump()
+                    for deployment_id, deployment in self.deployments.items()
+                },
+                "pending_deployments": {
+                    deployment_id: deployment.model_dump()
+                    for deployment_id, deployment in self.pending_deployments.items()
+                },
+                "current_deployment": self.current_deployment,
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Write to temp file first, then move atomically
+            temp_file = self.deployment_state_file.with_suffix(".tmp")
+            with open(temp_file, "w") as f:
+                json.dump(state, f, indent=2)
+
+            # Atomic rename
+            temp_file.replace(self.deployment_state_file)
+            logger.debug(f"Saved deployment state with {len(self.deployments)} deployments")
+        except Exception as e:
+            logger.error(f"Failed to save deployment state: {e}")
 
     async def _save_state_async(self) -> None:
         """Save deployment state to persistent storage (async version)."""

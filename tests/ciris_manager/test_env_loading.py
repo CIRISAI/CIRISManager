@@ -3,7 +3,7 @@ Test environment variable loading functionality.
 """
 
 import pytest
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock, AsyncMock, patch, mock_open
 import yaml
 from fastapi.testclient import TestClient
 
@@ -262,15 +262,33 @@ MIXED_QUOTES="it's a mixed value"
         }
 
         # Mock file operations
-        with patch("builtins.open", mock_open(read_data=yaml.dump(compose_data))):
-            with patch("pathlib.Path.exists", return_value=True):
-                with patch("subprocess.run") as mock_run:
-                    with patch("yaml.dump") as mock_yaml_dump:
-                        mock_run.return_value = Mock(returncode=0)
+        # Create a better mock for multiple file operations
+        import io
 
-                        response = client.patch(
-                            "/manager/v1/agents/test-agent/config", json=config_update
-                        )
+        open_count = [0]
+
+        def multi_mock_open(*args, **kwargs):
+            open_count[0] += 1
+            if open_count[0] == 1:
+                # First call - reading
+                return io.StringIO(yaml.dump(compose_data))
+            else:
+                # Second call - writing
+                return io.StringIO()
+
+        with patch("builtins.open", multi_mock_open):
+            with patch("pathlib.Path.exists", return_value=True):
+                with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                    with patch("yaml.dump") as mock_yaml_dump:
+                        with patch("shutil.copy2"):  # Mock the backup operation
+                            mock_proc = AsyncMock()
+                            mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                            mock_proc.returncode = 0
+                            mock_subprocess.return_value = mock_proc
+
+                            response = client.patch(
+                                "/manager/v1/agents/test-agent/config", json=config_update
+                            )
 
         assert response.status_code == 200
         assert response.json()["status"] == "updated"

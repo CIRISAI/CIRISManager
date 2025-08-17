@@ -105,12 +105,29 @@ class TestEnhancedSettings:
             }
         }
 
+        # Create a mock that handles multiple file operations
+        import io
+
+        open_count = [0]
+
+        def multi_mock_open(*args, **kwargs):
+            open_count[0] += 1
+            if open_count[0] == 1:
+                # First call - reading
+                return io.StringIO(yaml.dump(compose_data))
+            else:
+                # Second call - writing
+                return io.StringIO()
+
         # The update_agent_config endpoint opens file twice: once to read, once to write
-        with patch("builtins.open", mock_open(read_data=yaml.dump(compose_data))):
+        with patch("builtins.open", multi_mock_open):
             with patch("pathlib.Path.exists", return_value=True):
-                with patch("subprocess.run") as mock_run:
-                    with patch("yaml.dump", return_value="mocked_yaml"):
-                        mock_run.return_value = Mock(returncode=0)
+                with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                    with patch("shutil.copy2"):  # Mock the backup operation
+                        mock_proc = AsyncMock()
+                        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                        mock_proc.returncode = 0
+                        mock_subprocess.return_value = mock_proc
 
                         response = client.patch(
                             "/manager/v1/agents/test-agent/config", json=config_update
@@ -236,12 +253,16 @@ class TestEnhancedSettings:
 
         with patch("builtins.open", multi_mock_open):
             with patch("pathlib.Path.exists", return_value=True):
-                with patch("subprocess.run") as mock_run:
-                    mock_run.return_value = Mock(returncode=0)
+                with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                    with patch("shutil.copy2"):  # Mock the backup operation
+                        mock_proc = AsyncMock()
+                        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                        mock_proc.returncode = 0
+                        mock_subprocess.return_value = mock_proc
 
-                    response = client.patch(
-                        "/manager/v1/agents/test-agent/config", json=config_update
-                    )
+                        response = client.patch(
+                            "/manager/v1/agents/test-agent/config", json=config_update
+                        )
 
         assert response.status_code == 200
 
@@ -284,12 +305,16 @@ class TestEnhancedSettings:
 
         with patch("builtins.open", multi_mock_open):
             with patch("pathlib.Path.exists", return_value=True):
-                with patch("subprocess.run") as mock_run:
-                    mock_run.return_value = Mock(returncode=0)
+                with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                    with patch("shutil.copy2"):  # Mock the backup operation
+                        mock_proc = AsyncMock()
+                        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                        mock_proc.returncode = 0
+                        mock_subprocess.return_value = mock_proc
 
-                    response = client.patch(
-                        "/manager/v1/agents/test-agent/config", json=config_update
-                    )
+                        response = client.patch(
+                            "/manager/v1/agents/test-agent/config", json=config_update
+                        )
 
         assert response.status_code == 200
         assert "updated" in response.json()["status"]

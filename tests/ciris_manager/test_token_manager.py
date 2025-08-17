@@ -165,22 +165,24 @@ async def test_regenerate_token(token_manager, mock_registry, tmp_path):
 @pytest.mark.asyncio
 async def test_recover_tokens_from_containers(token_manager, mock_registry):
     """Test recovering tokens from running containers."""
-    with patch("subprocess.run") as mock_run:
+    with patch("asyncio.create_subprocess_exec") as mock_subprocess:
         # Simulate different container responses
-        def run_side_effect(cmd, **kwargs):
-            result = Mock()
-            if "test-agent-1" in cmd[2]:
-                result.returncode = 0
-                result.stdout = "recovered_token_1"
-            elif "test-agent-2" in cmd[2]:
-                result.returncode = 1  # Container not running
-                result.stdout = ""
-            else:
-                result.returncode = 0
-                result.stdout = "recovered_token_3"
-            return result
+        async def subprocess_side_effect(*args, **kwargs):
+            container = args[2] if len(args) > 2 else ""
+            mock_proc = AsyncMock()
 
-        mock_run.side_effect = run_side_effect
+            if "ciris-test-agent-1" in container:
+                mock_proc.returncode = 0
+                mock_proc.communicate = AsyncMock(return_value=(b"recovered_token_1", b""))
+            elif "ciris-test-agent-2" in container:
+                mock_proc.returncode = 1  # Container not running
+                mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+            else:
+                mock_proc.returncode = 0
+                mock_proc.communicate = AsyncMock(return_value=(b"recovered_token_3", b""))
+            return mock_proc
+
+        mock_subprocess.side_effect = subprocess_side_effect
         mock_registry.update_agent_token = Mock(return_value=True)
 
         results = await token_manager.recover_tokens_from_containers()
