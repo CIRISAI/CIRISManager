@@ -370,18 +370,22 @@ class TestCIRISManager:
     @pytest.mark.asyncio
     async def test_start_stop(self, manager):
         """Test starting and stopping manager."""
-        # Mock API server start
+        # Mock all background tasks to prevent them from running
         with patch.object(manager, "_start_api_server", new_callable=AsyncMock):
-            # Start
-            await manager.start()
-            assert manager._running
+            with patch.object(manager, "container_management_loop", new_callable=AsyncMock):
+                with patch.object(manager.watchdog, "start", new_callable=AsyncMock):
+                    with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
+                        with patch.object(
+                            manager.image_cleanup, "run_periodic_cleanup", new_callable=AsyncMock
+                        ):
+                            # Start
+                            await manager.start()
+                            assert manager._running
 
-            # Stop - watchdog.stop() will re-raise CancelledError
-            # Mock watchdog.stop to avoid CancelledError
-            with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
-                await manager.stop()
-                assert not manager._running
-                assert manager._shutdown_event.is_set()
+                            # Stop
+                            await manager.stop()
+                            assert not manager._running
+                            assert manager._shutdown_event.is_set()
 
     def test_get_status(self, manager):
         """Test getting manager status."""

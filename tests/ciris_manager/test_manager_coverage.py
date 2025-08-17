@@ -261,14 +261,20 @@ class TestManagerCoverage:
         manager = CIRISManager(config)
 
         with patch.object(manager, "_start_api_server") as mock_start_api:
-            await manager.start()
+            # Mock all background tasks to prevent hanging
+            with patch.object(manager, "container_management_loop", new_callable=AsyncMock):
+                with patch.object(manager.watchdog, "start", new_callable=AsyncMock):
+                    with patch.object(
+                        manager.image_cleanup, "run_periodic_cleanup", new_callable=AsyncMock
+                    ):
+                        await manager.start()
 
-            # API server should not be started
-            mock_start_api.assert_not_called()
+                        # API server should not be started
+                        mock_start_api.assert_not_called()
 
-            # Mock watchdog.stop to avoid CancelledError
-            with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
-                await manager.stop()
+                        # Mock watchdog.stop to avoid CancelledError
+                        with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
+                            await manager.stop()
 
     @pytest.mark.asyncio
     async def test_run_with_signal_handlers(self, tmp_path):
