@@ -197,9 +197,9 @@ class TestNoOpDeployment:
             )
         ]
 
-        # Create notification
+        # Create notification - GUI only, no agent_image
         notification = UpdateNotification(
-            agent_image="ghcr.io/cirisai/ciris-agent:latest",
+            agent_image=None,  # No agent image for GUI-only update
             gui_image="ghcr.io/cirisai/ciris-gui:latest",
             message="GUI update only",
             strategy="immediate",
@@ -207,6 +207,10 @@ class TestNoOpDeployment:
 
         # Mock _update_nginx_container since GUI needs updating
         orchestrator._update_nginx_container = AsyncMock(return_value=True)
+
+        # Mock the digest checks to show GUI needs updating
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:new789")
+        orchestrator._get_container_image_digest = AsyncMock(return_value="sha256:old456")
 
         # Start deployment
         status = await orchestrator.start_deployment(notification, agents)
@@ -240,6 +244,16 @@ class TestNoOpDeployment:
             return_value={"success": True, "agent_pulled": True, "gui_pulled": True}
         )
 
+        # Mock version checks to show agent needs updating (no current version)
+        orchestrator._get_agent_version = AsyncMock(
+            side_effect=[
+                None,  # No current version means agent needs update
+            ]
+        )
+
+        # Mock the background deployment task
+        orchestrator._run_deployment = Mock()
+
         # Create test agents
         agents = [
             AgentInfo(
@@ -258,9 +272,6 @@ class TestNoOpDeployment:
             message="First deployment",
             strategy="canary",  # Agent updates must use canary, not immediate
         )
-
-        # Mock the background deployment task
-        orchestrator._run_deployment = Mock()
 
         # Start deployment
         status = await orchestrator.start_deployment(notification, agents)
