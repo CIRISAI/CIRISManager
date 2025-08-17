@@ -172,6 +172,11 @@ class TestNoOpDeployment:
         orchestrator.deployments = {}
         orchestrator.current_deployment = None
 
+        # Mock _pull_images to avoid actual Docker operations
+        orchestrator._pull_images = AsyncMock(
+            return_value={"success": True, "agent_pulled": True, "gui_pulled": True}
+        )
+
         # Mock same agent digest, different GUI digest
         mock_registry_client.resolve_image_digest = AsyncMock(
             side_effect=[
@@ -226,6 +231,11 @@ class TestNoOpDeployment:
         orchestrator.deployment_state_file = orchestrator.state_dir / "deployment_state.json"
         orchestrator.deployments = {}
         orchestrator.current_deployment = None
+
+        # Mock _pull_images to avoid actual Docker operations
+        orchestrator._pull_images = AsyncMock(
+            return_value={"success": True, "agent_pulled": True, "gui_pulled": True}
+        )
 
         # Create test agents
         agents = [
