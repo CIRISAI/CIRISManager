@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
 import httpx
+import aiofiles  # type: ignore
 
 from ciris_manager.agent_auth import get_agent_auth
 from ciris_manager.models import (
@@ -62,7 +63,7 @@ class DeploymentOrchestrator:
         self.registry_client = DockerRegistryClient(auth_token=github_token)
 
     def _load_state(self) -> None:
-        """Load deployment state from persistent storage."""
+        """Load deployment state from persistent storage (sync version for __init__)."""
         if self.deployment_state_file.exists():
             try:
                 with open(self.deployment_state_file, "r") as f:
@@ -102,7 +103,23 @@ class DeploymentOrchestrator:
                 logger.warning(f"Failed to load deployment state: {e}")
 
     def _save_state(self) -> None:
-        """Save deployment state to persistent storage."""
+        """Save deployment state synchronously (for compatibility)."""
+        # Use asyncio.run if not in event loop, otherwise create task
+        try:
+            asyncio.get_running_loop()
+            # We're in an async context, create a task
+            # Store task to prevent garbage collection
+            if not hasattr(self, "_background_tasks"):
+                self._background_tasks = set()
+            task = asyncio.create_task(self._save_state_async())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+        except RuntimeError:
+            # No event loop, run synchronously
+            asyncio.run(self._save_state_async())
+
+    async def _save_state_async(self) -> None:
+        """Save deployment state to persistent storage (async version)."""
         try:
             state = {
                 "deployments": {
@@ -119,10 +136,10 @@ class DeploymentOrchestrator:
 
             # Write to temp file first, then move atomically
             temp_file = self.deployment_state_file.with_suffix(".tmp")
-            with open(temp_file, "w") as f:
-                json.dump(state, f, indent=2)
+            async with aiofiles.open(temp_file, "w") as f:
+                await f.write(json.dumps(state, indent=2))
 
-            # Atomic rename
+            # Atomic rename (this is still sync as it's a filesystem operation)
             temp_file.replace(self.deployment_state_file)
             logger.debug(f"Saved deployment state with {len(self.deployments)} deployments")
         except Exception as e:
@@ -686,8 +703,9 @@ class DeploymentOrchestrator:
         # Get GUI versions
         gui_file = Path("/opt/ciris/metadata/gui_versions.json")
         if gui_file.exists():
-            with open(gui_file, "r") as f:
-                gui_versions = json.load(f)
+            async with aiofiles.open(gui_file, "r") as f:
+                content = await f.read()
+                gui_versions = json.loads(content)
                 result["gui"] = {
                     "current": gui_versions.get("current", "unknown"),
                     "n-1": gui_versions.get("n-1", "not available"),
@@ -697,8 +715,9 @@ class DeploymentOrchestrator:
         # Get nginx versions
         nginx_file = Path("/opt/ciris/metadata/nginx_versions.json")
         if nginx_file.exists():
-            with open(nginx_file, "r") as f:
-                nginx_versions = json.load(f)
+            async with aiofiles.open(nginx_file, "r") as f:
+                content = await f.read()
+                nginx_versions = json.loads(content)
                 result["nginx"] = {
                     "current": nginx_versions.get("current", "unknown"),
                     "n-1": nginx_versions.get("n-1", "not available"),
@@ -853,8 +872,9 @@ class DeploymentOrchestrator:
             # Check if GUI version history exists
             gui_versions_file = Path("/opt/ciris/metadata/gui_versions.json")
             if gui_versions_file.exists():
-                with open(gui_versions_file, "r") as f:
-                    gui_versions = json.load(f)
+                async with aiofiles.open(gui_versions_file, "r") as f:
+                    content = await f.read()
+                    gui_versions = json.loads(content)
                     rollback_targets["gui_version"] = gui_versions.get("n-1", "unknown")
 
         if include_nginx:
@@ -862,8 +882,9 @@ class DeploymentOrchestrator:
             # Check if nginx version history exists
             nginx_versions_file = Path("/opt/ciris/metadata/nginx_versions.json")
             if nginx_versions_file.exists():
-                with open(nginx_versions_file, "r") as f:
-                    nginx_versions = json.load(f)
+                async with aiofiles.open(nginx_versions_file, "r") as f:
+                    content = await f.read()
+                    nginx_versions = json.loads(content)
                     rollback_targets["nginx_version"] = nginx_versions.get("n-1", "unknown")
 
         # Create rollback proposal
@@ -2795,8 +2816,9 @@ class DeploymentOrchestrator:
 
             versions = {}
             if metadata_file.exists():
-                with open(metadata_file, "r") as f:
-                    versions = json.load(f)
+                async with aiofiles.open(metadata_file, "r") as f:
+                    content = await f.read()
+                    versions = json.loads(content)
 
             # Rotate versions
             current = versions.get("current")
@@ -2812,8 +2834,8 @@ class DeploymentOrchestrator:
             versions["current"] = new_image
             versions["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-            with open(metadata_file, "w") as f:
-                json.dump(versions, f, indent=2)
+            async with aiofiles.open(metadata_file, "w") as f:
+                await f.write(json.dumps(versions, indent=2))
 
             logger.info(f"Stored {container_type} version: {new_image}")
 
@@ -2835,8 +2857,9 @@ class DeploymentOrchestrator:
             if target_version in ["n-1", "n-2"]:
                 metadata_file = Path("/opt/ciris/metadata/gui_versions.json")
                 if metadata_file.exists():
-                    with open(metadata_file, "r") as f:
-                        versions = json.load(f)
+                    async with aiofiles.open(metadata_file, "r") as f:
+                        content = await f.read()
+                        versions = json.loads(content)
                     target_image = versions.get(target_version)
                     if not target_image:
                         logger.error(f"No {target_version} version found for GUI")
@@ -2890,8 +2913,9 @@ class DeploymentOrchestrator:
             if target_version in ["n-1", "n-2"]:
                 metadata_file = Path("/opt/ciris/metadata/nginx_versions.json")
                 if metadata_file.exists():
-                    with open(metadata_file, "r") as f:
-                        versions = json.load(f)
+                    async with aiofiles.open(metadata_file, "r") as f:
+                        content = await f.read()
+                        versions = json.loads(content)
                     target_image = versions.get(target_version)
                     if not target_image:
                         logger.error(f"No {target_version} version found for nginx")

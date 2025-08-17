@@ -6,17 +6,17 @@ launch/pause/rollback controls aligned with CIRIS Covenant principles.
 """
 
 import pytest
+from unittest.mock import Mock, AsyncMock, patch  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
 
-pytest.skip("Skipping staged deployment tests temporarily for CI", allow_module_level=True)
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, timezone
-from fastapi import HTTPException
-
-from ciris_manager.models import (
+from ciris_manager.models import (  # noqa: E402
     UpdateNotification,
     DeploymentStatus,
     AgentInfo,
 )
+
+pytest.skip("Skipping staged deployment tests temporarily for CI", allow_module_level=True)
 
 
 class TestStagedDeploymentAPI:
@@ -70,18 +70,20 @@ class TestStagedDeploymentAPI:
         from ciris_manager.api.routes import create_routes
         from fastapi.testclient import TestClient
         from fastapi import FastAPI
-        
+
         mock_manager = Mock()
-        with patch("ciris_manager.api.routes.DeploymentOrchestrator", return_value=mock_orchestrator):
+        with patch(
+            "ciris_manager.api.routes.DeploymentOrchestrator", return_value=mock_orchestrator
+        ):
             router = create_routes(mock_manager)
             app = FastAPI()
             app.include_router(router, prefix="/manager/v1")
             client = TestClient(app)
-            
+
             # Mock auth
             with patch("ciris_manager.api.routes.get_current_user", return_value={"user": "test"}):
                 response = client.get("/manager/v1/updates/pending")
-        
+
         assert response.status_code == 200
         result = response.json()
         assert result["pending"] is True

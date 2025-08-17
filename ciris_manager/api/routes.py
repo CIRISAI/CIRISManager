@@ -85,6 +85,9 @@ def create_routes(manager: Any) -> APIRouter:
     """
     router = APIRouter()
 
+    # Track background tasks to prevent garbage collection
+    background_tasks: set = set()
+
     # Initialize deployment orchestrator
     deployment_orchestrator = DeploymentOrchestrator(manager)
 
@@ -936,7 +939,9 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Backup current config
             backup_path = compose_path.with_suffix(".yml.bak")
-            subprocess.run(["cp", str(compose_path), str(backup_path)], check=True)
+            import shutil
+
+            shutil.copy2(str(compose_path), str(backup_path))
 
             # Write updated docker-compose.yml
             with open(compose_path, "w") as f:
@@ -944,12 +949,17 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Recreate container with new config
             agent_dir = Path("/opt/ciris/agents") / agent_id
-            subprocess.run(
-                ["docker-compose", "up", "-d"],
+            proc = await asyncio.create_subprocess_exec(
+                "docker-compose",
+                "up",
+                "-d",
                 cwd=str(agent_dir),
-                check=True,
-                capture_output=True,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(f"Failed to recreate container: {stderr.decode()}")
 
             logger.info(f"Agent {agent_id} config updated by {user['email']}")
             return {
@@ -1339,16 +1349,24 @@ def create_routes(manager: Any) -> APIRouter:
         latest_info = {}
         try:
             # Try to get digest of current latest tag locally
-            import subprocess
-
-            result = subprocess.run(
-                ["docker", "images", "ghcr.io/cirisai/ciris-agent:latest", "--format", "{{.ID}}"],
-                capture_output=True,
-                text=True,
-                timeout=5,
+            proc = await asyncio.create_subprocess_exec(
+                "docker",
+                "images",
+                "ghcr.io/cirisai/ciris-agent:latest",
+                "--format",
+                "{{.ID}}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            if result.returncode == 0 and result.stdout.strip():
-                latest_info["local_image_id"] = result.stdout.strip()[:12]  # Short ID
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                stdout = b""
+
+            if proc.returncode == 0 and stdout.strip():
+                latest_info["local_image_id"] = stdout.decode().strip()[:12]  # Short ID
 
             # Try to get what version is currently running
             agents = (
@@ -2297,7 +2315,9 @@ def create_routes(manager: Any) -> APIRouter:
         # Start the telemetry service
         import asyncio
 
-        asyncio.create_task(telemetry_service.start())
+        task = asyncio.create_task(telemetry_service.start())
+        background_tasks.add(task)
+        task.add_done_callback(background_tasks.discard)
 
         telemetry_router = create_telemetry_router(telemetry_service)
         router.include_router(telemetry_router, tags=["telemetry"])

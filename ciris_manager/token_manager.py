@@ -10,7 +10,6 @@ import json
 import logging
 import secrets
 import shutil
-import subprocess
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -306,15 +305,25 @@ class TokenManager:
 
             try:
                 # Get token from container environment
-                result = subprocess.run(
-                    ["docker", "exec", container_name, "printenv", "CIRIS_SERVICE_TOKEN"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
+                proc = await asyncio.create_subprocess_exec(
+                    "docker",
+                    "exec",
+                    container_name,
+                    "printenv",
+                    "CIRIS_SERVICE_TOKEN",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
 
-                if result.returncode == 0:
-                    token = result.stdout.strip()
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    raise
+
+                if proc.returncode == 0:
+                    token = stdout.decode().strip()
                     if token:
                         # Encrypt and update
                         encrypted = self.encryption.encrypt_token(token)
@@ -328,7 +337,7 @@ class TokenManager:
                     results[agent_id] = False
                     logger.warning(f"Could not get token from {container_name}")
 
-            except subprocess.TimeoutExpired:
+            except asyncio.TimeoutError:
                 results[agent_id] = False
                 logger.error(f"Timeout getting token from {container_name}")
             except Exception as e:

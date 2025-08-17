@@ -1,6 +1,7 @@
 """Tests for CLI client commands."""
 
 import json
+import math
 from unittest.mock import Mock, patch
 import argparse
 
@@ -358,7 +359,7 @@ class TestSystemCommands:
         assert result == 0
         captured = capsys.readouterr()
         data = json.loads(captured.out)
-        assert data["cpu_usage"] == 45.2
+        assert math.isclose(data["cpu_usage"], 45.2, rel_tol=1e-9)
         mock_client.get_metrics.assert_called_once()
 
     def test_system_update_status(self, capsys):
