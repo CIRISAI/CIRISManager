@@ -266,7 +266,9 @@ class TestManagerCoverage:
             # API server should not be started
             mock_start_api.assert_not_called()
 
-            await manager.stop()
+            # Mock watchdog.stop to avoid CancelledError
+            with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
+                await manager.stop()
 
     @pytest.mark.asyncio
     async def test_run_with_signal_handlers(self, tmp_path):
@@ -296,7 +298,9 @@ class TestManagerCoverage:
             manager._shutdown_event.set()
 
             # Wait for completion
-            await run_task
+            # Mock watchdog.stop to avoid CancelledError during stop
+            with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
+                await run_task
 
             # Verify signal handlers were added
             assert mock_loop.add_signal_handler.called

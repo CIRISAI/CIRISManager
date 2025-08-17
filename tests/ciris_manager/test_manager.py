@@ -376,10 +376,12 @@ class TestCIRISManager:
             await manager.start()
             assert manager._running
 
-            # Stop
-            await manager.stop()
-            assert not manager._running
-            assert manager._shutdown_event.is_set()
+            # Stop - watchdog.stop() will re-raise CancelledError
+            # Mock watchdog.stop to avoid CancelledError
+            with patch.object(manager.watchdog, "stop", new_callable=AsyncMock):
+                await manager.stop()
+                assert not manager._running
+                assert manager._shutdown_event.is_set()
 
     def test_get_status(self, manager):
         """Test getting manager status."""
