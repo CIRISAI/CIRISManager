@@ -244,12 +244,10 @@ class TestNoOpDeployment:
             return_value={"success": True, "agent_pulled": True, "gui_pulled": True}
         )
 
-        # Mock version checks to show agent needs updating (no current version)
-        orchestrator._get_agent_version = AsyncMock(
-            side_effect=[
-                None,  # No current version means agent needs update
-            ]
-        )
+        # Mock digest comparison to show agent needs updating
+        # When no version is specified, it falls back to digest comparison
+        orchestrator._get_local_image_digest = AsyncMock(return_value="sha256:newdigest")
+        orchestrator._get_container_image_digest = AsyncMock(return_value=None)  # No current digest
 
         # Mock the background deployment task
         orchestrator._run_deployment = Mock()
