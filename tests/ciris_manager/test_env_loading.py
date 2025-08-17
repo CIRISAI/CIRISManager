@@ -261,34 +261,39 @@ MIXED_QUOTES="it's a mixed value"
             }
         }
 
-        # Mock file operations
-        # Create a better mock for multiple file operations
-        import io
+        # Mock file operations using mock_open properly
+        yaml_content = yaml.dump(compose_data)
 
+        # Create separate mocks for read and write
+        m_read = mock_open(read_data=yaml_content)
+        m_write = mock_open()
+
+        # Track which call we're on
         open_count = [0]
 
-        def multi_mock_open(*args, **kwargs):
+        def side_effect(*args, **kwargs):
             open_count[0] += 1
             if open_count[0] == 1:
                 # First call - reading
-                return io.StringIO(yaml.dump(compose_data))
+                return m_read(*args, **kwargs)
             else:
-                # Second call - writing
-                return io.StringIO()
+                # Second/third call - writing (backup and actual write)
+                return m_write(*args, **kwargs)
 
-        with patch("builtins.open", multi_mock_open):
+        with patch("builtins.open", side_effect=side_effect):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-                    with patch("yaml.dump") as mock_yaml_dump:
-                        with patch("shutil.copy2"):  # Mock the backup operation
-                            mock_proc = AsyncMock()
-                            mock_proc.communicate = AsyncMock(return_value=(b"", b""))
-                            mock_proc.returncode = 0
-                            mock_subprocess.return_value = mock_proc
+                    with patch("yaml.safe_load", return_value=compose_data):
+                        with patch("yaml.dump", return_value="mocked_yaml") as mock_yaml_dump:
+                            with patch("shutil.copy2"):  # Mock the backup operation
+                                mock_proc = AsyncMock()
+                                mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                                mock_proc.returncode = 0
+                                mock_subprocess.return_value = mock_proc
 
-                            response = client.patch(
-                                "/manager/v1/agents/test-agent/config", json=config_update
-                            )
+                                response = client.patch(
+                                    "/manager/v1/agents/test-agent/config", json=config_update
+                                )
 
         assert response.status_code == 200
         assert response.json()["status"] == "updated"
@@ -314,15 +319,41 @@ MIXED_QUOTES="it's a mixed value"
         def capture_yaml_dump(data, file, **kwargs):
             captured_yaml["data"] = data
 
-        with patch("builtins.open", mock_open(read_data=yaml.dump(compose_data))):
-            with patch("pathlib.Path.exists", return_value=True):
-                with patch("subprocess.run") as mock_run:
-                    with patch("yaml.dump", side_effect=capture_yaml_dump):
-                        mock_run.return_value = Mock(returncode=0)
+        # Mock file operations using mock_open properly
+        yaml_content = yaml.dump(compose_data)
 
-                        response = client.patch(
-                            "/manager/v1/agents/test-agent/config", json=config_update
-                        )
+        # Create separate mocks for read and write
+        m_read = mock_open(read_data=yaml_content)
+        m_write = mock_open()
+
+        # Track which call we're on
+        open_count = [0]
+
+        def side_effect(*args, **kwargs):
+            open_count[0] += 1
+            if open_count[0] == 1:
+                # First call - reading
+                return m_read(*args, **kwargs)
+            else:
+                # Second/third call - writing (backup and actual write)
+                return m_write(*args, **kwargs)
+
+        with patch("builtins.open", side_effect=side_effect):
+            with patch("pathlib.Path.exists", return_value=True):
+                with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                    with patch("yaml.safe_load", return_value=compose_data):
+                        with patch(
+                            "yaml.dump", side_effect=capture_yaml_dump, return_value="mocked_yaml"
+                        ):
+                            with patch("shutil.copy2"):  # Mock the backup operation
+                                mock_proc = AsyncMock()
+                                mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                                mock_proc.returncode = 0
+                                mock_subprocess.return_value = mock_proc
+
+                                response = client.patch(
+                                    "/manager/v1/agents/test-agent/config", json=config_update
+                                )
 
         assert response.status_code == 200
 
