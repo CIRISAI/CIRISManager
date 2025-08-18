@@ -9,6 +9,7 @@ import base64
 from pathlib import Path
 from nacl.signing import SigningKey
 from ciris_manager.template_verifier import TemplateVerifier
+import asyncio
 
 
 class TestTemplateVerifier:
@@ -144,7 +145,7 @@ settings:
 
         # Verify
         verifier = TemplateVerifier(temp_manifest_path)
-        assert verifier.is_pre_approved("test", temp_template_path)
+        assert asyncio.run(verifier.is_pre_approved("test", temp_template_path))
 
     def test_is_pre_approved_modified(self, temp_manifest_path, temp_template_path, valid_manifest):
         """Test checking a modified template."""
@@ -160,7 +161,7 @@ settings:
 
         # Should not be pre-approved
         verifier = TemplateVerifier(temp_manifest_path)
-        assert not verifier.is_pre_approved("test", temp_template_path)
+        assert not asyncio.run(verifier.is_pre_approved("test", temp_template_path))
 
     def test_is_pre_approved_not_in_list(
         self, temp_manifest_path, temp_template_path, valid_manifest
@@ -174,13 +175,13 @@ settings:
 
         # Check non-existent template
         verifier = TemplateVerifier(temp_manifest_path)
-        assert not verifier.is_pre_approved("unknown", temp_template_path)
+        assert not asyncio.run(verifier.is_pre_approved("unknown", temp_template_path))
 
     def test_calculate_checksum(self, temp_template_path):
         """Test checksum calculation."""
         verifier = TemplateVerifier(Path("/nonexistent"))
 
-        checksum = verifier.calculate_template_checksum(temp_template_path)
+        checksum = asyncio.run(verifier.calculate_template_checksum(temp_template_path))
         assert len(checksum) == 64  # SHA-256 hex length
         assert all(c in "0123456789abcdef" for c in checksum)
 
@@ -226,4 +227,4 @@ settings:
         # Should handle gracefully
         verifier = TemplateVerifier(temp_manifest_path)
         assert verifier.manifest is None
-        assert not verifier.is_pre_approved("any", Path("/any"))
+        assert not asyncio.run(verifier.is_pre_approved("any", Path("/any")))
