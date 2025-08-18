@@ -7,8 +7,8 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
 from .models import Agent
-from ..auth import get_current_user
-from ...core import get_manager
+from ciris_manager.api.auth import get_current_user
+from ciris_manager.core import get_manager
 from ciris_manager.docker_discovery import DockerAgentDiscovery
 
 
@@ -66,7 +66,7 @@ async def list_agents(
             template=template_value,
             deployment=deployment_value,
             status=agent.status,
-            port=agent.api_port or agent.port or 0,
+            port=agent.api_port or 0,
             health=agent.health or "unknown",
         )
         result.append(clean_agent)
@@ -144,7 +144,7 @@ async def get_agent(agent_id: str, _user: Dict[str, str] = Depends(get_current_u
                 template=template,
                 deployment=deployment,
                 status=agent.status,
-                port=agent.api_port or agent.port or 0,
+                port=agent.api_port or 0,
                 health=agent.health or "unknown",
             )
 

@@ -8,9 +8,9 @@ from pathlib import Path
 import yaml
 
 from .models import Template
-from ..auth import get_current_user
-from ...core import get_manager
-from ...template_verifier import TemplateVerifier
+from ciris_manager.api.auth import get_current_user
+from ciris_manager.core import get_manager
+from ciris_manager.template_verifier import TemplateVerifier
 
 
 router = APIRouter(prefix="/templates", tags=["templates"])

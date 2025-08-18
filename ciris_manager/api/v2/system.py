@@ -9,8 +9,8 @@ import psutil
 import time
 
 from .models import SystemHealth, SystemStatus, PortAllocation
-from ..auth import get_current_user
-from ...core import get_manager
+from ciris_manager.api.auth import get_current_user
+from ciris_manager.core import get_manager
 
 
 router = APIRouter(prefix="/system", tags=["system"])
