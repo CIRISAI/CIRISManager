@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Header, Response, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List, Union
+import asyncio
 import httpx
 import logging
 import os
@@ -88,9 +89,6 @@ def create_routes(manager: Any) -> APIRouter:
         Configured APIRouter
     """
     router = APIRouter()
-
-    # Track background tasks to prevent garbage collection
-    background_tasks: set = set()
 
     # Initialize deployment orchestrator
     deployment_orchestrator = DeploymentOrchestrator(manager)
