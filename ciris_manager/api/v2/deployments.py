@@ -89,7 +89,7 @@ async def list_deployments(
         deployment = Deployment(
             id=dep_id,
             status=dep.status,
-            strategy=dep.strategy,
+            strategy=dep.strategy or "immediate",
             targets=[],  # Simplified
             versions={},  # Simplified
             created_at=datetime.fromisoformat(dep.staged_at)
@@ -287,14 +287,18 @@ async def deploy_to_target(
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent {request.agent_id} not found")
 
-    # Create simple agent info object
-    from types import SimpleNamespace
+    # Create agent info object
+    from ciris_manager.models import AgentInfo
 
-    agent_info = SimpleNamespace(
+    agent_info = AgentInfo(
         agent_id=request.agent_id,
         agent_name=agent.name,
         container_name=f"ciris-agent-{request.agent_id}",
         status="running",
+        template=agent.template if hasattr(agent, "template") else "unknown",
+        deployment=agent.metadata.get("deployment", "CIRIS_DISCORD_PILOT")
+        if hasattr(agent, "metadata")
+        else "CIRIS_DISCORD_PILOT",
     )
 
     # Start single agent deployment

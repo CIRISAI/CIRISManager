@@ -161,10 +161,10 @@ async def delete_agent(
     manager = get_manager()
 
     # Stop and remove agent
-    result = await manager.remove_agent(agent_id)
+    success = await manager.delete_agent(agent_id)
 
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to delete agent"))
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to delete agent")
 
     return {"status": "deleted", "agent_id": agent_id}
 

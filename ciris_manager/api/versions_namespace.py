@@ -400,6 +400,7 @@ async def stage_version(
         raise HTTPException(status_code=400, detail=f"Invalid component type: {component_type}")
 
     tracker = get_version_tracker()
+    assert image is not None  # Validated above
     await tracker.stage_version(
         component_type,
         image,
