@@ -110,7 +110,7 @@ async def system_metrics(_user: Dict[str, str] = Depends(get_current_user)) -> D
     manager = get_manager()
 
     # Collect metrics
-    metrics = {
+    metrics: Dict[str, Any] = {
         "timestamp": datetime.utcnow().isoformat(),
         "uptime_seconds": int(time.time() - STARTUP_TIME),
         "agents": {"total": len(manager.agent_registry.agents), "running": 0, "stopped": 0},
