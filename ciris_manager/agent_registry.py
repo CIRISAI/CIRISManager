@@ -39,6 +39,9 @@ class AgentInfo:
         self.compose_file = compose_file
         self.created_at = created_at or datetime.now(timezone.utc).isoformat()
         self.metadata = metadata or {}
+        # Set deployment field with default for initial agents
+        if "deployment" not in self.metadata:
+            self.metadata["deployment"] = "CIRIS_DISCORD_PILOT"
         self.oauth_status = oauth_status
         self.service_token = service_token
         self.current_version = current_version
@@ -256,6 +259,45 @@ class AgentRegistry:
         self._save_metadata()
         logger.info(f"Set canary group for {agent_id} to {group}")
         return True
+
+    def set_deployment(self, agent_id: str, deployment: str) -> bool:
+        """Set the deployment identifier for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            deployment: Deployment identifier (e.g., 'CIRIS_DISCORD_PILOT')
+
+        Returns:
+            True if successful, False if agent not found
+        """
+        agent = self.agents.get(agent_id)
+        if not agent:
+            logger.error(f"Agent {agent_id} not found for deployment update")
+            return False
+
+        if not hasattr(agent, "metadata"):
+            agent.metadata = {}
+
+        agent.metadata["deployment"] = deployment
+        self._save_metadata()
+        logger.info(f"Set deployment for {agent_id} to {deployment}")
+        return True
+
+    def get_agents_by_deployment(self, deployment: str) -> List[AgentInfo]:
+        """Get all agents with a specific deployment identifier.
+
+        Args:
+            deployment: Deployment identifier to filter by
+
+        Returns:
+            List of agents with matching deployment
+        """
+        result = []
+        for agent in self.agents.values():
+            metadata = agent.metadata if hasattr(agent, "metadata") else {}
+            if metadata.get("deployment") == deployment:
+                result.append(agent)
+        return result
 
     def get_agents_by_canary_group(self) -> Dict[str, List[AgentInfo]]:
         """Get agents organized by canary group.

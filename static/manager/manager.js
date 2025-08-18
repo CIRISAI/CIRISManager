@@ -80,6 +80,12 @@ function renderAgents() {
                         <span class="px-2 py-1 bg-gray-100 text-gray-700 text-sm rounded">
                             ${escapeHtml(agent.template)}
                         </span>
+                        ${agent.deployment ? `
+                            <span class="px-2 py-1 bg-purple-100 text-purple-700 text-sm rounded" title="Deployment">
+                                <i class="fas fa-layer-group text-xs"></i>
+                                ${escapeHtml(agent.deployment)}
+                            </span>
+                        ` : ''}
                         ${agent.version ? `
                             <span class="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded flex items-center gap-1" title="${escapeHtml(agent.codename || '')}">
                                 <i class="fas fa-tag text-xs"></i>
@@ -96,6 +102,7 @@ function renderAgents() {
                         <div>ID: ${escapeHtml(agent.agent_id)}</div>
                         <div>Container: ${escapeHtml(agent.container_name)}</div>
                         <div>Port: ${agent.api_port || agent.port}</div>
+                        ${agent.deployment ? `<div>Deployment: ${escapeHtml(agent.deployment)}</div>` : ''}
                         ${agent.codename ? `<div>Codename: ${escapeHtml(agent.codename)}</div>` : ''}
                         ${agent.code_hash ? `<div class="font-mono text-xs">Hash: ${escapeHtml(agent.code_hash).substring(0, 8)}...</div>` : ''}
                         <div class="flex items-center gap-1">

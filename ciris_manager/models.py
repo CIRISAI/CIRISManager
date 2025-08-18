@@ -37,6 +37,9 @@ class AgentInfo(BaseModel):
 
     # Metadata fields
     template: str = Field("unknown", description="Template used to create agent")
+    deployment: str = Field(
+        "CIRIS_DISCORD_PILOT", description="Deployment identifier (e.g., CIRIS_DISCORD_PILOT)"
+    )
     created_at: Optional[str] = Field(None, description="When agent was created")
     health: Optional[str] = Field(None, description="Agent health status")
     api_endpoint: Optional[str] = Field(None, description="Full API endpoint URL")

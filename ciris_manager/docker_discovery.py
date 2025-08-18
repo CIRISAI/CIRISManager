@@ -110,6 +110,19 @@ class DockerAgentDiscovery:
             adapter_list = env_dict.get("CIRIS_ADAPTER", "api").lower()
             discord_enabled = "discord" in adapter_list
 
+            # Get template and deployment info from registry if available
+            registry_agent = (
+                self.agent_registry.get_agent(agent_id) if self.agent_registry else None
+            )
+            template = "unknown"
+            deployment = "CIRIS_DISCORD_PILOT"  # Default deployment
+
+            if registry_agent:
+                template = registry_agent.template
+                # Get deployment from metadata
+                if hasattr(registry_agent, "metadata") and registry_agent.metadata:
+                    deployment = registry_agent.metadata.get("deployment", "CIRIS_DISCORD_PILOT")
+
             # Build agent info - simple and typed
             agent_info = AgentInfo(
                 agent_id=agent_id,
@@ -125,7 +138,8 @@ class DockerAgentDiscovery:
                 code_hash=None,
                 mock_llm=mock_llm,
                 discord_enabled=discord_enabled,
-                template="unknown",  # Template info from registry, not container
+                template=template,
+                deployment=deployment,
                 created_at=None,
                 health="healthy" if container.status == "running" else "unhealthy",
                 api_endpoint=f"http://localhost:{api_port}" if api_port else None,

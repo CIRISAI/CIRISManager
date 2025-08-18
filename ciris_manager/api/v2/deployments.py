@@ -8,9 +8,9 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from .models import Deployment
-from ciris_manager.api.auth import get_current_user
-from ciris_manager.core import get_manager
-from ciris_manager.deployment_orchestrator import get_deployment_orchestrator, UpdateNotification
+from ..auth import get_current_user
+from ...core import get_manager
+from ...deployment_orchestrator import get_deployment_orchestrator, UpdateNotification
 
 
 router = APIRouter(prefix="/deployments", tags=["deployments"])
@@ -233,7 +233,7 @@ async def rollback_deployment(
     """
     orchestrator = get_deployment_orchestrator()
 
-    result = await orchestrator.start_rollback(
+    await orchestrator.start_rollback(
         deployment_id=deployment_id,
         target_version="n_minus_1",  # Rollback to previous
         rollback_targets={"agent": ["all"], "gui": True, "nginx": False},

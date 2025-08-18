@@ -8,10 +8,10 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from .models import Version, FleetVersion, FleetVersions
-from ciris_manager.api.auth import get_current_user
-from ciris_manager.core import get_manager
-from ciris_manager.version_tracker import get_version_tracker
-from ciris_manager.docker_discovery import DockerAgentDiscovery
+from ..auth import get_current_user
+from ...core import get_manager
+from ...version_tracker import get_version_tracker
+from ...docker_discovery import DockerAgentDiscovery
 
 
 router = APIRouter(prefix="/versions", tags=["versions"])
@@ -227,7 +227,7 @@ async def execute_rollback(
         raise HTTPException(status_code=400, detail=f"Invalid component: {request.component}")
 
     # Get deployment orchestrator
-    from ciris_manager.deployment_orchestrator import get_deployment_orchestrator
+    from ...deployment_orchestrator import get_deployment_orchestrator
 
     orchestrator = get_deployment_orchestrator()
 
@@ -235,7 +235,7 @@ async def execute_rollback(
     deployment_id = f"rollback-{request.component}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
 
     # Start rollback
-    result = await orchestrator.start_rollback(
+    await orchestrator.start_rollback(
         deployment_id=deployment_id,
         target_version=request.target_version,
         rollback_targets={request.component: ["all"]},

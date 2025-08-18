@@ -314,7 +314,7 @@ class DeploymentOrchestrator:
                     if notification.agent_image:
                         tracker = get_version_tracker()
                         await tracker.record_deployment(
-                            container_type="agents",
+                            container_type="agent",
                             image=notification.agent_image,
                             deployment_id=deployment_id,
                             deployed_by=notification.metadata.get("initiated_by", "system"),
@@ -568,7 +568,7 @@ class DeploymentOrchestrator:
         # Stage agent version if provided
         if notification.agent_image:
             await tracker.stage_version(
-                "agents",
+                "agent",  # Use singular form to keep separate from GUI
                 notification.agent_image,
                 digest=None,  # Could get from registry
                 deployment_id=deployment_id,
@@ -896,7 +896,7 @@ class DeploymentOrchestrator:
 
         result: Dict[str, Any] = {
             "deployment_id": deployment_id,
-            "agents": {},
+            "agent": {},  # Individual agent versions
             "gui": {},
             "nginx": {},
         }
@@ -913,7 +913,7 @@ class DeploymentOrchestrator:
                         "n-1": previous.get("n-1", "not available"),
                         "n-2": previous.get("n-2", "not available"),
                     }
-                    result["agents"][agent_id] = agent_versions
+                    result["agent"][agent_id] = agent_versions
 
         # Get GUI versions
         gui_file = Path("/opt/ciris/metadata/gui_versions.json")
@@ -1079,7 +1079,7 @@ class DeploymentOrchestrator:
         rollback_targets: Dict[str, Any] = {}
 
         if affected_agents:
-            rollback_targets["agents"] = [a.agent_id for a in affected_agents]
+            rollback_targets["agent"] = [a.agent_id for a in affected_agents]
             rollback_targets["agent_versions"] = await self._get_previous_versions(affected_agents)
 
         if include_gui:
@@ -1189,7 +1189,7 @@ class DeploymentOrchestrator:
                 # Legacy support for affected_agents
                 affected_agents = deployment.notification.metadata.get("affected_agents", [])
                 if affected_agents and not rollback_targets:
-                    rollback_targets["agents"] = affected_agents
+                    rollback_targets["agent"] = affected_agents
 
             # Rollback GUI/nginx if needed
             gui_target = target_version  # Default
@@ -1212,7 +1212,7 @@ class DeploymentOrchestrator:
 
             # Rollback agents
             if self.manager and hasattr(self.manager, "agent_registry"):
-                agent_list = rollback_targets.get("agents", [])
+                agent_list = rollback_targets.get("agent", [])
                 for agent_id in agent_list:
                     agent_info = self.manager.agent_registry.get_agent(agent_id)
                     if not agent_info:
@@ -1224,8 +1224,8 @@ class DeploymentOrchestrator:
 
                         # Check for agent-specific target version
                         agent_target = target_version
-                        if target_versions and "agents" in target_versions:
-                            agent_target = target_versions["agents"].get(agent_id, target_version)
+                        if target_versions and "agent" in target_versions:
+                            agent_target = target_versions["agent"].get(agent_id, target_version)
 
                         # Get the appropriate image based on target
                         if agent_target in ["n-1", "n-2"]:
@@ -1848,7 +1848,7 @@ class DeploymentOrchestrator:
                     notification = deployment_status.notification
                     # Promote agent version
                     if notification.agent_image:
-                        await tracker.promote_staged_version("agents", deployment_id)
+                        await tracker.promote_staged_version("agent", deployment_id)
 
                     # Promote GUI version
                     if notification.gui_image:

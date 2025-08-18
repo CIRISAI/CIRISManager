@@ -9,8 +9,8 @@ import psutil
 import time
 
 from .models import SystemHealth, SystemStatus, PortAllocation
-from ciris_manager.api.auth import get_current_user
-from ciris_manager.core import get_manager
+from ..auth import get_current_user
+from ...core import get_manager
 
 
 router = APIRouter(prefix="/system", tags=["system"])
@@ -24,8 +24,6 @@ async def health_check() -> SystemHealth:
     """
     Simple health check - no auth required.
     """
-    manager = get_manager()
-
     # Check Docker availability
     try:
         import docker
@@ -33,7 +31,7 @@ async def health_check() -> SystemHealth:
         client = docker.from_env()
         docker_available = True
         agents_count = len([c for c in client.containers.list() if "ciris-agent" in c.name])
-    except:
+    except Exception:
         docker_available = False
         agents_count = 0
 
@@ -135,7 +133,7 @@ async def system_metrics(_user: Dict[str, str] = Depends(get_current_user)) -> D
                     metrics["agents"]["running"] += 1
                 else:
                     metrics["agents"]["stopped"] += 1
-    except:
+    except Exception:
         pass
 
     return metrics

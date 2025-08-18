@@ -374,6 +374,43 @@ def create_routes(manager: Any) -> APIRouter:
             "total_agents": len(agents),
         }
 
+    @router.post("/agents/{agent_id}/deployment")
+    async def set_agent_deployment(
+        agent_id: str, request: Dict[str, Any], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """Set the deployment identifier for an agent."""
+        deployment = request.get("deployment")
+        if not deployment:
+            raise HTTPException(status_code=400, detail="Deployment field is required")
+
+        if not manager.agent_registry.set_deployment(agent_id, deployment):
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+        return {"status": "success", "agent_id": agent_id, "deployment": deployment}
+
+    @router.get("/agents/by-deployment/{deployment}")
+    async def get_agents_by_deployment(
+        deployment: str, _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """Get all agents with a specific deployment identifier."""
+        agents = manager.agent_registry.get_agents_by_deployment(deployment)
+
+        # Convert to API response format
+        agent_list = []
+        for agent in agents:
+            agent_list.append(
+                {
+                    "agent_id": agent.agent_id,
+                    "name": agent.name,
+                    "template": agent.template,
+                    "port": agent.port,
+                    "deployment": deployment,
+                    "metadata": agent.metadata if hasattr(agent, "metadata") else {},
+                }
+            )
+
+        return {"deployment": deployment, "agents": agent_list, "count": len(agent_list)}
+
     @router.get("/agents/{agent_name}")
     async def get_agent(agent_name: str) -> AgentResponse:
         """Get specific agent by name."""
@@ -1620,10 +1657,14 @@ def create_routes(manager: Any) -> APIRouter:
         options = await tracker.get_rollback_options()
 
         # Format response for UI consumption
+        # Note: Support both "agent" (new) and "agents" (legacy) for backward compatibility
+        agent_options = options.get("agent", options.get("agents", {}))
         result = {
-            "agents": options.get("agents", {}),
+            "agent": agent_options,  # Separate from GUI
             "gui": options.get("gui", {}),
             "nginx": options.get("nginx", {}),
+            # Legacy support
+            "agents": agent_options,  # Deprecated - use "agent" instead
         }
 
         return result

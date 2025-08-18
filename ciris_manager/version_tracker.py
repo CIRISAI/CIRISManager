@@ -79,10 +79,13 @@ class VersionTracker:
         self.version_file = self.data_dir / "version_state.json"
 
         # Version state for each container type
+        # IMPORTANT: Keep agent and GUI rollback histories separate
         self.state: Dict[str, VersionState] = {
-            "agents": VersionState(),
-            "gui": VersionState(),
-            "nginx": VersionState(),
+            "agent": VersionState(),  # Agent container versions
+            "gui": VersionState(),  # GUI container versions
+            "nginx": VersionState(),  # Nginx container versions
+            # Legacy support - will be migrated
+            "agents": VersionState(),  # Deprecated - use "agent" instead
         }
 
         # Lock for concurrent access
@@ -106,6 +109,11 @@ class VersionTracker:
         try:
             async with aiofiles.open(self.version_file, "r") as f:
                 data = json.loads(await f.read())
+
+            # Migrate legacy "agents" to "agent" if needed
+            if "agents" in data and "agent" not in data:
+                logger.info("Migrating legacy 'agents' to 'agent' container type")
+                data["agent"] = data["agents"]
 
             for container_type, state_data in data.items():
                 if container_type in self.state:
