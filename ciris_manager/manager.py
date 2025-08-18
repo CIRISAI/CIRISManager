@@ -618,6 +618,27 @@ class CIRISManager:
                 device_auth_router = create_device_auth_routes()
                 app.include_router(device_auth_router, prefix="/manager/v1")
 
+            # Mount v2 API alongside v1
+            try:
+                from .api.v2 import (
+                    agents_router,
+                    versions_router,
+                    deployments_router,
+                    templates_router,
+                    system_router,
+                )
+
+                # Mount v2 routers
+                app.include_router(system_router, prefix="/manager/v2")
+                app.include_router(agents_router, prefix="/manager/v2")
+                app.include_router(versions_router, prefix="/manager/v2")
+                app.include_router(deployments_router, prefix="/manager/v2")
+                app.include_router(templates_router, prefix="/manager/v2")
+
+                logger.info("v2 API mounted successfully at /manager/v2")
+            except ImportError as e:
+                logger.warning(f"Could not mount v2 API: {e}")
+
                 # Load OAuth configuration
                 if not load_oauth_config():
                     logger.warning("OAuth not configured. Authentication will not work.")
