@@ -160,7 +160,7 @@ async def get_deployment(
     return Deployment(
         id=deployment_id,
         status=dep.status,
-        strategy=dep.strategy,
+        strategy=dep.strategy or "immediate",  # Provide default if None
         targets=[],  # Simplified
         versions={},  # Simplified
         created_at=datetime.fromisoformat(dep.staged_at) if dep.staged_at else datetime.utcnow(),
@@ -287,7 +287,7 @@ async def deploy_to_target(
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent {request.agent_id} not found")
 
-    # Create agent info object
+    # Create agent info object with all required fields
     from ciris_manager.models import AgentInfo
 
     agent_info = AgentInfo(
@@ -299,6 +299,20 @@ async def deploy_to_target(
         deployment=agent.metadata.get("deployment", "CIRIS_DISCORD_PILOT")
         if hasattr(agent, "metadata")
         else "CIRIS_DISCORD_PILOT",
+        # Optional fields with defaults
+        api_port=agent.port if hasattr(agent, "port") else None,
+        image=request.version,
+        oauth_status=None,
+        service_token=agent.metadata.get("service_token") if hasattr(agent, "metadata") else None,
+        version=None,
+        codename=None,
+        code_hash=None,
+        mock_llm=None,
+        discord_enabled=None,
+        created_at=None,
+        health="unknown",
+        api_endpoint=None,
+        update_available=False,
     )
 
     # Start single agent deployment
