@@ -52,24 +52,12 @@ jobs:
           npm run build:browser
           npm test
       
-      - name: Build TypeScript Telemetry SDK
-        run: |
-          cd sdk/typescript/packages/ciristelemetry-sdk
-          npm ci
-          npm run build
-          npm run build:browser
-          npm test
-      
       - name: Verify SDK builds
         run: |
           echo "=== Manager SDK ==="
           ls -la sdk/typescript/packages/cirismanager-sdk/dist/ || true
           ls -la sdk/typescript/packages/cirismanager-sdk/dist-browser/ || true
           test -f sdk/typescript/packages/cirismanager-sdk/dist-browser/cirismanager-sdk.js || echo "Manager SDK browser build not found"
-          
-          echo "=== Telemetry SDK ==="
-          ls -la sdk/typescript/packages/ciristelemetry-sdk/dist/ || true
-          test -f sdk/typescript/packages/ciristelemetry-sdk/dist/ciristelemetry-sdk.min.js || echo "Telemetry SDK browser build not found"
     
   deploy:
     name: Deploy to Production
@@ -179,75 +167,18 @@ jobs:
             # Ensure ciris home directory has proper permissions for group access
             chmod 755 /home/ciris
             
-            # Copy static files for manager UI and dashboard
+            # Copy static files for manager UI
             echo "Deploying static files..."
             mkdir -p /home/ciris/static/manager
-            mkdir -p /home/ciris/static/dashboard
-            mkdir -p /home/ciris/static/sdk
             cp -r /opt/ciris-manager/static/manager/* /home/ciris/static/manager/
-            cp -r /opt/ciris-manager/static/dashboard/* /home/ciris/static/dashboard/
-            
-            # Build and deploy telemetry SDK
-            if [ -f /opt/ciris-manager/scripts/build-telemetry-sdk.sh ]; then
-              echo "Building telemetry SDK..."
-              cd /opt/ciris-manager
-              bash scripts/build-telemetry-sdk.sh
-              cp static/sdk/ciristelemetry-sdk.min.js /home/ciris/static/sdk/
-            fi
             
             chown -R ciris-manager:ciris /home/ciris/static
             chmod -R 755 /home/ciris/static
             
-            # Deploy or verify PostgreSQL container
-            echo "Checking PostgreSQL container..."
-            cd /opt/ciris-manager
-            
-            # Set a secure password if not already set
-            if [ ! -f /opt/ciris-manager/.env ]; then
-              echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)" > /opt/ciris-manager/.env
-              chmod 600 /opt/ciris-manager/.env
-            fi
-            
-            # Load the password for the service
-            source /opt/ciris-manager/.env
-            
             # Create or update environment file for systemd service
             echo "# Auto-generated environment file for CIRISManager" > /etc/ciris-manager/environment
-            echo "TELEMETRY_DATABASE_URL=postgresql://ciris:${POSTGRES_PASSWORD}@localhost:5432/telemetry" >> /etc/ciris-manager/environment
             echo "CIRIS_DEPLOY_TOKEN=${{ secrets.CIRIS_DEPLOY_TOKEN }}" >> /etc/ciris-manager/environment
             chmod 600 /etc/ciris-manager/environment
-            
-            # Start or restart PostgreSQL container
-            if ! docker ps | grep -q ciris-postgres; then
-              echo "Starting PostgreSQL container..."
-              docker-compose -f docker-compose-production.yml up -d postgres
-            else
-              echo "PostgreSQL container already running"
-            fi
-            
-            # Wait for PostgreSQL to be ready
-            echo "Waiting for PostgreSQL to be ready..."
-            for i in {1..30}; do
-              if docker exec ciris-postgres pg_isready -U ciris -d telemetry 2>/dev/null; then
-                echo "PostgreSQL is ready!"
-                break
-              fi
-              if [ $i -eq 30 ]; then
-                echo "PostgreSQL failed to start!"
-                docker logs ciris-postgres --tail 50
-                exit 1
-              fi
-              sleep 2
-            done
-            
-            # Apply database schema updates
-            echo "Applying database schema updates..."
-            if [ -f "/opt/ciris-manager/deploy/init-telemetry-complete.sql" ]; then
-              docker exec -i ciris-postgres psql -U ciris -d telemetry < /opt/ciris-manager/deploy/init-telemetry-complete.sql 2>&1 | grep -v "already exists" || true
-              echo "Database schema updated"
-            else
-              echo "Warning: Schema file not found, skipping database update"
-            fi
             
             # Deploy or update nginx container
             echo "Updating nginx container..."
