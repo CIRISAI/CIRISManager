@@ -359,7 +359,7 @@ class DeploymentOrchestrator:
             current_image: str = ""
             if container.image and container.image.tags:
                 current_image = container.image.tags[0]
-            elif container.image:
+            elif container.image and container.image.id:
                 current_image = container.image.id
             else:
                 # Can't determine current image, assume update needed
