@@ -288,8 +288,8 @@ class TestGuiNginxDeployment:
         assert "rollback_targets" in proposal
 
         targets = proposal["rollback_targets"]
-        assert "agents" in targets
-        assert len(targets["agents"]) == 2
+        assert "agent" in targets
+        assert len(targets["agent"]) == 2
         assert "gui" in targets
         assert targets["gui"] == "n-1"
         assert "nginx" in targets

@@ -108,7 +108,7 @@ class TestRollbackProposal:
             assert proposal["reason"] == "No test agents reached WORK state within 0.01 minutes"
             # Check rollback_targets structure (new format)
             assert "rollback_targets" in proposal
-            assert proposal["rollback_targets"]["agents"] == ["agent-1", "agent-2"]
+            assert proposal["rollback_targets"]["agent"] == ["agent-1", "agent-2"]
 
     @pytest.mark.asyncio
     async def test_no_rollback_proposal_on_defer(self, orchestrator):
