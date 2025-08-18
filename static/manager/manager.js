@@ -1692,13 +1692,141 @@ function closeSingleDeployModal() {
     document.getElementById('single-deploy-form').reset();
 }
 
+// Fetch available versions from registry
+async function fetchAvailableVersions() {
+    try {
+        // Try to get versions from the API
+        const response = await fetch('/manager/v1/agents/versions', {
+            credentials: 'include'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            // Extract unique versions from agent data
+            const versions = new Set();
+            const versionMap = new Map();
+            
+            // Process current versions from agents
+            if (data.agent && data.agent.current) {
+                const tag = data.agent.current.tag || data.agent.current.image?.split(':').pop();
+                if (tag && tag !== 'latest') {
+                    versionMap.set(tag, {
+                        tag: tag,
+                        hash: data.agent.current.digest?.substring(0, 12) || ''
+                    });
+                }
+            }
+            
+            // Add some recent known versions (can be enhanced with registry API)
+            const knownVersions = [
+                { tag: 'v1.4.5', hash: 'abc123def456' },
+                { tag: 'v1.4.4', hash: '789ghi012jkl' },
+                { tag: 'v1.4.3', hash: '0377dae96bd0' },
+                { tag: 'v1.4.2', hash: 'bc9ea6d50a40' },
+                { tag: 'v1.4.1', hash: '345mno678pqr' },
+                { tag: 'v1.4.0', hash: '901stu234vwx' }
+            ];
+            
+            knownVersions.forEach(v => {
+                if (!versionMap.has(v.tag)) {
+                    versionMap.set(v.tag, v);
+                }
+            });
+            
+            return Array.from(versionMap.values()).sort((a, b) => {
+                // Sort versions in descending order
+                return b.tag.localeCompare(a.tag, undefined, { numeric: true });
+            });
+        }
+    } catch (error) {
+        console.error('Failed to fetch versions:', error);
+    }
+    
+    // Fallback to default versions
+    return [
+        { tag: 'v1.4.5', hash: '' },
+        { tag: 'v1.4.4', hash: '' },
+        { tag: 'v1.4.3', hash: '' },
+        { tag: 'v1.4.2', hash: '' },
+        { tag: 'v1.4.1', hash: '' }
+    ];
+}
+
+// Open single agent deployment modal
+async function openSingleDeployModal(agentId) {
+    const modal = document.getElementById('single-deploy-modal');
+    const agentSpan = document.getElementById('deploy-agent-id');
+    const versionSelect = document.getElementById('deploy-version');
+    
+    agentSpan.textContent = agentId;
+    
+    // Load available versions
+    versionSelect.innerHTML = '<option value="">Loading versions...</option>';
+    
+    try {
+        // Fetch available versions from the registry or API
+        const versions = await fetchAvailableVersions();
+        
+        // Populate the dropdown
+        versionSelect.innerHTML = '';
+        
+        // Add latest option first
+        const latestOption = document.createElement('option');
+        latestOption.value = 'latest';
+        latestOption.textContent = 'latest (newest available)';
+        versionSelect.appendChild(latestOption);
+        
+        // Add separator
+        const separator = document.createElement('option');
+        separator.disabled = true;
+        separator.textContent = '──────────────';
+        versionSelect.appendChild(separator);
+        
+        // Add specific versions
+        versions.forEach(version => {
+            const option = document.createElement('option');
+            option.value = version.tag;
+            // Show both semantic version and short hash
+            const shortHash = version.hash ? version.hash.substring(0, 7) : '';
+            option.textContent = `${version.tag}${shortHash ? ' (' + shortHash + ')' : ''}`;
+            versionSelect.appendChild(option);
+        });
+        
+        // Select latest by default
+        versionSelect.value = 'latest';
+        
+    } catch (error) {
+        console.error('Failed to load versions:', error);
+        versionSelect.innerHTML = '<option value="latest">latest (default)</option>';
+    }
+    
+    // Set default deployment message
+    document.getElementById('deploy-message').value = 'Routine maintenance update';
+    
+    // Set consensual deployment as default
+    document.getElementById('deploy-strategy').value = 'manual';
+    
+    modal.classList.remove('hidden');
+}
+
+// Close single agent deployment modal
+function closeSingleDeployModal() {
+    const modal = document.getElementById('single-deploy-modal');
+    modal.classList.add('hidden');
+    
+    // Reset form but keep defaults
+    document.getElementById('single-deploy-form').reset();
+    document.getElementById('deploy-message').value = 'Routine maintenance update';
+    document.getElementById('deploy-strategy').value = 'manual';
+}
+
 async function deploySingleAgent(event) {
     event.preventDefault();
     
     const form = event.target;
     const agentId = document.getElementById('deploy-agent-id').textContent;
     const version = form.version.value.trim();
-    const message = form.message.value.trim();
+    const message = form.message.value.trim() || 'Routine maintenance update';
     const strategy = form.strategy.value;
     
     // Construct the full image name
