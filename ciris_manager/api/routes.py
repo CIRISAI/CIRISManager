@@ -338,14 +338,20 @@ def create_routes(manager: Any) -> APIRouter:
     @router.get("/agents/versions")
     async def get_agent_versions(_user: Dict[str, str] = auth_dependency) -> Dict[str, Any]:
         """
-        Get version information for all agents.
+        Get version information for all agents including version history.
 
-        Returns version, codename, and code hash for each agent.
+        Returns version, codename, code hash, and version history for rollback.
         """
         from ciris_manager.docker_discovery import DockerAgentDiscovery
+        from ciris_manager.version_tracker import get_version_tracker
 
         discovery = DockerAgentDiscovery(manager.agent_registry)
         agents = discovery.discover_agents()
+
+        # Get version history from tracker
+        tracker = get_version_tracker()
+        # Get rollback options which includes current and previous versions
+        rollback_options = await tracker.get_rollback_options()
 
         # Build version response
         agent_versions = []
@@ -370,6 +376,9 @@ def create_routes(manager: Any) -> APIRouter:
             "agents": agent_versions,
             "version_summary": version_summary,
             "total_agents": len(agents),
+            # Include version history for UI to use
+            "agent": rollback_options.get("agent", {}),
+            "gui": rollback_options.get("gui", {}),
         }
 
     @router.post("/agents/{agent_id}/deployment")
