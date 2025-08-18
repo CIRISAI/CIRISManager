@@ -1732,6 +1732,7 @@ def create_routes(manager: Any) -> APIRouter:
                 "single_agent_deployment": True,
                 "target_agent": agent_id,
                 "initiated_by": _user.get("email", "unknown"),
+                "source": "manager_ui",
             },
         )
 
