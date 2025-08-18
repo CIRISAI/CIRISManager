@@ -222,12 +222,16 @@ class DeploymentOrchestrator:
                     agents_deferred=0,
                     agents_failed=1,
                     started_at=datetime.now(timezone.utc).isoformat(),
+                    staged_at=None,
                     completed_at=datetime.now(timezone.utc).isoformat(),
                     status="failed",
                     message=f"Failed to pull image: {pull_results.get('error', 'Unknown error')}",
+                    canary_phase=None,
                 )
 
             # Check if agent actually needs updating
+            if not notification.agent_image:
+                raise ValueError("Agent image is required for deployment")
             needs_update = await self._agent_needs_update(agent, notification.agent_image)
 
             if not needs_update:
@@ -240,9 +244,11 @@ class DeploymentOrchestrator:
                     agents_deferred=0,
                     agents_failed=0,
                     started_at=datetime.now(timezone.utc).isoformat(),
+                    staged_at=None,
                     completed_at=datetime.now(timezone.utc).isoformat(),
                     status="completed",
                     message=f"Agent {agent.agent_id} already running target version",
+                    canary_phase=None,
                 )
 
             # Create deployment status
@@ -265,7 +271,7 @@ class DeploymentOrchestrator:
             self.current_deployment = deployment_id
 
             # Persist state
-            await self._save_state()
+            self._save_state()
 
             # Start the deployment in background
             task = asyncio.create_task(
@@ -305,13 +311,14 @@ class DeploymentOrchestrator:
                     status.message = f"Successfully deployed to {agent.agent_id}"
 
                     # Record in version tracker
-                    tracker = get_version_tracker()
-                    await tracker.record_deployment(
-                        container_type="agents",
-                        image=notification.agent_image,
-                        deployment_id=deployment_id,
-                        deployed_by=notification.metadata.get("initiated_by", "system"),
-                    )
+                    if notification.agent_image:
+                        tracker = get_version_tracker()
+                        await tracker.record_deployment(
+                            container_type="agents",
+                            image=notification.agent_image,
+                            deployment_id=deployment_id,
+                            deployed_by=notification.metadata.get("initiated_by", "system"),
+                        )
                 else:
                     status.status = "failed"
                     status.agents_failed = 1
@@ -339,7 +346,7 @@ class DeploymentOrchestrator:
             status.completed_at = datetime.now(timezone.utc).isoformat()
         finally:
             self.current_deployment = None
-            await self._save_state()
+            self._save_state()
 
     async def _agent_needs_update(self, agent: AgentInfo, target_image: str) -> bool:
         """Check if a specific agent needs updating to target image."""
@@ -349,13 +356,23 @@ class DeploymentOrchestrator:
             client = docker.from_env()
 
             container = client.containers.get(agent.container_name)
-            current_image = container.image.tags[0] if container.image.tags else container.image.id
+            if container.image and container.image.tags:
+                current_image = container.image.tags[0]
+            elif container.image:
+                current_image = container.image.id
+            else:
+                # Can't determine current image, assume update needed
+                return True
 
             # Normalize image names for comparison
-            current = current_image.split(":")[-1] if ":" in current_image else "latest"
+            if current_image and ":" in current_image:
+                current = current_image.split(":")[-1]
+            else:
+                current = "latest"
+
             target = target_image.split(":")[-1] if ":" in target_image else "latest"
 
-            return current != target
+            return bool(current != target)
 
         except Exception as e:
             logger.warning(f"Could not check if agent {agent.agent_id} needs update: {e}")
