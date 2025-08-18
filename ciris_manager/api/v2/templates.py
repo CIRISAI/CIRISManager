@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any, List
 from pathlib import Path
 import yaml
+import re
+import aiofiles  # type: ignore
 
 from .models import Template
 from ciris_manager.api.auth import get_current_user_dependency as get_current_user
@@ -34,11 +36,12 @@ async def list_templates(_user: Dict[str, str] = Depends(get_current_user)) -> L
         template_name = template_file.stem
 
         try:
-            with open(template_file, "r") as f:
-                template_data = yaml.safe_load(f)
+            async with aiofiles.open(template_file, "r") as f:
+                content = await f.read()
+                template_data = yaml.safe_load(content)
 
             # Check if pre-approved
-            is_pre_approved = verifier.is_pre_approved(template_name, template_file)
+            is_pre_approved = await verifier.is_pre_approved(template_name, template_file)
 
             # Get stewardship tier
             stewardship_tier = template_data.get("stewardship", {}).get("stewardship_tier", 1)
@@ -72,19 +75,33 @@ async def get_template(
     """
     Get template details.
     """
+    # Validate template name to prevent path traversal
+    if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+        raise HTTPException(status_code=400, detail="Invalid template name")
+
     manager = get_manager()
     templates_dir = Path(manager.config.manager.templates_directory)
     template_file = templates_dir / f"{name}.yaml"
+
+    # Ensure the resolved path is within templates directory
+    try:
+        template_file = template_file.resolve()
+        templates_dir = templates_dir.resolve()
+        if not str(template_file).startswith(str(templates_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid template path")
 
     if not template_file.exists():
         raise HTTPException(status_code=404, detail=f"Template {name} not found")
 
     try:
-        with open(template_file, "r") as f:
-            template_data = yaml.safe_load(f)
+        async with aiofiles.open(template_file, "r") as f:
+            content = await f.read()
+            template_data = yaml.safe_load(content)
 
         verifier = TemplateVerifier(Path("/opt/ciris/templates/pre-approved-templates.json"))
-        is_pre_approved = verifier.is_pre_approved(name, template_file)
+        is_pre_approved = await verifier.is_pre_approved(name, template_file)
 
         # Return template info
         return {
@@ -108,21 +125,35 @@ async def validate_template(
     """
     Validate a template.
     """
+    # Validate template name to prevent path traversal
+    if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+        raise HTTPException(status_code=400, detail="Invalid template name")
+
     manager = get_manager()
     templates_dir = Path(manager.config.manager.templates_directory)
     template_file = templates_dir / f"{name}.yaml"
+
+    # Ensure the resolved path is within templates directory
+    try:
+        template_file = template_file.resolve()
+        templates_dir = templates_dir.resolve()
+        if not str(template_file).startswith(str(templates_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid template path")
 
     if not template_file.exists():
         raise HTTPException(status_code=404, detail=f"Template {name} not found")
 
     try:
         # Load template
-        with open(template_file, "r") as f:
-            template_data = yaml.safe_load(f)
+        async with aiofiles.open(template_file, "r") as f:
+            content = await f.read()
+            template_data = yaml.safe_load(content)
 
         # Check pre-approval
         verifier = TemplateVerifier(Path("/opt/ciris/templates/pre-approved-templates.json"))
-        is_pre_approved = verifier.is_pre_approved(name, template_file)
+        is_pre_approved = await verifier.is_pre_approved(name, template_file)
 
         # Validate structure
         validation_errors = []

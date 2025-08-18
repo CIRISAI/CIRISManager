@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 import base64
+import aiofiles  # type: ignore
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
 
@@ -98,15 +99,18 @@ class TemplateVerifier:
             logger.error(f"Signature verification error: {e}")
             return False
 
-    def calculate_template_checksum(self, template_path: Path) -> str:
+    async def calculate_template_checksum(self, template_path: Path) -> str:
         """Calculate SHA-256 checksum of a template file."""
         sha256_hash = hashlib.sha256()
-        with open(template_path, "rb") as f:
-            for byte_block in iter(lambda: f.read(4096), b""):
+        async with aiofiles.open(template_path, "rb") as f:
+            while True:
+                byte_block = await f.read(4096)
+                if not byte_block:
+                    break
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
 
-    def is_pre_approved(self, template_name: str, template_path: Path) -> bool:
+    async def is_pre_approved(self, template_name: str, template_path: Path) -> bool:
         """
         Check if a template is pre-approved.
 
@@ -129,7 +133,7 @@ class TemplateVerifier:
 
         # Calculate actual checksum
         try:
-            actual_checksum = self.calculate_template_checksum(template_path)
+            actual_checksum = await self.calculate_template_checksum(template_path)
         except Exception as e:
             logger.error(f"Failed to calculate checksum for {template_path}: {e}")
             return False

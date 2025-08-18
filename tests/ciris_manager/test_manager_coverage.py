@@ -235,7 +235,7 @@ class TestManagerCoverage:
             manager.port_manager.allocate_port("agent-existing")
 
             # Mock verifier and subprocess
-            manager.template_verifier.is_pre_approved = Mock(return_value=True)
+            manager.template_verifier.is_pre_approved = AsyncMock(return_value=True)
 
             with patch("asyncio.create_subprocess_exec") as mock_subprocess:
                 mock_process = AsyncMock()

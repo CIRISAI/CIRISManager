@@ -219,7 +219,7 @@ class TestCIRISManager:
         os.environ["CIRIS_ENCRYPTION_SALT"] = "test-salt-sixteen-chars"
 
         # Mock template verifier
-        manager.template_verifier.is_pre_approved = Mock(return_value=True)
+        manager.template_verifier.is_pre_approved = AsyncMock(return_value=True)
 
         # Mock subprocess for docker-compose
         with patch("asyncio.create_subprocess_exec") as mock_subprocess:
@@ -259,7 +259,7 @@ class TestCIRISManager:
     async def test_create_agent_custom_template_no_signature(self, manager):
         """Test creating agent with custom template without signature."""
         # Mock template verifier
-        manager.template_verifier.is_pre_approved = Mock(return_value=False)
+        manager.template_verifier.is_pre_approved = AsyncMock(return_value=False)
 
         # Should raise permission error
         with pytest.raises(PermissionError, match="WA signature required"):
@@ -269,7 +269,7 @@ class TestCIRISManager:
     async def test_create_agent_custom_template_with_signature(self, manager):
         """Test creating agent with custom template and signature."""
         # Mock template verifier
-        manager.template_verifier.is_pre_approved = Mock(return_value=False)
+        manager.template_verifier.is_pre_approved = AsyncMock(return_value=False)
 
         # Mock subprocess
         with patch("asyncio.create_subprocess_exec") as mock_subprocess:
@@ -299,7 +299,7 @@ class TestCIRISManager:
     async def test_create_agent_docker_failure(self, manager):
         """Test handling docker-compose failure."""
         # Mock template verifier
-        manager.template_verifier.is_pre_approved = Mock(return_value=True)
+        manager.template_verifier.is_pre_approved = AsyncMock(return_value=True)
 
         # Mock subprocess to fail
         with patch("asyncio.create_subprocess_exec") as mock_subprocess:
@@ -396,7 +396,7 @@ class TestCIRISManager:
     async def test_port_allocation_persistence(self, manager):
         """Test port allocation persists across restarts."""
         # Mock template and subprocess
-        manager.template_verifier.is_pre_approved = Mock(return_value=True)
+        manager.template_verifier.is_pre_approved = AsyncMock(return_value=True)
 
         with patch("asyncio.create_subprocess_exec") as mock_subprocess:
             mock_process = AsyncMock()
@@ -430,7 +430,7 @@ class TestCIRISManager:
     async def test_concurrent_agent_creation(self, manager):
         """Test concurrent agent creation."""
         # Mock template and subprocess
-        manager.template_verifier.is_pre_approved = Mock(return_value=True)
+        manager.template_verifier.is_pre_approved = AsyncMock(return_value=True)
 
         async def mock_subprocess(*args, **kwargs):
             mock_process = AsyncMock()

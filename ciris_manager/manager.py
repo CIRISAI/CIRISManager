@@ -178,13 +178,24 @@ class CIRISManager:
         log_agent_operation(
             "create_start", agent_id="pending", details={"agent_name": name, "template": template}
         )
-        # Validate inputs
-        template_path = Path(self.config.manager.templates_directory) / f"{template}.yaml"
+        # Validate inputs - prevent path traversal
+        import re
+
+        if not re.match(r"^[a-zA-Z0-9_-]+$", template):
+            raise ValueError(f"Invalid template name: {template}")
+
+        templates_dir = Path(self.config.manager.templates_directory).resolve()
+        template_path = (templates_dir / f"{template}.yaml").resolve()
+
+        # Ensure path is within templates directory
+        if not str(template_path).startswith(str(templates_dir)):
+            raise ValueError(f"Invalid template path: {template}")
+
         if not template_path.exists():
             raise ValueError(f"Template not found: {template}")
 
         # Check if template is pre-approved
-        is_pre_approved = self.template_verifier.is_pre_approved(template, template_path)
+        is_pre_approved = await self.template_verifier.is_pre_approved(template, template_path)
 
         if not is_pre_approved and not wa_signature:
             raise PermissionError(

@@ -4,6 +4,7 @@ Test that GUI and Agent rollback options are properly separated.
 
 import pytest
 import json
+import aiofiles  # type: ignore
 from pathlib import Path
 from ciris_manager.version_tracker import VersionTracker
 
@@ -96,8 +97,8 @@ async def test_legacy_agents_migration():
     # Write legacy file
     version_file = Path("/tmp/test-legacy/version_state.json")
     version_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(version_file, "w") as f:
-        json.dump(legacy_data, f)
+    async with aiofiles.open(version_file, "w") as f:
+        await f.write(json.dumps(legacy_data))
 
     # Load tracker - should migrate
     await tracker._load_state()
