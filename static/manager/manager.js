@@ -1694,66 +1694,59 @@ function closeSingleDeployModal() {
 
 // Fetch available versions from registry
 async function fetchAvailableVersions() {
-    try {
-        // Try to get versions from the API (if authenticated)
-        const response = await fetch('/manager/v1/agents/versions', {
-            credentials: 'include'
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            // Extract unique versions from agent data
-            const versionMap = new Map();
-            
-            // Process current versions from agents
-            if (data.agent && data.agent.current) {
-                const tag = data.agent.current.tag || data.agent.current.image?.split(':').pop();
-                if (tag && tag !== 'latest') {
-                    versionMap.set(tag, {
-                        tag: tag,
-                        hash: data.agent.current.digest?.substring(0, 12) || ''
-                    });
-                }
-            }
-            
-            // Add some recent known versions (can be enhanced with registry API)
-            const knownVersions = [
-                { tag: 'v1.4.5', hash: 'abc123def456' },
-                { tag: 'v1.4.4', hash: '789ghi012jkl' },
-                { tag: 'v1.4.3', hash: '0377dae96bd0' },
-                { tag: 'v1.4.2', hash: 'bc9ea6d50a40' },
-                { tag: 'v1.4.1', hash: '345mno678pqr' },
-                { tag: 'v1.4.0', hash: '901stu234vwx' }
-            ];
-            
-            knownVersions.forEach(v => {
-                if (!versionMap.has(v.tag)) {
-                    versionMap.set(v.tag, v);
-                }
-            });
-            
-            return Array.from(versionMap.values()).sort((a, b) => {
-                // Sort versions in descending order
-                return b.tag.localeCompare(a.tag, undefined, { numeric: true });
-            });
-        } else if (response.status === 401) {
-            console.log('Not authenticated, using default versions');
+    // No try-catch - let errors propagate for proper handling
+    const response = await fetch('/manager/v1/agents/versions', {
+        credentials: 'include'
+    });
+    
+    if (!response.ok) {
+        if (response.status === 401) {
+            throw new Error('AUTHENTICATION REQUIRED: You must be logged in to deploy versions');
         }
-    } catch (error) {
-        console.error('Failed to fetch versions:', error);
+        throw new Error(`FAILED TO FETCH VERSIONS: ${response.status} ${response.statusText}`);
     }
     
-    // Fallback to known recent versions
-    return [
-        { tag: 'v1.4.5', hash: 'latest' },
-        { tag: 'v1.4.4', hash: '789ghi01' },
-        { tag: 'v1.4.3', hash: '0377dae9' },
-        { tag: 'v1.4.2', hash: 'bc9ea6d5' },
-        { tag: 'v1.4.1', hash: '345mno67' },
-        { tag: 'v1.4.0', hash: '901stu23' },
-        { tag: 'v1.3.9', hash: 'def456ab' },
-        { tag: 'v1.3.8', hash: 'cba321fe' }
-    ];
+    const data = await response.json();
+    const versions = [];
+    
+    // Only show REAL versions from the API response
+    if (data.agent && data.agent.current) {
+        const tag = data.agent.current.tag || data.agent.current.image?.split(':').pop();
+        if (tag && tag !== 'latest') {
+            versions.push({
+                tag: tag,
+                hash: data.agent.current.digest?.substring(0, 12) || ''
+            });
+        }
+    }
+    
+    // Add previous versions if available
+    if (data.agent && data.agent.n_minus_1) {
+        const tag = data.agent.n_minus_1.tag || data.agent.n_minus_1.image?.split(':').pop();
+        if (tag && tag !== 'latest') {
+            versions.push({
+                tag: tag,
+                hash: data.agent.n_minus_1.digest?.substring(0, 12) || ''
+            });
+        }
+    }
+    
+    if (data.agent && data.agent.n_minus_2) {
+        const tag = data.agent.n_minus_2.tag || data.agent.n_minus_2.image?.split(':').pop();
+        if (tag && tag !== 'latest') {
+            versions.push({
+                tag: tag,
+                hash: data.agent.n_minus_2.digest?.substring(0, 12) || ''
+            });
+        }
+    }
+    
+    // If no versions found, throw error
+    if (versions.length === 0) {
+        throw new Error('No version history available - only latest can be deployed');
+    }
+    
+    return versions;
 }
 
 // Open single agent deployment modal
@@ -1800,8 +1793,19 @@ async function openSingleDeployModal(agentId) {
         versionSelect.value = 'latest';
         
     } catch (error) {
-        console.error('Failed to load versions:', error);
-        versionSelect.innerHTML = '<option value="latest">latest (default)</option>';
+        console.error('VERSION FETCH FAILED:', error);
+        
+        // Show error prominently
+        versionSelect.innerHTML = `<option value="" disabled selected>ERROR: ${error.message}</option>`;
+        versionSelect.style.backgroundColor = '#fee';
+        versionSelect.style.color = '#c00';
+        
+        // Show alert to user
+        alert(`DEPLOYMENT UNAVAILABLE\n\n${error.message}\n\nPlease ensure you are logged in and try again.`);
+        
+        // Close the modal since we can't proceed
+        closeSingleDeployModal();
+        return;
     }
     
     // Set default deployment message
