@@ -217,7 +217,7 @@ class TestSingleAgentDeployment:
                 with patch(
                     "ciris_manager.deployment_orchestrator.get_version_tracker"
                 ) as mock_tracker:
-                    mock_tracker.return_value.record_deployment = AsyncMock()
+                    mock_tracker.return_value.promote_staged_version = AsyncMock()
 
                     # Mock save state
                     with patch.object(orchestrator, "_save_state", new_callable=AsyncMock):
