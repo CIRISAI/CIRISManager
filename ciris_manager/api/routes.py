@@ -1725,14 +1725,20 @@ def create_routes(manager: Any) -> APIRouter:
         # Create a targeted update notification
         notification = UpdateNotification(
             agent_image=agent_image,
+            gui_image=None,
+            nginx_image=None,
             message=message,
             strategy=strategy,
+            source="manager_ui",
+            commit_sha=None,
+            version=None,
+            changelog=None,
+            risk_level="low",
             metadata={
                 **metadata,
                 "single_agent_deployment": True,
                 "target_agent": agent_id,
                 "initiated_by": _user.get("email", "unknown"),
-                "source": "manager_ui",
             },
         )
 
