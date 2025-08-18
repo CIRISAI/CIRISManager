@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from ciris_manager.api.auth import get_current_user
+from ciris_manager.api.auth import get_current_user_dependency as get_current_user
 from ciris_manager.version_tracker import get_version_tracker
 from ciris_manager.docker_discovery import DockerAgentDiscovery
 

@@ -3219,3 +3219,60 @@ class DeploymentOrchestrator:
         except Exception as e:
             logger.error(f"Failed to rollback nginx container: {e}")
             return False
+
+    # Wrapper methods for v2 API compatibility
+    async def process_update_notification(self, notification: UpdateNotification) -> str:
+        """
+        Process an update notification (wrapper for stage_deployment).
+
+        This is for v2 API compatibility.
+        """
+        # Get all agents for staging
+        from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+        if self.manager:
+            discovery = DockerAgentDiscovery(self.manager.agent_registry)
+            agents = discovery.discover_agents()
+        else:
+            agents = []
+
+        return await self.stage_deployment(notification, agents)
+
+    async def cancel_deployment(self, deployment_id: str) -> bool:
+        """
+        Cancel a deployment (wrapper for pause_deployment).
+
+        This is for v2 API compatibility.
+        """
+        return await self.pause_deployment(deployment_id)
+
+    async def launch_deployment(self, deployment_id: str) -> bool:
+        """
+        Launch a deployment (wrapper for launch_staged_deployment).
+
+        This is for v2 API compatibility.
+        """
+        return await self.launch_staged_deployment(deployment_id)
+
+    async def start_rollback(
+        self,
+        deployment_id: str,
+        target_version: str,
+        rollback_targets: Dict[str, Any],
+        reason: str = "Manual rollback",
+    ) -> None:
+        """
+        Start a rollback deployment.
+
+        This is a simplified implementation for v2 API.
+        """
+        # For now, just log the rollback request
+        logger.info(f"Rollback requested for {deployment_id}: {reason}")
+        logger.info(f"Target version: {target_version}, targets: {rollback_targets}")
+
+        # TODO: Implement actual rollback logic
+        # This would involve:
+        # 1. Creating a new deployment with rollback flag
+        # 2. Setting target versions from version history
+        # 3. Executing the rollback deployment
+        pass

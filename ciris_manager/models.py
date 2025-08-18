@@ -174,6 +174,8 @@ class DeploymentStatus(BaseModel):
     )
     message: str = Field(..., description="Current status message")
     events: List[dict] = Field(default_factory=list, description="Timeline of deployment events")
+    strategy: str = Field("canary", description="Deployment strategy: canary, immediate, manual")
+    updated_at: Optional[str] = Field(None, description="Last update timestamp")
 
 
 class AgentUpdateResponse(BaseModel):
