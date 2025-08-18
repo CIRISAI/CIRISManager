@@ -1808,10 +1808,8 @@ async function fetchAvailableVersions() {
         }
     }
     
-    // If no versions found, throw error
-    if (versions.length === 0) {
-        throw new Error('No version history available - only latest can be deployed');
-    }
+    // If no versions found, return empty array (UI will show latest only)
+    console.log('Version history extracted:', versions);
     
     return versions;
 }

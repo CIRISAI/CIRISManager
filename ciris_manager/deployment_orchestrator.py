@@ -324,15 +324,12 @@ class DeploymentOrchestrator:
                     status.status = "completed"
                     status.message = f"Successfully deployed to {agent.agent_id}"
 
-                    # Record in version tracker
+                    # Promote staged version to current
+                    tracker = get_version_tracker()
                     if notification.agent_image:
-                        tracker = get_version_tracker()
-                        await tracker.record_deployment(
-                            container_type="agent",
-                            image=notification.agent_image,
-                            deployment_id=deployment_id,
-                            deployed_by=notification.metadata.get("initiated_by", "system"),
-                        )
+                        await tracker.promote_staged_version("agent", deployment_id)
+                    if notification.gui_image:
+                        await tracker.promote_staged_version("gui", deployment_id)
                 else:
                     status.status = "failed"
                     status.agents_failed = 1
@@ -2366,6 +2363,22 @@ class DeploymentOrchestrator:
         status.message = f"Updating {len(running_agents)} agents immediately"
         self._save_state()
         await self._update_agent_group(deployment_id, notification, running_agents)
+
+        # Mark deployment as completed
+        status.status = "completed"
+        status.completed_at = datetime.now(timezone.utc).isoformat()
+        self._save_state()
+
+        # Promote staged versions to current after immediate deployment
+        tracker = get_version_tracker()
+        if notification.agent_image:
+            await tracker.promote_staged_version("agent", deployment_id)
+        if notification.gui_image:
+            await tracker.promote_staged_version("gui", deployment_id)
+        if hasattr(notification, "nginx_image") and notification.nginx_image:
+            await tracker.promote_staged_version("nginx", deployment_id)
+
+        logger.info(f"Immediate deployment {deployment_id} completed, versions promoted")
 
     async def _update_agent_group(
         self,
