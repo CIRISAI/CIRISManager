@@ -36,7 +36,7 @@ def get_deployment_orchestrator() -> "DeploymentOrchestrator":
     """Get the global deployment orchestrator instance."""
     global _orchestrator
     if _orchestrator is None:
-        from ciris_manager.core import get_manager
+        from ciris_manager.manager_core import get_manager
 
         manager = get_manager()
         _orchestrator = DeploymentOrchestrator(manager)

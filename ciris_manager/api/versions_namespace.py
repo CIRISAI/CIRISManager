@@ -124,7 +124,7 @@ async def get_agent_versions(_user: Dict[str, str] = Depends(get_current_user)) 
 
     This replaces the old /agents/versions endpoint.
     """
-    from ciris_manager.core import get_manager
+    from ciris_manager.manager_core import get_manager
 
     manager = get_manager()
     discovery = DockerAgentDiscovery(manager.agent_registry)
@@ -174,7 +174,7 @@ async def get_agent_version(
     agent_id: str, _user: Dict[str, str] = Depends(get_current_user)
 ) -> AgentVersionInfo:
     """Get version information for a specific agent."""
-    from ciris_manager.core import get_manager
+    from ciris_manager.manager_core import get_manager
 
     manager = get_manager()
     discovery = DockerAgentDiscovery(manager.agent_registry)
@@ -207,7 +207,7 @@ async def get_version_adoption(_user: Dict[str, str] = Depends(get_current_user)
 
     Shows which versions are running and their adoption rates.
     """
-    from ciris_manager.core import get_manager
+    from ciris_manager.manager_core import get_manager
 
     manager = get_manager()
     discovery = DockerAgentDiscovery(manager.agent_registry)
@@ -254,7 +254,7 @@ async def get_version_adoption_details(
     version: str, _user: Dict[str, str] = Depends(get_current_user)
 ) -> VersionAdoption:
     """Get adoption details for a specific version."""
-    from ciris_manager.core import get_manager
+    from ciris_manager.manager_core import get_manager
 
     manager = get_manager()
     discovery = DockerAgentDiscovery(manager.agent_registry)

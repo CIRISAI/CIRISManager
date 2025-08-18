@@ -621,7 +621,7 @@ class CIRISManager:
             # Mount v2 API alongside v1
             try:
                 # Set global manager instance for v2 API
-                from .core import set_manager
+                from .manager_core import set_manager
 
                 set_manager(self)
 

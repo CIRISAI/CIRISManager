@@ -9,7 +9,7 @@ import yaml
 
 from .models import Template
 from ciris_manager.api.auth import get_current_user_dependency as get_current_user
-from ciris_manager.core import get_manager
+from ciris_manager.manager_core import get_manager
 from ciris_manager.template_verifier import TemplateVerifier
 
 
