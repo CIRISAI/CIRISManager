@@ -122,8 +122,8 @@ function renderAgents() {
                         <button onclick="showOAuthSetup('${agent.agent_id}')" class="px-3 py-1 text-indigo-600 hover:bg-indigo-50 rounded">
                             <i class="fas fa-key"></i> OAuth
                         </button>
-                        <button onclick="showDeployVersion('${agent.agent_id}')" class="px-3 py-1 text-amber-600 hover:bg-amber-50 rounded" title="Deploy specific version to this agent">
-                            <i class="fas fa-rocket"></i> Deploy
+                        <button onclick="showDeployVersion('${agent.agent_id}')" class="px-3 py-1 text-amber-600 hover:bg-amber-50 rounded" title="Change release version for this agent">
+                            <i class="fas fa-code-branch"></i> Change Release
                         </button>
                     </div>
                     <div>
@@ -1676,11 +1676,78 @@ function hideOAuthModal() {
 }
 
 // Single Agent Deployment Functions
-function showDeployVersion(agentId) {
+async function showDeployVersion(agentId) {
+    console.log('showDeployVersion called for agent:', agentId);
+    
     const modal = document.getElementById('single-deploy-modal');
     const agentSpan = document.getElementById('deploy-agent-id');
+    const versionSelect = document.getElementById('deploy-version');
     
     agentSpan.textContent = agentId;
+    
+    // Load available versions
+    versionSelect.innerHTML = '<option value="">Loading versions...</option>';
+    console.log('Starting to fetch versions...');
+    
+    try {
+        // Fetch available versions from the registry or API
+        const versions = await fetchAvailableVersions();
+        console.log('Successfully fetched versions:', versions);
+        
+        // Populate the dropdown
+        versionSelect.innerHTML = '';
+        
+        // Add latest option first
+        const latestOption = document.createElement('option');
+        latestOption.value = 'latest';
+        latestOption.textContent = 'latest (newest available)';
+        versionSelect.appendChild(latestOption);
+        
+        // Add separator if we have versions
+        if (versions.length > 0) {
+            const separator = document.createElement('option');
+            separator.disabled = true;
+            separator.textContent = '──────────────';
+            versionSelect.appendChild(separator);
+            
+            // Add specific versions
+            versions.forEach(version => {
+                const option = document.createElement('option');
+                option.value = version.tag;
+                // Show both semantic version and short hash
+                const shortHash = version.hash ? version.hash.substring(0, 7) : '';
+                option.textContent = `${version.tag}${shortHash ? ' (' + shortHash + ')' : ''}`;
+                versionSelect.appendChild(option);
+            });
+        }
+        
+        // Select latest by default
+        versionSelect.value = 'latest';
+        console.log('Version dropdown populated successfully');
+        
+    } catch (error) {
+        console.error('VERSION FETCH FAILED:', error);
+        console.error('Error stack:', error.stack);
+        
+        // Show error prominently
+        versionSelect.innerHTML = `<option value="" disabled selected>ERROR: ${error.message}</option>`;
+        versionSelect.style.backgroundColor = '#fee';
+        versionSelect.style.color = '#c00';
+        
+        // Show alert to user
+        alert(`CHANGE RELEASE UNAVAILABLE\n\n${error.message}\n\nPlease ensure you are logged in and try again.`);
+        
+        // Close the modal since we can't proceed
+        closeSingleDeployModal();
+        return;
+    }
+    
+    // Set default deployment message
+    document.getElementById('deploy-message').value = 'Routine maintenance update';
+    
+    // Set consensual deployment as default
+    document.getElementById('deploy-strategy').value = 'manual';
+    
     modal.classList.remove('hidden');
 }
 
@@ -1749,73 +1816,6 @@ async function fetchAvailableVersions() {
     return versions;
 }
 
-// Open single agent deployment modal
-async function openSingleDeployModal(agentId) {
-    const modal = document.getElementById('single-deploy-modal');
-    const agentSpan = document.getElementById('deploy-agent-id');
-    const versionSelect = document.getElementById('deploy-version');
-    
-    agentSpan.textContent = agentId;
-    
-    // Load available versions
-    versionSelect.innerHTML = '<option value="">Loading versions...</option>';
-    
-    try {
-        // Fetch available versions from the registry or API
-        const versions = await fetchAvailableVersions();
-        
-        // Populate the dropdown
-        versionSelect.innerHTML = '';
-        
-        // Add latest option first
-        const latestOption = document.createElement('option');
-        latestOption.value = 'latest';
-        latestOption.textContent = 'latest (newest available)';
-        versionSelect.appendChild(latestOption);
-        
-        // Add separator
-        const separator = document.createElement('option');
-        separator.disabled = true;
-        separator.textContent = '──────────────';
-        versionSelect.appendChild(separator);
-        
-        // Add specific versions
-        versions.forEach(version => {
-            const option = document.createElement('option');
-            option.value = version.tag;
-            // Show both semantic version and short hash
-            const shortHash = version.hash ? version.hash.substring(0, 7) : '';
-            option.textContent = `${version.tag}${shortHash ? ' (' + shortHash + ')' : ''}`;
-            versionSelect.appendChild(option);
-        });
-        
-        // Select latest by default
-        versionSelect.value = 'latest';
-        
-    } catch (error) {
-        console.error('VERSION FETCH FAILED:', error);
-        
-        // Show error prominently
-        versionSelect.innerHTML = `<option value="" disabled selected>ERROR: ${error.message}</option>`;
-        versionSelect.style.backgroundColor = '#fee';
-        versionSelect.style.color = '#c00';
-        
-        // Show alert to user
-        alert(`DEPLOYMENT UNAVAILABLE\n\n${error.message}\n\nPlease ensure you are logged in and try again.`);
-        
-        // Close the modal since we can't proceed
-        closeSingleDeployModal();
-        return;
-    }
-    
-    // Set default deployment message
-    document.getElementById('deploy-message').value = 'Routine maintenance update';
-    
-    // Set consensual deployment as default
-    document.getElementById('deploy-strategy').value = 'manual';
-    
-    modal.classList.remove('hidden');
-}
 
 // Update strategy info based on selection
 function updateStrategyInfo() {
