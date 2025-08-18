@@ -620,6 +620,11 @@ class CIRISManager:
 
             # Mount v2 API alongside v1
             try:
+                # Set global manager instance for v2 API
+                from .core import set_manager
+
+                set_manager(self)
+
                 from .api.v2 import (
                     agents_router,
                     versions_router,

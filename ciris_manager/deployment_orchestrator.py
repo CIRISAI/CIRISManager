@@ -28,6 +28,20 @@ from ciris_manager.utils.log_sanitizer import sanitize_agent_id, sanitize_for_lo
 
 logger = logging.getLogger(__name__)
 
+# Global deployment orchestrator instance
+_orchestrator: Optional["DeploymentOrchestrator"] = None
+
+
+def get_deployment_orchestrator() -> "DeploymentOrchestrator":
+    """Get the global deployment orchestrator instance."""
+    global _orchestrator
+    if _orchestrator is None:
+        from ciris_manager.core import get_manager
+
+        manager = get_manager()
+        _orchestrator = DeploymentOrchestrator(manager)
+    return _orchestrator
+
 
 class DeploymentOrchestrator:
     """Orchestrates deployments across agent fleet."""

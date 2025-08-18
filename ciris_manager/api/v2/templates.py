@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 from .models import Template
-from ciris_manager.api.auth import get_current_user
+from ciris_manager.api.auth import get_current_user_dependency as get_current_user
 from ciris_manager.core import get_manager
 from ciris_manager.template_verifier import TemplateVerifier
 
@@ -28,7 +28,7 @@ async def list_templates(_user: Dict[str, str] = Depends(get_current_user)) -> L
         return []
 
     templates = []
-    verifier = TemplateVerifier()
+    verifier = TemplateVerifier(Path("/opt/ciris/templates/pre-approved-templates.json"))
 
     for template_file in templates_dir.glob("*.yaml"):
         template_name = template_file.stem
@@ -83,7 +83,7 @@ async def get_template(
         with open(template_file, "r") as f:
             template_data = yaml.safe_load(f)
 
-        verifier = TemplateVerifier()
+        verifier = TemplateVerifier(Path("/opt/ciris/templates/pre-approved-templates.json"))
         is_pre_approved = verifier.is_pre_approved(name, template_file)
 
         # Return template info
@@ -121,7 +121,7 @@ async def validate_template(
             template_data = yaml.safe_load(f)
 
         # Check pre-approval
-        verifier = TemplateVerifier()
+        verifier = TemplateVerifier(Path("/opt/ciris/templates/pre-approved-templates.json"))
         is_pre_approved = verifier.is_pre_approved(name, template_file)
 
         # Validate structure

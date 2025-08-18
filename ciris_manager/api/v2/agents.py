@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
 from .models import Agent
-from ciris_manager.api.auth import get_current_user
+from ciris_manager.api.auth import get_current_user_dependency as get_current_user
 from ciris_manager.core import get_manager
 from ciris_manager.docker_discovery import DockerAgentDiscovery
 

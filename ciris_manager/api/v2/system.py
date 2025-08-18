@@ -9,7 +9,7 @@ import psutil
 import time
 
 from .models import SystemHealth, SystemStatus, PortAllocation
-from ciris_manager.api.auth import get_current_user
+from ciris_manager.api.auth import get_current_user_dependency as get_current_user
 from ciris_manager.core import get_manager
 
 
