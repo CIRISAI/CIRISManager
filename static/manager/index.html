@@ -560,20 +560,22 @@
                             <label class="block text-sm font-medium mb-1">Deployment Strategy</label>
                             <select id="deploy-strategy" 
                                     name="strategy" 
-                                    class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    onchange="updateStrategyInfo()">
                                 <option value="manual" selected>Consensual - Agent decides when to update (recommended)</option>
-                                <option value="immediate">Immediate - Deploy right away (override agent autonomy)</option>
+                                <option value="immediate">API Forced - Request immediate shutdown via API</option>
+                                <option value="docker">Manager Forced - Force container restart via Docker</option>
                             </select>
-                            <p class="text-xs text-gray-500 mt-1">Respecting agent autonomy is the default and recommended approach</p>
+                            <p class="text-xs text-gray-500 mt-1">Consensual deployment respects agent autonomy. Forced options should only be used when necessary.</p>
                         </div>
 
-                        <!-- Info Message -->
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <!-- Dynamic Strategy Info Message -->
+                        <div id="strategy-info" class="bg-blue-50 border border-blue-200 rounded-lg p-4">
                             <div class="flex items-start gap-2">
-                                <i class="fas fa-info-circle text-blue-600 mt-1"></i>
+                                <i id="strategy-icon" class="fas fa-info-circle text-blue-600 mt-1"></i>
                                 <div>
-                                    <p class="text-sm font-medium text-blue-900">Consensual Deployment</p>
-                                    <p class="text-xs text-blue-700 mt-1">
+                                    <p id="strategy-title" class="text-sm font-medium text-blue-900">Consensual Deployment</p>
+                                    <p id="strategy-description" class="text-xs text-blue-700 mt-1">
                                         This deployment respects agent autonomy. The agent will review the update
                                         and decide when to apply it based on its current state and policies.
                                     </p>

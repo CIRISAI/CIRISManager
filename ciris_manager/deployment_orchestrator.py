@@ -2517,12 +2517,58 @@ class DeploymentOrchestrator:
                     # Fall back to message if no changelog
                     reason = f"{reason} - {notification.message}"
 
+                # Handle different deployment strategies
+                if notification.strategy == "docker":
+                    # Manager forced - skip API call and directly restart container
+                    logger.info(
+                        f"Manager forced restart for agent {agent.agent_id} - bypassing API"
+                    )
+
+                    # Directly restart the container
+                    try:
+                        import docker
+
+                        docker_client = docker.from_env()
+                        container = docker_client.containers.get(agent.container_name)
+
+                        logger.info(f"Stopping container {agent.container_name} forcefully...")
+                        container.stop(timeout=10)  # Give 10 seconds for graceful stop
+
+                        logger.info(f"Starting container {agent.container_name} with new image...")
+                        container.start()
+
+                        # Update metadata with new image
+                        if self.manager:
+                            await self._update_agent_metadata(agent.agent_id, notification)
+
+                        return AgentUpdateResponse(
+                            agent_id=agent.agent_id,
+                            decision="accept",
+                            reason="Container forcefully restarted via Docker",
+                            ready_at=None,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to force restart container {agent.container_name}: {e}"
+                        )
+                        return AgentUpdateResponse(
+                            agent_id=agent.agent_id,
+                            decision="reject",
+                            reason=f"Docker restart failed: {str(e)}",
+                            ready_at=None,
+                        )
+
+                # For API-based strategies (manual or immediate)
                 # Add API indicator for clarity
                 reason = f"System shutdown requested: {reason} (API shutdown by wa-system-admin)"
 
+                # Respect deployment strategy for force flag
+                # "immediate" means force the shutdown via API, "manual" means consensual (agent decides)
+                force_shutdown = notification.strategy == "immediate"
+
                 shutdown_payload = {
                     "reason": reason,
-                    "force": False,
+                    "force": force_shutdown,
                     "confirm": True,
                 }
 
@@ -2550,9 +2596,13 @@ class DeploymentOrchestrator:
                         details={"deployment_id": deployment_id},
                     )
 
-                # Log the shutdown request
+                # Log the shutdown request with strategy
+                if force_shutdown:
+                    deployment_mode = "API forced (immediate)"
+                else:
+                    deployment_mode = "consensual (agent decides)"
                 logger.info(
-                    f"Requesting shutdown for agent {agent.agent_id} at http://localhost:{agent.api_port}/v1/system/shutdown"
+                    f"Requesting {deployment_mode} shutdown for agent {agent.agent_id} at http://localhost:{agent.api_port}/v1/system/shutdown"
                 )
                 audit_deployment_action(
                     deployment_id=deployment_id,

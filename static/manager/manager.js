@@ -1809,6 +1809,44 @@ async function openSingleDeployModal(agentId) {
     modal.classList.remove('hidden');
 }
 
+// Update strategy info based on selection
+function updateStrategyInfo() {
+    const strategy = document.getElementById('deploy-strategy').value;
+    const infoDiv = document.getElementById('strategy-info');
+    const icon = document.getElementById('strategy-icon');
+    const title = document.getElementById('strategy-title');
+    const description = document.getElementById('strategy-description');
+    
+    switch(strategy) {
+        case 'manual':
+            infoDiv.className = 'bg-blue-50 border border-blue-200 rounded-lg p-4';
+            icon.className = 'fas fa-info-circle text-blue-600 mt-1';
+            title.className = 'text-sm font-medium text-blue-900';
+            title.textContent = 'Consensual Deployment';
+            description.className = 'text-xs text-blue-700 mt-1';
+            description.textContent = 'This deployment respects agent autonomy. The agent will review the update and decide when to apply it based on its current state and policies.';
+            break;
+            
+        case 'immediate':
+            infoDiv.className = 'bg-amber-50 border border-amber-200 rounded-lg p-4';
+            icon.className = 'fas fa-exclamation-triangle text-amber-600 mt-1';
+            title.className = 'text-sm font-medium text-amber-900';
+            title.textContent = 'API Forced Shutdown';
+            description.className = 'text-xs text-amber-700 mt-1';
+            description.textContent = 'Sends a forced shutdown request via the agent API. The agent will attempt to shut down immediately, but may still perform cleanup tasks.';
+            break;
+            
+        case 'docker':
+            infoDiv.className = 'bg-red-50 border border-red-200 rounded-lg p-4';
+            icon.className = 'fas fa-exclamation-circle text-red-600 mt-1';
+            title.className = 'text-sm font-medium text-red-900';
+            title.textContent = 'Manager Forced Restart';
+            description.className = 'text-xs text-red-700 mt-1';
+            description.textContent = 'Forcibly restarts the Docker container, bypassing the agent entirely. Use only when the agent is unresponsive or in emergency situations.';
+            break;
+    }
+}
+
 // Close single agent deployment modal
 function closeSingleDeployModal() {
     const modal = document.getElementById('single-deploy-modal');
@@ -1818,6 +1856,7 @@ function closeSingleDeployModal() {
     document.getElementById('single-deploy-form').reset();
     document.getElementById('deploy-message').value = 'Routine maintenance update';
     document.getElementById('deploy-strategy').value = 'manual';
+    updateStrategyInfo(); // Reset info display
 }
 
 async function deploySingleAgent(event) {
