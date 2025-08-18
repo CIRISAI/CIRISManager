@@ -187,6 +187,180 @@ class DeploymentOrchestrator:
             # Save state after adding event
             self._save_state()
 
+    async def start_single_agent_deployment(
+        self, notification: UpdateNotification, agent: AgentInfo
+    ) -> DeploymentStatus:
+        """
+        Start a deployment for a single agent (for testing purposes).
+
+        This method allows targeted deployment to a specific agent,
+        bypassing canary groups and deploying immediately.
+
+        Args:
+            notification: Update notification with target version
+            agent: The specific agent to deploy to
+
+        Returns:
+            Deployment status
+        """
+        async with self._deployment_lock:
+            if self.current_deployment:
+                raise ValueError(f"Deployment {self.current_deployment} already in progress")
+
+            deployment_id = str(uuid4())
+
+            # Pull the new image first
+            logger.info(f"Pulling image {notification.agent_image} for single agent deployment")
+            pull_results = await self._pull_images(notification)
+
+            if not pull_results["success"]:
+                return DeploymentStatus(
+                    deployment_id=deployment_id,
+                    notification=notification,
+                    agents_total=1,
+                    agents_updated=0,
+                    agents_deferred=0,
+                    agents_failed=1,
+                    started_at=datetime.now(timezone.utc).isoformat(),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                    status="failed",
+                    message=f"Failed to pull image: {pull_results.get('error', 'Unknown error')}",
+                )
+
+            # Check if agent actually needs updating
+            needs_update = await self._agent_needs_update(agent, notification.agent_image)
+
+            if not needs_update:
+                logger.info(f"Agent {agent.agent_id} already running {notification.agent_image}")
+                return DeploymentStatus(
+                    deployment_id=deployment_id,
+                    notification=notification,
+                    agents_total=1,
+                    agents_updated=0,
+                    agents_deferred=0,
+                    agents_failed=0,
+                    started_at=datetime.now(timezone.utc).isoformat(),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                    status="completed",
+                    message=f"Agent {agent.agent_id} already running target version",
+                )
+
+            # Create deployment status
+            status = DeploymentStatus(
+                deployment_id=deployment_id,
+                notification=notification,
+                agents_total=1,
+                agents_updated=0,
+                agents_deferred=0,
+                agents_failed=0,
+                started_at=datetime.now(timezone.utc).isoformat(),
+                staged_at=None,
+                completed_at=None,
+                status="in_progress",
+                message=f"Single agent deployment to {agent.agent_id}: {notification.message}",
+                canary_phase=None,  # No canary for single agent
+            )
+
+            self.deployments[deployment_id] = status
+            self.current_deployment = deployment_id
+
+            # Persist state
+            await self._save_state()
+
+            # Start the deployment in background
+            task = asyncio.create_task(
+                self._execute_single_agent_deployment(deployment_id, notification, agent)
+            )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+            return status
+
+    async def _execute_single_agent_deployment(
+        self, deployment_id: str, notification: UpdateNotification, agent: AgentInfo
+    ) -> None:
+        """Execute single agent deployment."""
+        try:
+            status = self.deployments[deployment_id]
+
+            # Update the single agent
+            logger.info(f"Updating agent {agent.agent_id} to {notification.agent_image}")
+            update_response = await self._update_single_agent(deployment_id, notification, agent)
+
+            if update_response.decision == "accept":
+                status.agents_updated = 1
+
+                # Wait for agent to reach WORK state
+                logger.info(f"Waiting for agent {agent.agent_id} to reach WORK state")
+                success, results = await self._check_canary_group_health(
+                    deployment_id=deployment_id,
+                    agents=[agent],
+                    phase_name="single_agent",
+                    wait_for_work_minutes=5,  # 5 minutes for single agent
+                    stability_minutes=1,  # 1 minute stability
+                )
+
+                if success:
+                    status.status = "completed"
+                    status.message = f"Successfully deployed to {agent.agent_id}"
+
+                    # Record in version tracker
+                    tracker = get_version_tracker()
+                    await tracker.record_deployment(
+                        container_type="agents",
+                        image=notification.agent_image,
+                        deployment_id=deployment_id,
+                        deployed_by=notification.metadata.get("initiated_by", "system"),
+                    )
+                else:
+                    status.status = "failed"
+                    status.agents_failed = 1
+                    status.agents_updated = 0
+                    status.message = f"Agent {agent.agent_id} failed to reach stable WORK state"
+
+            elif update_response.decision == "defer":
+                status.agents_deferred = 1
+                status.status = "completed"
+                status.message = f"Agent {agent.agent_id} deferred the update"
+            else:
+                status.agents_failed = 1
+                status.status = "failed"
+                status.message = (
+                    f"Agent {agent.agent_id} rejected the update: {update_response.reason}"
+                )
+
+            status.completed_at = datetime.now(timezone.utc).isoformat()
+
+        except Exception as e:
+            logger.error(f"Single agent deployment {deployment_id} failed: {e}")
+            status.status = "failed"
+            status.agents_failed = 1
+            status.message = f"Deployment failed: {str(e)}"
+            status.completed_at = datetime.now(timezone.utc).isoformat()
+        finally:
+            self.current_deployment = None
+            await self._save_state()
+
+    async def _agent_needs_update(self, agent: AgentInfo, target_image: str) -> bool:
+        """Check if a specific agent needs updating to target image."""
+        try:
+            import docker
+
+            client = docker.from_env()
+
+            container = client.containers.get(agent.container_name)
+            current_image = container.image.tags[0] if container.image.tags else container.image.id
+
+            # Normalize image names for comparison
+            current = current_image.split(":")[-1] if ":" in current_image else "latest"
+            target = target_image.split(":")[-1] if ":" in target_image else "latest"
+
+            return current != target
+
+        except Exception as e:
+            logger.warning(f"Could not check if agent {agent.agent_id} needs update: {e}")
+            return True  # Assume update needed if we can't check
+
     async def start_deployment(
         self,
         notification: UpdateNotification,

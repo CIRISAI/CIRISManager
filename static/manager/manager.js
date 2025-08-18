@@ -115,6 +115,9 @@ function renderAgents() {
                         <button onclick="showOAuthSetup('${agent.agent_id}')" class="px-3 py-1 text-indigo-600 hover:bg-indigo-50 rounded">
                             <i class="fas fa-key"></i> OAuth
                         </button>
+                        <button onclick="showDeployVersion('${agent.agent_id}')" class="px-3 py-1 text-amber-600 hover:bg-amber-50 rounded" title="Deploy specific version to this agent">
+                            <i class="fas fa-rocket"></i> Deploy
+                        </button>
                     </div>
                     <div>
                         ${agent.status === 'running' ? `
@@ -1669,6 +1672,105 @@ function showOAuthModal(agentId) {
 
 function hideOAuthModal() {
     document.getElementById('oauth-setup-modal').classList.add('hidden');
+}
+
+// Single Agent Deployment Functions
+function showDeployVersion(agentId) {
+    const modal = document.getElementById('single-deploy-modal');
+    const agentSpan = document.getElementById('deploy-agent-id');
+    
+    agentSpan.textContent = agentId;
+    modal.classList.remove('hidden');
+}
+
+function closeSingleDeployModal() {
+    const modal = document.getElementById('single-deploy-modal');
+    modal.classList.add('hidden');
+    
+    // Reset form
+    document.getElementById('single-deploy-form').reset();
+}
+
+async function deploySingleAgent(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const agentId = document.getElementById('deploy-agent-id').textContent;
+    const version = form.version.value.trim();
+    const message = form.message.value.trim();
+    const strategy = form.strategy.value;
+    
+    // Construct the full image name
+    const agentImage = version === 'latest' 
+        ? 'ghcr.io/cirisai/ciris-agent:latest'
+        : `ghcr.io/cirisai/ciris-agent:${version.startsWith('v') ? version.substring(1) : version}`;
+    
+    try {
+        showLoading();
+        
+        const response = await fetch('/manager/v1/updates/deploy-single', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+                agent_id: agentId,
+                agent_image: agentImage,
+                message: message,
+                strategy: strategy,
+                metadata: {
+                    test_deployment: true,
+                    source: 'manager_ui'
+                }
+            })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to start deployment');
+        }
+        
+        const result = await response.json();
+        
+        showSuccess(`Deployment ${result.deployment_id} started for ${agentId}`);
+        closeSingleDeployModal();
+        
+        // Show deployment progress notification
+        showDeploymentProgress(result);
+        
+    } catch (error) {
+        showError(`Deployment failed: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+function showDeploymentProgress(deployment) {
+    // Create a notification showing deployment progress
+    const notification = document.createElement('div');
+    notification.className = 'fixed bottom-4 right-4 bg-white border border-amber-200 rounded-lg shadow-lg p-4 max-w-md';
+    notification.innerHTML = `
+        <div class="flex items-start gap-3">
+            <div class="animate-spin">
+                <i class="fas fa-circle-notch text-amber-600"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="font-semibold text-sm">Deployment in Progress</h4>
+                <p class="text-xs text-gray-600 mt-1">
+                    Deploying to ${deployment.agent_id}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">
+                    ID: ${deployment.deployment_id}
+                </p>
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => notification.remove(), 10000);
 }
 
 // Show OAuth setup for a specific agent

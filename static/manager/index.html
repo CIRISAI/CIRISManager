@@ -698,6 +698,78 @@
         </div>
     </div>
 
+    <!-- Single Agent Deployment Modal -->
+    <div id="single-deploy-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg max-w-2xl w-full">
+            <div class="p-6">
+                <h2 class="text-2xl font-bold mb-4">Deploy Version to Agent</h2>
+                <p class="text-gray-600 mb-6">Deploy a specific version to <span id="deploy-agent-id" class="font-mono font-bold"></span></p>
+
+                <form id="single-deploy-form" onsubmit="deploySingleAgent(event)">
+                    <div class="space-y-4">
+                        <!-- Version Input -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Target Version</label>
+                            <input type="text" 
+                                   id="deploy-version" 
+                                   name="version" 
+                                   placeholder="e.g., v1.4.5 or latest" 
+                                   class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                   required>
+                            <p class="text-xs text-gray-500 mt-1">Enter a version tag or 'latest' for the newest version</p>
+                        </div>
+
+                        <!-- Deployment Message -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Deployment Message</label>
+                            <input type="text" 
+                                   id="deploy-message" 
+                                   name="message" 
+                                   placeholder="Testing new feature X" 
+                                   class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                   required>
+                            <p class="text-xs text-gray-500 mt-1">Brief description of why you're deploying this version</p>
+                        </div>
+
+                        <!-- Strategy Selection -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Deployment Strategy</label>
+                            <select id="deploy-strategy" 
+                                    name="strategy" 
+                                    class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <option value="immediate" selected>Immediate - Deploy right away</option>
+                                <option value="manual">Manual - Agent decides when to update</option>
+                            </select>
+                        </div>
+
+                        <!-- Warning -->
+                        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                            <div class="flex items-start gap-2">
+                                <i class="fas fa-exclamation-triangle text-amber-600 mt-1"></i>
+                                <div>
+                                    <p class="text-sm font-medium text-amber-900">Test Deployment</p>
+                                    <p class="text-xs text-amber-700 mt-1">
+                                        This will deploy directly to a single agent for testing. 
+                                        The agent will follow its configured update consent policy.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button type="button" onclick="closeSingleDeployModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700">
+                            <i class="fas fa-rocket mr-2"></i>Deploy to Agent
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Agent Settings Modal -->
     <div id="agent-settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">

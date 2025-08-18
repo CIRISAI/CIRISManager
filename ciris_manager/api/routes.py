@@ -1682,6 +1682,77 @@ def create_routes(manager: Any) -> APIRouter:
         else:
             raise HTTPException(status_code=404, detail="Deployment not found")
 
+    @router.post("/updates/deploy-single")
+    async def deploy_single_agent(
+        request: Dict[str, Any], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """
+        Deploy a specific version to a single agent for testing.
+
+        This endpoint allows targeted deployment to individual agents,
+        respecting the consensual deployment system.
+
+        Request body:
+        {
+            "agent_id": "datum",
+            "agent_image": "ghcr.io/cirisai/ciris-agent:v1.4.5",
+            "message": "Testing new feature X",
+            "strategy": "immediate",  # immediate recommended for single agent
+            "metadata": {...}
+        }
+        """
+        agent_id = request.get("agent_id")
+        agent_image = request.get("agent_image")
+        message = request.get("message", "Single agent test deployment")
+        strategy = request.get("strategy", "immediate")
+        metadata = request.get("metadata", {})
+
+        if not agent_id:
+            raise HTTPException(status_code=400, detail="agent_id is required")
+        if not agent_image:
+            raise HTTPException(status_code=400, detail="agent_image is required")
+
+        # Get the specific agent
+        from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+        discovery = DockerAgentDiscovery(manager.agent_registry)
+        agents = discovery.discover_agents()
+
+        target_agent = next((a for a in agents if a.agent_id == agent_id), None)
+        if not target_agent:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+        # Create a targeted update notification
+        notification = UpdateNotification(
+            agent_image=agent_image,
+            message=message,
+            strategy=strategy,
+            metadata={
+                **metadata,
+                "single_agent_deployment": True,
+                "target_agent": agent_id,
+                "initiated_by": _user.get("email", "unknown"),
+            },
+        )
+
+        # Start deployment for just this agent
+        deployment_status = await deployment_orchestrator.start_single_agent_deployment(
+            notification, target_agent
+        )
+
+        logger.info(
+            f"Single agent deployment {deployment_status.deployment_id} started for {agent_id} "
+            f"by {_user.get('email', 'unknown')}"
+        )
+
+        return {
+            "deployment_id": deployment_status.deployment_id,
+            "agent_id": agent_id,
+            "status": deployment_status.status,
+            "message": deployment_status.message,
+            "image": agent_image,
+        }
+
     @router.get("/updates/latest/changelog")
     async def get_latest_changelog() -> Dict[str, Any]:
         """
