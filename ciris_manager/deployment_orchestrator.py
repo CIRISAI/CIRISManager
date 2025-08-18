@@ -356,6 +356,7 @@ class DeploymentOrchestrator:
             client = docker.from_env()
 
             container = client.containers.get(agent.container_name)
+            current_image: str = ""
             if container.image and container.image.tags:
                 current_image = container.image.tags[0]
             elif container.image:
