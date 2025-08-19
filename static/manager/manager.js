@@ -1559,6 +1559,22 @@ async function logout() {
     }
 }
 
+// Show loading indicator
+function showLoading() {
+    const loading = document.getElementById('loading');
+    const app = document.getElementById('app');
+    if (loading) loading.classList.remove('hidden');
+    if (app) app.classList.add('hidden');
+}
+
+// Hide loading indicator
+function hideLoading() {
+    const loading = document.getElementById('loading');
+    const app = document.getElementById('app');
+    if (loading) loading.classList.add('hidden');
+    if (app) app.classList.remove('hidden');
+}
+
 // Show error message
 function showError(message) {
     const alert = document.getElementById('error-alert');
