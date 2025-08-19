@@ -153,8 +153,9 @@ class DockerAgentDiscovery:
                     agent_info.version = version_info.get("version")
                     agent_info.codename = version_info.get("codename")
                     agent_info.code_hash = version_info.get("code_hash")
+                    agent_info.cognitive_state = version_info.get("cognitive_state")
                     logger.debug(
-                        f"Agent {agent_id} version: {agent_info.version} ({agent_info.codename})"
+                        f"Agent {agent_id} version: {agent_info.version} ({agent_info.codename}) state: {agent_info.cognitive_state}"
                     )
 
             return agent_info
@@ -189,6 +190,7 @@ class DockerAgentDiscovery:
                         "version": data.get("version"),
                         "codename": data.get("codename"),
                         "code_hash": data.get("code_hash"),
+                        "cognitive_state": data.get("cognitive_state"),
                     }
                 else:
                     logger.debug(

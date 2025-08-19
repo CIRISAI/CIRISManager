@@ -31,6 +31,9 @@ class AgentInfo(BaseModel):
     code_hash: Optional[str] = Field(
         None, description="Agent code hash for exact version identification"
     )
+    cognitive_state: Optional[str] = Field(
+        None, description="Agent cognitive state (WAKEUP, WORK, SHUTDOWN, etc.)"
+    )
     # Runtime configuration from environment
     mock_llm: Optional[bool] = Field(None, description="Whether agent is using mock LLM")
     discord_enabled: Optional[bool] = Field(None, description="Whether Discord adapter is enabled")
