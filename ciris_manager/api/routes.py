@@ -572,6 +572,7 @@ def create_routes(manager: Any) -> APIRouter:
     async def start_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
         """
         Start a stopped agent container using Docker.
+        If the image has changed, recreate the container with the new image.
         """
         try:
             # Check if agent exists in registry
@@ -582,7 +583,7 @@ def create_routes(manager: Any) -> APIRouter:
             # Get container name
             container_name = f"ciris-agent-{agent_id}"
 
-            # Use Docker API to start the container
+            # Use Docker API to check container state
             import docker
 
             client = docker.from_env()
@@ -599,8 +600,54 @@ def create_routes(manager: Any) -> APIRouter:
                         "container": container_name,
                     }
 
-                # Start the container
-                container.start()
+                # Check if the container's image matches what we expect
+                expected_image = "ghcr.io/cirisai/ciris-agent:latest"
+                container_image = container.image.tags[0] if container.image.tags else ""
+
+                # If image has changed or we have a compose file, recreate the container
+                if container_image != expected_image or (agent and agent.compose_file):
+                    logger.info(
+                        f"Container image changed from {container_image} to {expected_image}, recreating container"
+                    )
+
+                    # Use docker-compose to recreate with new image
+                    if agent and agent.compose_file:
+                        compose_path = Path(agent.compose_file)
+                        if compose_path.exists():
+                            result = await asyncio.create_subprocess_exec(
+                                "docker-compose",
+                                "-f",
+                                str(compose_path),
+                                "up",
+                                "-d",
+                                "--pull",
+                                "always",
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE,
+                            )
+                            stdout, stderr = await result.communicate()
+
+                            if result.returncode == 0:
+                                logger.info(
+                                    f"Agent {agent_id} recreated with new image by {user['email']}"
+                                )
+                                return {
+                                    "status": "success",
+                                    "agent_id": agent_id,
+                                    "message": f"Agent {agent_id} is starting with updated image",
+                                    "container": container_name,
+                                }
+                            else:
+                                raise HTTPException(
+                                    status_code=500,
+                                    detail=f"Failed to recreate agent: {stderr.decode()}",
+                                )
+                    else:
+                        # No compose file, just start the existing container
+                        container.start()
+                else:
+                    # Same image, just start the container
+                    container.start()
 
                 logger.info(f"Agent {agent_id} started by {user['email']}")
 
