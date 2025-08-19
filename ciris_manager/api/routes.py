@@ -1216,7 +1216,7 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=500, detail="Failed to load template details")
 
     @router.get("/env/default")
-    async def get_default_env() -> Dict[str, str]:
+    async def get_default_env(user: dict = auth_dependency) -> Dict[str, str]:
         """Get default environment variables for agent creation."""
         from pathlib import Path
 
