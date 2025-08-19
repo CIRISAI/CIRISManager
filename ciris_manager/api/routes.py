@@ -602,7 +602,9 @@ def create_routes(manager: Any) -> APIRouter:
 
                 # Check if the container's image matches what we expect
                 expected_image = "ghcr.io/cirisai/ciris-agent:latest"
-                container_image = container.image.tags[0] if container.image.tags else ""
+                container_image = ""
+                if container.image and container.image.tags:
+                    container_image = container.image.tags[0]
 
                 # If image has changed or we have a compose file, recreate the container
                 if container_image != expected_image or (agent and agent.compose_file):
