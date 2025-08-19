@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Loading Functions</title>
+    <style>
+        .hidden { display: none; }
+        .test-pass { color: green; }
+        .test-fail { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Testing Loading Functions</h1>
+    
+    <!-- Mock elements that manager.js expects -->
+    <div id="loading" class="hidden">Loading...</div>
+    <div id="app">App Content</div>
+    <div id="error-alert" class="hidden">
+        <span id="error-message"></span>
+    </div>
+    
+    <div id="test-results"></div>
+    
+    <!-- Load manager.js with cache buster -->
+    <script src="/manager/manager.js?v=20250819.1"></script>
+    
+    <script>
+        function runTests() {
+            const results = document.getElementById('test-results');
+            let html = '<h2>Test Results:</h2><ul>';
+            
+            // Test 1: Check if functions exist
+            if (typeof showLoading === 'function') {
+                html += '<li class="test-pass">✓ showLoading is defined</li>';
+            } else {
+                html += '<li class="test-fail">✗ showLoading is NOT defined</li>';
+            }
+            
+            if (typeof hideLoading === 'function') {
+                html += '<li class="test-pass">✓ hideLoading is defined</li>';
+            } else {
+                html += '<li class="test-fail">✗ hideLoading is NOT defined</li>';
+            }
+            
+            if (typeof showError === 'function') {
+                html += '<li class="test-pass">✓ showError is defined</li>';
+            } else {
+                html += '<li class="test-fail">✗ showError is NOT defined</li>';
+            }
+            
+            if (typeof deployToSingleAgent === 'function') {
+                html += '<li class="test-pass">✓ deployToSingleAgent is defined</li>';
+            } else {
+                html += '<li class="test-fail">✗ deployToSingleAgent is NOT defined</li>';
+            }
+            
+            // Test 2: Test showLoading/hideLoading functionality
+            try {
+                showLoading();
+                const loading = document.getElementById('loading');
+                const app = document.getElementById('app');
+                
+                if (!loading.classList.contains('hidden') && app.classList.contains('hidden')) {
+                    html += '<li class="test-pass">✓ showLoading works correctly</li>';
+                } else {
+                    html += '<li class="test-fail">✗ showLoading did not work as expected</li>';
+                }
+                
+                hideLoading();
+                if (loading.classList.contains('hidden') && !app.classList.contains('hidden')) {
+                    html += '<li class="test-pass">✓ hideLoading works correctly</li>';
+                } else {
+                    html += '<li class="test-fail">✗ hideLoading did not work as expected</li>';
+                }
+            } catch (e) {
+                html += '<li class="test-fail">✗ Error testing loading functions: ' + e.message + '</li>';
+            }
+            
+            html += '</ul>';
+            results.innerHTML = html;
+        }
+        
+        // Run tests when page loads
+        window.addEventListener('load', runTests);
+    </script>
+</body>
+</html>
