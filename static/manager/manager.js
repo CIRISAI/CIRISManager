@@ -70,7 +70,27 @@ function renderAgents() {
         return;
     }
 
-    container.innerHTML = agents.map(agent => `
+    container.innerHTML = agents.map(agent => {
+        // Determine cognitive state badge
+        let cognitiveStateBadge = '';
+        if (agent.cognitive_state) {
+            const stateColors = {
+                'WAKEUP': 'bg-yellow-100 text-yellow-700',
+                'WORK': 'bg-green-100 text-green-700',
+                'SHUTDOWN': 'bg-red-100 text-red-700',
+                'SLEEP': 'bg-gray-100 text-gray-700',
+                'ERROR': 'bg-red-100 text-red-700'
+            };
+            const color = stateColors[agent.cognitive_state] || 'bg-gray-100 text-gray-700';
+            cognitiveStateBadge = `
+                <span class="px-2 py-1 ${color} text-sm rounded" title="Cognitive State">
+                    <i class="fas fa-brain text-xs"></i>
+                    ${escapeHtml(agent.cognitive_state)}
+                </span>
+            `;
+        }
+
+        return `
         <div class="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
             <div class="flex items-start justify-between">
                 <div class="space-y-1">
@@ -97,6 +117,7 @@ function renderAgents() {
                                 ${escapeHtml(agent.code_hash.substring(0, 7))}
                             </span>
                         ` : ''}
+                        ${cognitiveStateBadge}
                     </div>
                     <div class="text-sm text-gray-600 space-y-1">
                         <div>ID: ${escapeHtml(agent.agent_id)}</div>
@@ -143,9 +164,11 @@ function renderAgents() {
                             <i class="fas fa-trash"></i> Delete
                         </button>
                     </div>
+                </div>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // Render manager status
