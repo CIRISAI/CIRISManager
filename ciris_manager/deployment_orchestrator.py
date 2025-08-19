@@ -2537,19 +2537,13 @@ class DeploymentOrchestrator:
                         f"Manager forced restart for agent {agent.agent_id} - bypassing API"
                     )
 
-                    # Directly restart the container
-                    try:
-                        import docker
+                    # Recreate the container with the new image
+                    logger.info(f"Recreating container {agent.container_name} with new image...")
 
-                        docker_client = docker.from_env()
-                        container = docker_client.containers.get(agent.container_name)
+                    # Use the existing proper recreation method
+                    recreated = await self._recreate_agent_container(agent.agent_id)
 
-                        logger.info(f"Stopping container {agent.container_name} forcefully...")
-                        container.stop(timeout=10)  # Give 10 seconds for graceful stop
-
-                        logger.info(f"Starting container {agent.container_name} with new image...")
-                        container.start()
-
+                    if recreated:
                         # Update metadata with new image
                         if self.manager:
                             await self._update_agent_metadata(agent.agent_id, notification)
@@ -2557,17 +2551,15 @@ class DeploymentOrchestrator:
                         return AgentUpdateResponse(
                             agent_id=agent.agent_id,
                             decision="accept",
-                            reason="Container forcefully restarted via Docker",
+                            reason="Container forcefully recreated with new image via Docker",
                             ready_at=None,
                         )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to force restart container {agent.container_name}: {e}"
-                        )
+                    else:
+                        logger.error(f"Failed to recreate container for {agent.agent_id}")
                         return AgentUpdateResponse(
                             agent_id=agent.agent_id,
                             decision="reject",
-                            reason=f"Docker restart failed: {str(e)}",
+                            reason="Failed to recreate container",
                             ready_at=None,
                         )
 
