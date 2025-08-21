@@ -1300,7 +1300,9 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Deployment token management endpoint (protected)
     @router.get("/deployment/tokens")
-    async def get_deployment_tokens(_user: Dict[str, str] = Depends(ciris_user)) -> Dict[str, Any]:
+    async def get_deployment_tokens(
+        _user: Dict[str, str] = Depends(get_current_user),
+    ) -> Dict[str, Any]:
         """
         Get deployment tokens for GitHub secrets configuration.
         Only accessible to @ciris.ai users.

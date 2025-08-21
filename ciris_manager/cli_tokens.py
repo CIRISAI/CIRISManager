@@ -7,13 +7,13 @@ Usage:
     ciris-manager tokens regenerate <repo>  # Regenerate token for specific repo
 """
 
-import click
 import sys
 from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import click
 from ciris_manager.deployment_tokens import DeploymentTokenManager
 
 
