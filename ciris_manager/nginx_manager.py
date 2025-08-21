@@ -328,10 +328,14 @@ http {
             add_header X-Content-Type-Options "nosniff";
         }
         
-        # Public Dashboard (no auth required)
+        # Public Dashboard (served by CIRISLens)
         location /dashboard/ {
-            root /home/ciris/static;
-            try_files $uri $uri/ /dashboard/index.html;
+            proxy_pass http://cirislens/dashboard/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
             
             # Add appropriate headers
             add_header X-Frame-Options "SAMEORIGIN";
@@ -339,9 +343,11 @@ http {
             add_header Cache-Control "public, max-age=300";
         }
         
-        # Telemetry SDK for dashboard
+        # Telemetry SDK (served by CIRISLens)
         location /static/ciristelemetry-sdk.min.js {
-            alias /home/ciris/static/sdk/ciristelemetry-sdk.min.js;
+            proxy_pass http://cirislens/static/ciristelemetry-sdk.min.js;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
             add_header Content-Type "application/javascript";
             add_header Cache-Control "public, max-age=3600";
         }
@@ -389,9 +395,9 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
         
-        # Public telemetry endpoints (no auth required)
-        location /telemetry/public/ {
-            proxy_pass http://manager/manager/v1/telemetry/public/;
+        # Public telemetry endpoints (served by CIRISLens)
+        location /telemetry/ {
+            proxy_pass http://cirislens/telemetry/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -400,7 +406,7 @@ http {
             
             # Enable CORS for public API
             add_header Access-Control-Allow-Origin "*";
-            add_header Access-Control-Allow-Methods "GET, OPTIONS";
+            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS";
             add_header Access-Control-Allow-Headers "Content-Type, Authorization";
         }
         
