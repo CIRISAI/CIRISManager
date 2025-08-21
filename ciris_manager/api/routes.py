@@ -93,12 +93,20 @@ def create_routes(manager: Any) -> APIRouter:
     # Initialize deployment orchestrator
     deployment_orchestrator = DeploymentOrchestrator(manager)
 
-    # Deployment tokens for CD authentication (repo-specific)
-    DEPLOY_TOKENS = {
-        "agent": os.getenv("CIRIS_AGENT_DEPLOY_TOKEN"),
-        "gui": os.getenv("CIRIS_GUI_DEPLOY_TOKEN"),
-        "legacy": os.getenv("CIRIS_DEPLOY_TOKEN"),  # Backwards compatibility
-    }
+    # Initialize deployment token manager
+    from ciris_manager.deployment_tokens import DeploymentTokenManager
+
+    token_manager = DeploymentTokenManager()
+
+    # Load deployment tokens (auto-generates if missing)
+    DEPLOY_TOKENS = token_manager.get_all_tokens()
+
+    # Also set them as environment variables for backwards compatibility
+    for repo, token in DEPLOY_TOKENS.items():
+        if repo == "legacy":
+            os.environ["CIRIS_DEPLOY_TOKEN"] = token
+        else:
+            os.environ[f"CIRIS_{repo.upper()}_DEPLOY_TOKEN"] = token
 
     # Check if we're in dev mode - if so, create a mock user dependency
     auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
@@ -1289,6 +1297,28 @@ def create_routes(manager: Any) -> APIRouter:
                 end=manager.port_manager.end_port,
             ),
         )
+
+    # Deployment token management endpoint (protected)
+    @router.get("/deployment/tokens")
+    async def get_deployment_tokens(_user: Dict[str, str] = Depends(ciris_user)) -> Dict[str, Any]:
+        """
+        Get deployment tokens for GitHub secrets configuration.
+        Only accessible to @ciris.ai users.
+        """
+        return {
+            "status": "success",
+            "tokens": {
+                "CIRISAI/CIRISAgent": {
+                    "secret_name": "DEPLOY_TOKEN",
+                    "secret_value": DEPLOY_TOKENS.get("agent", ""),
+                },
+                "CIRISAI/CIRISGUI": {
+                    "secret_name": "DEPLOY_TOKEN",
+                    "secret_value": DEPLOY_TOKENS.get("gui", ""),
+                },
+            },
+            "instructions": "Add these as repository secrets in GitHub Settings > Secrets and variables > Actions",
+        }
 
     # CD Orchestration endpoints
     @router.post("/updates/notify")
