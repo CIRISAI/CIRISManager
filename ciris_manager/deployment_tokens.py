@@ -175,7 +175,7 @@ class DeploymentTokenManager:
 
             try:
                 # Use gh CLI to set the secret
-                result = subprocess.run(
+                subprocess.run(
                     ["gh", "secret", "set", "DEPLOY_TOKEN", "--body", token, "--repo", gh_repo],
                     capture_output=True,
                     text=True,
