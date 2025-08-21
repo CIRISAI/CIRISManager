@@ -254,6 +254,11 @@ http {
     upstream manager {
         server 127.0.0.1:8888;
     }
+    
+    # CIRISLens API upstream
+    upstream cirislens {
+        server 127.0.0.1:8000;
+    }
 """
 
         # Add agent upstreams
@@ -397,6 +402,22 @@ http {
             add_header Access-Control-Allow-Origin "*";
             add_header Access-Control-Allow-Methods "GET, OPTIONS";
             add_header Access-Control-Allow-Headers "Content-Type, Authorization";
+        }
+        
+        # CIRISLens observability platform routes
+        location /lens/ {
+            proxy_pass http://cirislens/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
+            
+            # WebSocket support for live metrics
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
         }
 """
 
