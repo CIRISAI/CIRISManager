@@ -662,11 +662,38 @@ class DeploymentOrchestrator:
             if not deployment.notification:
                 raise ValueError(f"Deployment {deployment_id} has no notification")
 
-            agents_needing_update, _ = await self._check_agents_need_update(
+            agents_needing_update, nginx_needs_update = await self._check_agents_need_update(
                 deployment.notification, agents
             )
 
-            # Start deployment in background
+            # Check if this is a GUI-only update
+            if nginx_needs_update and not agents_needing_update:
+                # Handle GUI-only update immediately
+                logger.info(f"Deployment {deployment_id} is GUI-only, updating directly")
+
+                # Update GUI/nginx containers
+                gui_image = deployment.notification.gui_image or ""
+                nginx_image = deployment.notification.nginx_image or ""
+                nginx_updated = await self._update_nginx_container(
+                    gui_image,
+                    nginx_image,
+                )
+
+                # Update deployment status
+                deployment.status = "completed" if nginx_updated else "failed"
+                deployment.completed_at = datetime.now(timezone.utc).isoformat()
+                deployment.message = (
+                    "GUI updated successfully" if nginx_updated else "GUI update failed"
+                )
+                self.current_deployment = None
+                self._save_state()
+
+                logger.info(
+                    f"GUI-only deployment {deployment_id} {'succeeded' if nginx_updated else 'failed'}"
+                )
+                return True
+
+            # Start normal agent deployment in background
             task = asyncio.create_task(
                 self._run_deployment(deployment_id, deployment.notification, agents_needing_update)
             )
