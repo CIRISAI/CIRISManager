@@ -157,6 +157,43 @@ class DeploymentTokenManager:
         print("Keep these tokens secure! They authenticate deployments.")
         print("=" * 60 + "\n")
 
+    def set_github_secrets(self) -> bool:
+        """Automatically set tokens in GitHub repositories using gh CLI."""
+        import subprocess
+
+        repos_config = {
+            "agent": "CIRISAI/CIRISAgent",
+            "gui": "CIRISAI/CIRISGUI",
+        }
+
+        success = True
+        for repo, gh_repo in repos_config.items():
+            token = self.tokens.get(repo, "")
+            if not token:
+                logger.warning(f"No token found for {repo}")
+                continue
+
+            try:
+                # Use gh CLI to set the secret
+                result = subprocess.run(
+                    ["gh", "secret", "set", "DEPLOY_TOKEN", "--body", token, "--repo", gh_repo],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                logger.info(f"✅ Set DEPLOY_TOKEN for {gh_repo}")
+                print(f"✅ Set DEPLOY_TOKEN for {gh_repo}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to set token for {gh_repo}: {e.stderr}")
+                print(f"❌ Failed to set token for {gh_repo}: {e.stderr}")
+                success = False
+            except FileNotFoundError:
+                logger.error("gh CLI not found. Please install GitHub CLI.")
+                print("❌ gh CLI not found. Please install GitHub CLI: https://cli.github.com/")
+                return False
+
+        return success
+
 
 # CLI interface for token management
 if __name__ == "__main__":
@@ -169,6 +206,11 @@ if __name__ == "__main__":
 
         if command == "show":
             manager.print_github_secrets()
+        elif command == "set":
+            if manager.set_github_secrets():
+                print("\n✅ All GitHub secrets updated successfully!")
+            else:
+                print("\n⚠️  Some secrets failed to update. Check the errors above.")
         elif command == "regenerate" and len(sys.argv) > 2:
             repo = sys.argv[2]
             if repo in ["agent", "gui", "legacy"]:
@@ -177,7 +219,7 @@ if __name__ == "__main__":
             else:
                 print(f"Unknown repo: {repo}")
         else:
-            print("Usage: python deployment_tokens.py [show|regenerate <repo>]")
+            print("Usage: python deployment_tokens.py [show|set|regenerate <repo>]")
     else:
         # Default: ensure tokens exist and show them
         manager.print_github_secrets()
