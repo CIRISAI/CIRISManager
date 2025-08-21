@@ -13,8 +13,8 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import click
-from ciris_manager.deployment_tokens import DeploymentTokenManager
+import click  # noqa: E402
+from ciris_manager.deployment_tokens import DeploymentTokenManager  # noqa: E402
 
 
 @click.group()
