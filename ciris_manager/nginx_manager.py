@@ -225,6 +225,12 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
     
+    # WebSocket connection upgrade mapping
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+    
     # Performance settings
     sendfile on;
     tcp_nopush on;
@@ -378,6 +384,19 @@ http {
             return 301 /lens/;
         }
         
+        # Grafana WebSocket endpoint
+        location /lens/api/live/ws {
+            proxy_pass http://127.0.0.1:3001/api/live/ws;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 86400s;
+        }
+        
         location /lens/ {
             proxy_pass http://127.0.0.1:3001/;
             proxy_http_version 1.1;
@@ -385,12 +404,14 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Server $host;
             proxy_read_timeout 300s;
             proxy_connect_timeout 75s;
             
             # WebSocket support for live metrics
             proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
+            proxy_set_header Connection $connection_upgrade;
         }
         
         # CIRISLens Admin UI (OAuth protected)
