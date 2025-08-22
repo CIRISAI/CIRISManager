@@ -525,9 +525,8 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
             
             # Cache static assets
-            proxy_cache_valid 200 1d;
-            proxy_cache_bypass $http_cache_control;
-            add_header X-Proxy-Cache $upstream_cache_status;
+            expires 1d;
+            add_header Cache-Control "public, immutable";
         }
         
         # Root and all GUI routes - Agent GUI (login page) handles routing internally
