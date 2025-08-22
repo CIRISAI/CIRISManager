@@ -379,7 +379,7 @@ http {
         }
         
         location /lens/ {
-            proxy_pass http://127.0.0.1:3001/lens/;
+            proxy_pass http://127.0.0.1:3002/lens/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
