@@ -397,21 +397,6 @@ http {
             proxy_read_timeout 86400s;
         }
         
-        # Grafana public assets (fonts, images, plugins, etc.)
-        location /public/ {
-            proxy_pass http://127.0.0.1:3001/public/;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            
-            # Cache static assets
-            proxy_cache_valid 200 1d;
-            proxy_cache_bypass $http_cache_control;
-            add_header X-Proxy-Cache $upstream_cache_status;
-        }
-        
         # Grafana API endpoints
         location /lens/api/ {
             proxy_pass http://127.0.0.1:3001/api/;
@@ -528,6 +513,21 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        # Grafana public assets (fonts, images, plugins, etc.) - must come before root catch-all
+        location /public/ {
+            proxy_pass http://127.0.0.1:3001/public/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Cache static assets
+            proxy_cache_valid 200 1d;
+            proxy_cache_bypass $http_cache_control;
+            add_header X-Proxy-Cache $upstream_cache_status;
         }
         
         # Root and all GUI routes - Agent GUI (login page) handles routing internally
