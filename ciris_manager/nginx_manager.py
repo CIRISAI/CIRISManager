@@ -425,21 +425,14 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
         
-        # CIRISLens API
-        location /lens/api/ {
+        # CIRISLens Backend API (for admin operations)
+        location /lens/backend/ {
             proxy_pass http://127.0.0.1:8200/api/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-        }
-        
-        # CIRISLens Health Check
-        location = /lens/health {
-            proxy_pass http://127.0.0.1:8200/health;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
         }
 """
 
