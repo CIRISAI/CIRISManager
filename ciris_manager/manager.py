@@ -246,6 +246,7 @@ class CIRISManager:
 
         # Copy init script to agent directory
         import shutil
+
         init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
         init_script_dst = agent_dir / "init_permissions.sh"
         if init_script_src.exists():
