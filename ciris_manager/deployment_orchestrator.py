@@ -480,11 +480,11 @@ class DeploymentOrchestrator:
                     else "Failed to update GUI container",
                     canary_phase=None,
                 )
-                
+
                 # Add to deployments history
                 self.deployments[deployment_id] = status
                 self._save_state()
-                
+
                 return status
 
             deployment_id = str(uuid4())
@@ -689,7 +689,9 @@ class DeploymentOrchestrator:
                 deployment.status = "completed" if nginx_updated else "failed"
                 deployment.completed_at = datetime.now(timezone.utc).isoformat()
                 deployment.message = (
-                    "GUI Update: GUI container updated successfully" if nginx_updated else "GUI Update: Failed to update GUI container"
+                    "GUI Update: GUI container updated successfully"
+                    if nginx_updated
+                    else "GUI Update: Failed to update GUI container"
                 )
                 # Ensure agents_total is 0 for GUI-only updates
                 deployment.agents_total = 0
