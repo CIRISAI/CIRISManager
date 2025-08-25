@@ -1132,7 +1132,11 @@ function renderVersionData(data) {
                 <div>
                     <div class="flex justify-between text-sm mb-1">
                         <span class="font-medium">Progress</span>
-                        <span>${deployment.agents_updated} of ${deployment.agents_total} agents (${progressPercent}%)</span>
+                        <span>${
+                            deployment.agents_total === 0 && deployment.message && deployment.message.includes('GUI Update') 
+                                ? 'GUI container update'
+                                : `${deployment.agents_updated} of ${deployment.agents_total} agents (${progressPercent}%)`
+                        }</span>
                     </div>
                     <div class="w-full bg-gray-200 rounded-full h-2">
                         <div class="h-2 rounded-full transition-all duration-500 ${
@@ -1229,7 +1233,11 @@ function renderVersionData(data) {
                                     <div class="flex items-center gap-2">
                                         <i class="fas ${statusIcon} ${statusColor} text-sm"></i>
                                         <span class="text-sm font-medium">
-                                            ${deployment.agents_updated} of ${deployment.agents_total} agents notified
+                                            ${
+                                                deployment.agents_total === 0 && deployment.message && deployment.message.includes('GUI Update')
+                                                    ? 'GUI container updated'
+                                                    : `${deployment.agents_updated} of ${deployment.agents_total} agents notified`
+                                            }
                                         </span>
                                     </div>
                                     <div class="text-xs text-gray-600 mt-1">
@@ -1380,7 +1388,11 @@ function renderVersionData(data) {
                     <div class="text-sm font-medium">${escapeHtml(deployment.message)}</div>
                     <div class="text-xs text-gray-500">
                         ${formatDate(deployment.completed_at)} -
-                        ${deployment.agents_updated} of ${deployment.agents_total} agents updated
+                        ${
+                            deployment.agents_total === 0 && deployment.message && deployment.message.includes('GUI Update')
+                                ? 'GUI container updated'
+                                : `${deployment.agents_updated} of ${deployment.agents_total} agents updated`
+                        }
                     </div>
                 </div>
                 <span class="px-2 py-1 text-xs rounded ${
@@ -3013,7 +3025,11 @@ async function updateDeploymentStatus() {
                     </div>
                     <div class="flex justify-between">
                         <span class="font-medium">Progress:</span>
-                        <span>${data.agents_updated || 0}/${data.agents_total || 0}</span>
+                        <span>${
+                            data.agents_total === 0 && data.message && data.message.includes('GUI Update')
+                                ? 'GUI update'
+                                : `${data.agents_updated || 0}/${data.agents_total || 0}`
+                        }</span>
                     </div>
                     ${data.message ? `<div class="text-sm text-gray-600 italic">${data.message}</div>` : ''}
                 </div>
