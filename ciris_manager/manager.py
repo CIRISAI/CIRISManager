@@ -244,35 +244,24 @@ class CIRISManager:
             dir_path.chmod(permissions)
             logger.info(f"Created directory {dir_path} with permissions {oct(permissions)}")
 
-        # Change ownership to ciris user so containers can write
-        # The ciris user (uid=1005) is what the containers run as
+        # Change ownership to match container's ciris user (uid=1000, gid=1000)
+        # IMPORTANT: Container ciris user is 1000, not 1005 like host ciris user!
         import subprocess
 
         try:
-            # Change ownership of entire agent directory to ciris:ciris
+            # Change ownership to uid/gid 1000 (container's ciris user)
             subprocess.run(
-                ["chown", "-R", "ciris:ciris", str(agent_dir)],
+                ["chown", "-R", "1000:1000", str(agent_dir)],
                 check=True,
                 capture_output=True,
                 text=True,
             )
             logger.info(
-                f"Changed ownership of {agent_dir} to ciris:ciris for container compatibility"
+                f"Changed ownership of {agent_dir} to uid/gid 1000 for container compatibility"
             )
         except subprocess.CalledProcessError as e:
-            logger.warning(f"Could not change ownership to ciris:ciris: {e.stderr}")
-            # Try with numeric IDs as fallback (1005:1005)
-            try:
-                subprocess.run(
-                    ["chown", "-R", "1005:1005", str(agent_dir)],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                logger.info(f"Changed ownership of {agent_dir} to uid/gid 1005 (ciris)")
-            except subprocess.CalledProcessError as e2:
-                logger.error(f"Failed to set proper ownership for agent directories: {e2.stderr}")
-                logger.error("Agent may have permission issues - manual intervention required")
+            logger.error(f"Failed to set proper ownership for agent directories: {e.stderr}")
+            logger.error("Agent may have permission issues - manual intervention required")
 
         # Copy init script to agent directory
         import shutil
