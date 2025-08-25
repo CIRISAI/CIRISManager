@@ -307,6 +307,7 @@ async def deploy_to_target(
         version=None,
         codename=None,
         code_hash=None,
+        cognitive_state=None,
         mock_llm=None,
         discord_enabled=None,
         created_at=None,

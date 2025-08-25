@@ -132,6 +132,7 @@ class DockerAgentDiscovery:
                 status=container.status,
                 image=config.get("Image"),
                 oauth_status=None,  # OAuth status tracked separately in metadata
+                cognitive_state=None,  # Will be populated from agent status API
                 service_token=None,  # Service tokens are in agent registry, not containers
                 version=None,  # Will be populated by query_agent_version
                 codename=None,
