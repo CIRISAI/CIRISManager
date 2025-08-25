@@ -93,14 +93,6 @@ class DockerAgentDiscovery:
                 # No suffix (development) or non-standard format
                 agent_name = agent_id.replace("-", " ").title()
 
-            # Get port mapping
-            api_port = None
-            port_bindings = network_settings.get("Ports", {})
-            for container_port, host_bindings in port_bindings.items():
-                if "8080" in container_port and host_bindings:
-                    api_port = host_bindings[0].get("HostPort")
-                    break
-
             # Extract runtime configuration from environment
             # Check if mock LLM is disabled (defaults to true if not set)
             mock_llm_setting = env_dict.get("CIRIS_MOCK_LLM", "true").lower()
@@ -110,14 +102,19 @@ class DockerAgentDiscovery:
             adapter_list = env_dict.get("CIRIS_ADAPTER", "api").lower()
             discord_enabled = "discord" in adapter_list
 
-            # Get template and deployment info from registry if available
+            # Get ALL static configuration from registry - single source of truth
             registry_agent = (
                 self.agent_registry.get_agent(agent_id) if self.agent_registry else None
             )
+            
+            # Registry is the source of truth for port, template, deployment
+            api_port = None
             template = "unknown"
             deployment = "CIRIS_DISCORD_PILOT"  # Default deployment
 
             if registry_agent:
+                # ALWAYS use port from registry - it's the allocated port
+                api_port = registry_agent.api_port if hasattr(registry_agent, 'api_port') else None
                 template = registry_agent.template
                 # Get deployment from metadata
                 if hasattr(registry_agent, "metadata") and registry_agent.metadata:
