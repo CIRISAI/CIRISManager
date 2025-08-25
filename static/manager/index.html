@@ -748,6 +748,102 @@
     <script src="/manager/cirismanager-sdk.js"></script>
     <script src="/manager/sdk-wrapper.js"></script>
     
+    <!-- Create Agent Dialog -->
+    <div id="create-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Create New Agent</h2>
+                    <button onclick="hideCreateDialog()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form id="create-agent-form" onsubmit="createAgent(event)">
+                    <div class="space-y-4">
+                        <!-- Agent Name -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Agent Name</label>
+                            <input type="text" 
+                                   id="agent-name" 
+                                   name="name" 
+                                   required 
+                                   placeholder="my-agent"
+                                   pattern="[a-z0-9-]+"
+                                   class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 mt-1">Lowercase letters, numbers, and hyphens only</p>
+                        </div>
+                        
+                        <!-- Template Selection -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Template</label>
+                            <select id="template-select" 
+                                    name="template"
+                                    onchange="checkTemplateApproval()"
+                                    class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <option value="">Select a template...</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Wise Authority Signature Field (hidden by default) -->
+                        <div id="wa-signature-field" class="hidden">
+                            <label class="block text-sm font-medium mb-1">Wise Authority Signature</label>
+                            <input type="text" 
+                                   id="wa-signature" 
+                                   name="wa_signature"
+                                   placeholder="Required for non-pre-approved templates"
+                                   class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 mt-1">Authorization required for this template</p>
+                        </div>
+                        
+                        <!-- Environment Variables -->
+                        <div id="env-vars-section" class="hidden">
+                            <label class="block text-sm font-medium mb-1">Environment Variables</label>
+                            <div id="env-vars-container" class="space-y-2">
+                                <!-- Dynamic env vars will be added here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Advanced Options -->
+                        <details class="border rounded-lg p-3">
+                            <summary class="cursor-pointer font-medium text-sm">Advanced Options</summary>
+                            <div class="mt-3 space-y-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Docker Image</label>
+                                    <input type="text" 
+                                           id="docker-image" 
+                                           name="image"
+                                           placeholder="ghcr.io/cirisai/ciris-agent:latest"
+                                           class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Port</label>
+                                    <input type="number" 
+                                           id="agent-port" 
+                                           name="port"
+                                           placeholder="Auto-assign"
+                                           min="8000"
+                                           max="9000"
+                                           class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                    
+                    <div class="flex justify-end gap-3 mt-6">
+                        <button type="button" onclick="hideCreateDialog()" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                            Cancel
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            <i class="fas fa-plus mr-2"></i>Create Agent
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
     <!-- Main application -->
     <script src="/manager/manager.js?v=20250819.3"></script>
     <!-- <script src="/manager/manager-sdk.js"></script> -->
