@@ -66,10 +66,12 @@ class TestComposeGenerator:
         assert env["CIRIS_API_PORT"] == "8080"
         assert env["CIRIS_MOCK_LLM"] == "true"
 
-        # Check volumes
+        # Check volumes - now using bind mounts
         volumes = service["volumes"]
-        assert "agent-scout_data:/app/data" in volumes
-        assert "agent-scout_logs:/app/logs" in volumes
+        assert any("/data:/app/data" in v for v in volumes)
+        assert any("/logs:/app/logs" in v for v in volumes)
+        assert any("/.secrets:/app/.secrets" in v for v in volumes)
+        assert any("/audit_keys:/app/audit_keys" in v for v in volumes)
         assert "/home/ciris/shared/oauth:/home/ciris/shared/oauth:ro" in volumes
 
         # Check healthcheck
@@ -155,8 +157,8 @@ class TestComposeGenerator:
 
         volumes = compose["services"]["agent-scout"]["volumes"]
         # Custom OAuth volume path should be used
-        assert "agent-scout_data:/app/data" in volumes
-        assert "agent-scout_logs:/app/logs" in volumes
+        assert any("/data:/app/data" in v for v in volumes)
+        assert any("/logs:/app/logs" in v for v in volumes)
         assert "/custom/oauth/path:/home/ciris/shared/oauth:ro" in volumes
 
     def test_write_compose_file(self, generator, temp_agent_dir):

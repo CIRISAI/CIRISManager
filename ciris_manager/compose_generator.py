@@ -118,12 +118,12 @@ class ComposeGenerator:
                     "command": ["python", "main.py", "--template", template],
                     "environment": base_env,
                     "volumes": [
-                        f"{agent_id}_data:/app/data",
-                        f"{agent_id}_data_archive:/app/data_archive",
-                        f"{agent_id}_logs:/app/logs",
-                        f"{agent_id}_config:/app/config",
-                        f"{agent_id}_audit_keys:/app/audit_keys",
-                        f"{agent_id}_secrets:/app/.secrets",
+                        f"{agent_dir}/data:/app/data",
+                        f"{agent_dir}/data_archive:/app/data_archive",
+                        f"{agent_dir}/logs:/app/logs",
+                        f"{agent_dir}/config:/app/config",
+                        f"{agent_dir}/audit_keys:/app/audit_keys",
+                        f"{agent_dir}/.secrets:/app/.secrets",
                         f"{oauth_volume}:/home/ciris/shared/oauth:ro",
                     ],
                     "restart": "no",
@@ -147,38 +147,6 @@ class ComposeGenerator:
                 }
             },
             "networks": {"default": {"name": f"ciris-{agent_id}-network"}},
-            "volumes": {
-                f"{agent_id}_data": {
-                    "driver": "local",
-                    "labels": {"ai.ciris.agents.id": agent_id, "ai.ciris.agents.type": "data"},
-                },
-                f"{agent_id}_data_archive": {
-                    "driver": "local",
-                    "labels": {
-                        "ai.ciris.agents.id": agent_id,
-                        "ai.ciris.agents.type": "data_archive",
-                    },
-                },
-                f"{agent_id}_logs": {
-                    "driver": "local",
-                    "labels": {"ai.ciris.agents.id": agent_id, "ai.ciris.agents.type": "logs"},
-                },
-                f"{agent_id}_config": {
-                    "driver": "local",
-                    "labels": {"ai.ciris.agents.id": agent_id, "ai.ciris.agents.type": "config"},
-                },
-                f"{agent_id}_audit_keys": {
-                    "driver": "local",
-                    "labels": {
-                        "ai.ciris.agents.id": agent_id,
-                        "ai.ciris.agents.type": "audit_keys",
-                    },
-                },
-                f"{agent_id}_secrets": {
-                    "driver": "local",
-                    "labels": {"ai.ciris.agents.id": agent_id, "ai.ciris.agents.type": "secrets"},
-                },
-            },
         }
 
         return compose_config
