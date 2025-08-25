@@ -115,6 +115,7 @@ class ComposeGenerator:
                     "image": f"{self.docker_registry}/{self.default_image}",
                     "platform": "linux/amd64",
                     "ports": [f"{port}:8080"],
+                    "entrypoint": ["/init_permissions.sh"],
                     "command": ["python", "main.py", "--template", template],
                     "environment": base_env,
                     "volumes": [
@@ -124,6 +125,7 @@ class ComposeGenerator:
                         f"{agent_dir}/config:/app/config",
                         f"{agent_dir}/audit_keys:/app/audit_keys",
                         f"{agent_dir}/.secrets:/app/.secrets",
+                        f"{agent_dir}/init_permissions.sh:/init_permissions.sh:ro",
                         f"{oauth_volume}:/home/ciris/shared/oauth:ro",
                     ],
                     "restart": "no",

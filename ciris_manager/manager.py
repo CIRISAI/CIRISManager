@@ -244,6 +244,17 @@ class CIRISManager:
             dir_path.chmod(permissions)
             logger.info(f"Created directory {dir_path} with permissions {oct(permissions)}")
 
+        # Copy init script to agent directory
+        import shutil
+        init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
+        init_script_dst = agent_dir / "init_permissions.sh"
+        if init_script_src.exists():
+            shutil.copy2(init_script_src, init_script_dst)
+            init_script_dst.chmod(0o755)
+            logger.info(f"Copied init script to {init_script_dst}")
+        else:
+            logger.warning(f"Init script not found at {init_script_src}")
+
         # Add service token to environment for agent
         if environment is None:
             environment = {}
