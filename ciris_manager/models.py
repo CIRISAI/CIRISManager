@@ -4,7 +4,7 @@ Simple data models for CIRISManager.
 Keep it simple. Keep it typed. Keep it working.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -181,6 +181,14 @@ class DeploymentStatus(BaseModel):
         default="canary", description="Deployment strategy: canary, immediate, manual"
     )
     updated_at: Optional[str] = Field(default=None, description="Last update timestamp")
+    agents_pending_restart: List[str] = Field(
+        default_factory=list, 
+        description="Agent IDs that have shutdown and are pending restart"
+    )
+    agents_in_progress: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Agents currently being processed: agent_id -> state (shutting_down, restarting, etc)"
+    )
 
 
 class AgentUpdateResponse(BaseModel):

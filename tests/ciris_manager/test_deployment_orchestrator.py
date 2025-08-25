@@ -265,6 +265,19 @@ class TestDeploymentOrchestrator:
         orchestrator._wait_for_container_stop = AsyncMock(return_value=True)
         orchestrator._recreate_agent_container = AsyncMock(return_value=True)
 
+        # Create deployment in orchestrator for the test
+        from ciris_manager.models import DeploymentStatus
+        deployment = DeploymentStatus(
+            deployment_id="deployment-123",
+            agents_total=1,
+            agents_updated=0,
+            status="in_progress",
+            message="Test deployment",
+            agents_pending_restart=[],
+            agents_in_progress={}
+        )
+        orchestrator.deployments["deployment-123"] = deployment
+
         with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
             with patch("httpx.AsyncClient") as mock_client_class:
                 mock_client = AsyncMock()
@@ -311,6 +324,20 @@ class TestDeploymentOrchestrator:
         # Mock agent_auth to bypass encryption
         mock_auth = Mock()
         mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        
+        # Create deployment in orchestrator for the test
+        from ciris_manager.models import DeploymentStatus
+        deployment = DeploymentStatus(
+            deployment_id="deployment-123",
+            agents_total=1,
+            agents_updated=0,
+            status="in_progress",
+            message="Test deployment",
+            agents_pending_restart=[],
+            agents_in_progress={}
+        )
+        orchestrator.deployments["deployment-123"] = deployment
+        
         with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
             with patch("httpx.AsyncClient") as mock_client_class:
                 mock_client = AsyncMock()
@@ -360,6 +387,20 @@ class TestDeploymentOrchestrator:
         # Mock agent_auth to bypass encryption
         mock_auth = Mock()
         mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
+        
+        # Create deployment in orchestrator for the test
+        from ciris_manager.models import DeploymentStatus
+        deployment = DeploymentStatus(
+            deployment_id="deployment-123",
+            agents_total=1,
+            agents_updated=0,
+            status="in_progress",
+            message="Test deployment",
+            agents_pending_restart=[],
+            agents_in_progress={}
+        )
+        orchestrator.deployments["deployment-123"] = deployment
+        
         with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
             with patch("httpx.AsyncClient") as mock_client_class:
                 mock_client = AsyncMock()
@@ -585,6 +626,19 @@ class TestDeploymentOrchestrator:
         orchestrator._wait_for_container_stop = AsyncMock(return_value=True)
         orchestrator._recreate_agent_container = AsyncMock(return_value=True)
 
+        # Create deployment in orchestrator for the test
+        from ciris_manager.models import DeploymentStatus
+        deployment = DeploymentStatus(
+            deployment_id="deployment-123",
+            agents_total=1,
+            agents_updated=0,
+            status="in_progress",
+            message="Test deployment",
+            agents_pending_restart=[],
+            agents_in_progress={}
+        )
+        orchestrator.deployments["deployment-123"] = deployment
+
         # Mock agent_auth
         mock_auth = Mock()
         mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
@@ -640,6 +694,19 @@ class TestDeploymentOrchestrator:
         # Mock the helper methods
         orchestrator._wait_for_container_stop = AsyncMock(return_value=True)
         orchestrator._recreate_agent_container = AsyncMock(return_value=True)
+
+        # Create deployment in orchestrator for the test
+        from ciris_manager.models import DeploymentStatus
+        deployment = DeploymentStatus(
+            deployment_id="deployment-123",
+            agents_total=1,
+            agents_updated=0,
+            status="in_progress",
+            message="Test deployment",
+            agents_pending_restart=[],
+            agents_in_progress={}
+        )
+        orchestrator.deployments["deployment-123"] = deployment
 
         # Mock agent_auth
         mock_auth = Mock()

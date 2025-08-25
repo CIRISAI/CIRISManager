@@ -102,20 +102,30 @@ class DeploymentOrchestrator:
                         f"and {len(self.pending_deployments)} pending deployments"
                     )
 
-                    # Check for in-progress deployments that need to be marked as failed
+                    # Check for in-progress deployments that need recovery or marking as failed
                     if self.current_deployment and self.current_deployment in self.deployments:
                         deployment = self.deployments[self.current_deployment]
                         if deployment.status == "in_progress":
-                            logger.warning(
-                                f"Found in-progress deployment {self.current_deployment} after restart. "
-                                "Marking as failed due to manager restart during deployment."
-                            )
-                            deployment.status = "failed"
-                            deployment.completed_at = datetime.now(timezone.utc).isoformat()
-                            deployment.message = "Deployment interrupted by manager restart"
-                            # Clear the current deployment lock to allow new deployments
-                            self.current_deployment = None
-                            self._save_state()
+                            # Check if we have agents that were in the middle of being restarted
+                            if deployment.agents_pending_restart or deployment.agents_in_progress:
+                                logger.warning(
+                                    f"Found interrupted deployment {self.current_deployment} after restart. "
+                                    f"Agents pending restart: {deployment.agents_pending_restart}, "
+                                    f"Agents in progress: {list(deployment.agents_in_progress.keys())}"
+                                )
+                                # Schedule recovery of interrupted operations
+                                asyncio.create_task(self._recover_interrupted_deployment(deployment))
+                            else:
+                                logger.warning(
+                                    f"Found in-progress deployment {self.current_deployment} after restart. "
+                                    "Marking as failed due to manager restart during deployment."
+                                )
+                                deployment.status = "failed"
+                                deployment.completed_at = datetime.now(timezone.utc).isoformat()
+                                deployment.message = "Deployment interrupted by manager restart"
+                                # Clear the current deployment lock to allow new deployments
+                                self.current_deployment = None
+                                self._save_state()
             except Exception as e:
                 logger.warning(f"Failed to load deployment state: {e}")
 
@@ -2678,17 +2688,35 @@ class DeploymentOrchestrator:
                         await self._update_agent_metadata(agent.agent_id, notification)
                         logger.debug(f"Updated metadata for agent {agent.agent_id}")
 
+                    # Track that this agent is pending restart
+                    deployment = self.deployments[deployment_id]
+                    if agent.agent_id not in deployment.agents_pending_restart:
+                        deployment.agents_pending_restart.append(agent.agent_id)
+                    deployment.agents_in_progress[agent.agent_id] = "waiting_for_shutdown"
+                    self._save_state()
+
                     # Wait for container to stop and recreate it with new image
                     logger.info(f"Waiting for container {agent.container_name} to stop...")
                     stopped = await self._wait_for_container_stop(agent.container_name, timeout=60)
 
                     if stopped:
+                        # Update state to show we're restarting
+                        deployment.agents_in_progress[agent.agent_id] = "restarting"
+                        self._save_state()
+                        
                         logger.info(
                             f"Container {agent.container_name} stopped, recreating with new image..."
                         )
                         recreated = await self._recreate_agent_container(agent.agent_id)
 
                         if recreated:
+                            # Remove from pending and in-progress
+                            if agent.agent_id in deployment.agents_pending_restart:
+                                deployment.agents_pending_restart.remove(agent.agent_id)
+                            if agent.agent_id in deployment.agents_in_progress:
+                                del deployment.agents_in_progress[agent.agent_id]
+                            self._save_state()
+                            
                             logger.info(
                                 f"Successfully recreated container for agent {agent.agent_id}"
                             )
@@ -2699,6 +2727,13 @@ class DeploymentOrchestrator:
                                 ready_at=None,
                             )
                         else:
+                            # Mark as failed
+                            if agent.agent_id in deployment.agents_pending_restart:
+                                deployment.agents_pending_restart.remove(agent.agent_id)
+                            if agent.agent_id in deployment.agents_in_progress:
+                                del deployment.agents_in_progress[agent.agent_id]
+                            self._save_state()
+                            
                             logger.error(f"Failed to recreate container for agent {agent.agent_id}")
                             return AgentUpdateResponse(
                                 agent_id=agent.agent_id,
@@ -2707,6 +2742,13 @@ class DeploymentOrchestrator:
                                 ready_at=None,
                             )
                     else:
+                        # Remove from tracking since it didn't stop
+                        if agent.agent_id in deployment.agents_pending_restart:
+                            deployment.agents_pending_restart.remove(agent.agent_id)
+                        if agent.agent_id in deployment.agents_in_progress:
+                            del deployment.agents_in_progress[agent.agent_id]
+                        self._save_state()
+                        
                         logger.warning(f"Container {agent.container_name} did not stop in time")
                         return AgentUpdateResponse(
                             agent_id=agent.agent_id,
@@ -2896,6 +2938,107 @@ class DeploymentOrchestrator:
         except Exception as e:
             logger.error(f"Error recreating container for agent {agent_id}: {e}")
             return False
+
+    async def _recover_interrupted_deployment(self, deployment: DeploymentStatus) -> None:
+        """
+        Recover an interrupted deployment after manager restart.
+        
+        Args:
+            deployment: The deployment to recover
+        """
+        logger.info(f"Starting recovery for interrupted deployment {deployment.deployment_id}")
+        
+        try:
+            # Process agents that were pending restart
+            for agent_id in list(deployment.agents_pending_restart):
+                logger.info(f"Recovering restart for agent {agent_id}")
+                
+                # Check if container is already stopped
+                container_name = f"ciris-{agent_id}"
+                status_result = await asyncio.create_subprocess_exec(
+                    "docker",
+                    "inspect",
+                    container_name,
+                    "--format",
+                    "{{.State.Status}}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await status_result.communicate()
+                
+                if status_result.returncode != 0:
+                    # Container doesn't exist - try to recreate it
+                    logger.info(f"Container {container_name} not found, attempting recreation")
+                    recreated = await self._recreate_agent_container(agent_id)
+                    if recreated:
+                        deployment.agents_updated += 1
+                        deployment.agents_pending_restart.remove(agent_id)
+                        if agent_id in deployment.agents_in_progress:
+                            del deployment.agents_in_progress[agent_id]
+                        logger.info(f"Successfully recovered agent {agent_id}")
+                    else:
+                        deployment.agents_failed += 1
+                        deployment.agents_pending_restart.remove(agent_id)
+                        if agent_id in deployment.agents_in_progress:
+                            del deployment.agents_in_progress[agent_id]
+                        logger.error(f"Failed to recover agent {agent_id}")
+                else:
+                    status = stdout.decode().strip()
+                    if status in ["exited", "dead", "removing", "removed"]:
+                        # Container is stopped, recreate it
+                        logger.info(f"Container {container_name} is stopped, recreating")
+                        recreated = await self._recreate_agent_container(agent_id)
+                        if recreated:
+                            deployment.agents_updated += 1
+                            deployment.agents_pending_restart.remove(agent_id)
+                            if agent_id in deployment.agents_in_progress:
+                                del deployment.agents_in_progress[agent_id]
+                            logger.info(f"Successfully recovered agent {agent_id}")
+                        else:
+                            deployment.agents_failed += 1
+                            deployment.agents_pending_restart.remove(agent_id)
+                            if agent_id in deployment.agents_in_progress:
+                                del deployment.agents_in_progress[agent_id]
+                            logger.error(f"Failed to recover agent {agent_id}")
+                    elif status == "running":
+                        # Container is already running - check if it's the new version
+                        # For now, assume it was successfully updated
+                        logger.info(f"Container {container_name} is already running, assuming update completed")
+                        deployment.agents_updated += 1
+                        deployment.agents_pending_restart.remove(agent_id)
+                        if agent_id in deployment.agents_in_progress:
+                            del deployment.agents_in_progress[agent_id]
+                    else:
+                        # Container in unexpected state
+                        logger.warning(f"Container {container_name} in unexpected state: {status}")
+                        deployment.agents_failed += 1
+                        deployment.agents_pending_restart.remove(agent_id)
+                        if agent_id in deployment.agents_in_progress:
+                            del deployment.agents_in_progress[agent_id]
+                
+                # Save state after each agent
+                self._save_state()
+            
+            # Check if deployment is complete
+            if (deployment.agents_updated + deployment.agents_deferred + deployment.agents_failed) >= deployment.agents_total:
+                deployment.status = "completed"
+                deployment.completed_at = datetime.now(timezone.utc).isoformat()
+                deployment.message = f"Deployment recovered after manager restart: {deployment.agents_updated} updated, {deployment.agents_deferred} deferred, {deployment.agents_failed} failed"
+                self.current_deployment = None
+                logger.info(f"Deployment {deployment.deployment_id} recovery completed")
+            else:
+                # Continue with remaining agents if needed
+                logger.info(f"Deployment {deployment.deployment_id} recovery in progress")
+            
+            self._save_state()
+            
+        except Exception as e:
+            logger.error(f"Error recovering deployment {deployment.deployment_id}: {e}")
+            deployment.status = "failed"
+            deployment.completed_at = datetime.now(timezone.utc).isoformat()
+            deployment.message = f"Recovery failed: {str(e)}"
+            self.current_deployment = None
+            self._save_state()
 
     async def _update_nginx_container(
         self, gui_image: str, nginx_image: Optional[str] = None
