@@ -247,15 +247,18 @@ class CIRISManager:
         # Change ownership to ciris user so containers can write
         # The ciris user (uid=1005) is what the containers run as
         import subprocess
+
         try:
             # Change ownership of entire agent directory to ciris:ciris
             subprocess.run(
                 ["chown", "-R", "ciris:ciris", str(agent_dir)],
                 check=True,
                 capture_output=True,
-                text=True
+                text=True,
             )
-            logger.info(f"Changed ownership of {agent_dir} to ciris:ciris for container compatibility")
+            logger.info(
+                f"Changed ownership of {agent_dir} to ciris:ciris for container compatibility"
+            )
         except subprocess.CalledProcessError as e:
             logger.warning(f"Could not change ownership to ciris:ciris: {e.stderr}")
             # Try with numeric IDs as fallback (1005:1005)
@@ -264,7 +267,7 @@ class CIRISManager:
                     ["chown", "-R", "1005:1005", str(agent_dir)],
                     check=True,
                     capture_output=True,
-                    text=True
+                    text=True,
                 )
                 logger.info(f"Changed ownership of {agent_dir} to uid/gid 1005 (ciris)")
             except subprocess.CalledProcessError as e2:
