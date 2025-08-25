@@ -182,12 +182,11 @@ class DeploymentStatus(BaseModel):
     )
     updated_at: Optional[str] = Field(default=None, description="Last update timestamp")
     agents_pending_restart: List[str] = Field(
-        default_factory=list, 
-        description="Agent IDs that have shutdown and are pending restart"
+        default_factory=list, description="Agent IDs that have shutdown and are pending restart"
     )
     agents_in_progress: Dict[str, str] = Field(
         default_factory=dict,
-        description="Agents currently being processed: agent_id -> state (shutting_down, restarting, etc)"
+        description="Agents currently being processed: agent_id -> state (shutting_down, restarting, etc)",
     )
 
 

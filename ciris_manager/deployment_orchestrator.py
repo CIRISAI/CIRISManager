@@ -114,7 +114,9 @@ class DeploymentOrchestrator:
                                     f"Agents in progress: {list(deployment.agents_in_progress.keys())}"
                                 )
                                 # Schedule recovery of interrupted operations
-                                asyncio.create_task(self._recover_interrupted_deployment(deployment))
+                                asyncio.create_task(
+                                    self._recover_interrupted_deployment(deployment)
+                                )
                             else:
                                 logger.warning(
                                     f"Found in-progress deployment {self.current_deployment} after restart. "
@@ -2703,7 +2705,7 @@ class DeploymentOrchestrator:
                         # Update state to show we're restarting
                         deployment.agents_in_progress[agent.agent_id] = "restarting"
                         self._save_state()
-                        
+
                         logger.info(
                             f"Container {agent.container_name} stopped, recreating with new image..."
                         )
@@ -2716,7 +2718,7 @@ class DeploymentOrchestrator:
                             if agent.agent_id in deployment.agents_in_progress:
                                 del deployment.agents_in_progress[agent.agent_id]
                             self._save_state()
-                            
+
                             logger.info(
                                 f"Successfully recreated container for agent {agent.agent_id}"
                             )
@@ -2733,7 +2735,7 @@ class DeploymentOrchestrator:
                             if agent.agent_id in deployment.agents_in_progress:
                                 del deployment.agents_in_progress[agent.agent_id]
                             self._save_state()
-                            
+
                             logger.error(f"Failed to recreate container for agent {agent.agent_id}")
                             return AgentUpdateResponse(
                                 agent_id=agent.agent_id,
@@ -2748,7 +2750,7 @@ class DeploymentOrchestrator:
                         if agent.agent_id in deployment.agents_in_progress:
                             del deployment.agents_in_progress[agent.agent_id]
                         self._save_state()
-                        
+
                         logger.warning(f"Container {agent.container_name} did not stop in time")
                         return AgentUpdateResponse(
                             agent_id=agent.agent_id,
@@ -2942,17 +2944,17 @@ class DeploymentOrchestrator:
     async def _recover_interrupted_deployment(self, deployment: DeploymentStatus) -> None:
         """
         Recover an interrupted deployment after manager restart.
-        
+
         Args:
             deployment: The deployment to recover
         """
         logger.info(f"Starting recovery for interrupted deployment {deployment.deployment_id}")
-        
+
         try:
             # Process agents that were pending restart
             for agent_id in list(deployment.agents_pending_restart):
                 logger.info(f"Recovering restart for agent {agent_id}")
-                
+
                 # Check if container is already stopped
                 container_name = f"ciris-{agent_id}"
                 status_result = await asyncio.create_subprocess_exec(
@@ -2965,7 +2967,7 @@ class DeploymentOrchestrator:
                     stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await status_result.communicate()
-                
+
                 if status_result.returncode != 0:
                     # Container doesn't exist - try to recreate it
                     logger.info(f"Container {container_name} not found, attempting recreation")
@@ -3003,7 +3005,9 @@ class DeploymentOrchestrator:
                     elif status == "running":
                         # Container is already running - check if it's the new version
                         # For now, assume it was successfully updated
-                        logger.info(f"Container {container_name} is already running, assuming update completed")
+                        logger.info(
+                            f"Container {container_name} is already running, assuming update completed"
+                        )
                         deployment.agents_updated += 1
                         deployment.agents_pending_restart.remove(agent_id)
                         if agent_id in deployment.agents_in_progress:
@@ -3015,12 +3019,14 @@ class DeploymentOrchestrator:
                         deployment.agents_pending_restart.remove(agent_id)
                         if agent_id in deployment.agents_in_progress:
                             del deployment.agents_in_progress[agent_id]
-                
+
                 # Save state after each agent
                 self._save_state()
-            
+
             # Check if deployment is complete
-            if (deployment.agents_updated + deployment.agents_deferred + deployment.agents_failed) >= deployment.agents_total:
+            if (
+                deployment.agents_updated + deployment.agents_deferred + deployment.agents_failed
+            ) >= deployment.agents_total:
                 deployment.status = "completed"
                 deployment.completed_at = datetime.now(timezone.utc).isoformat()
                 deployment.message = f"Deployment recovered after manager restart: {deployment.agents_updated} updated, {deployment.agents_deferred} deferred, {deployment.agents_failed} failed"
@@ -3029,9 +3035,9 @@ class DeploymentOrchestrator:
             else:
                 # Continue with remaining agents if needed
                 logger.info(f"Deployment {deployment.deployment_id} recovery in progress")
-            
+
             self._save_state()
-            
+
         except Exception as e:
             logger.error(f"Error recovering deployment {deployment.deployment_id}: {e}")
             deployment.status = "failed"
