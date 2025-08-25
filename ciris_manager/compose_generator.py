@@ -62,6 +62,8 @@ class ComposeGenerator:
             "CIRIS_TEMPLATE": template,
             "CIRIS_API_HOST": "0.0.0.0",
             "CIRIS_API_PORT": "8080",
+            # OAuth configuration for agent authentication
+            "OAUTH_CALLBACK_BASE_URL": "https://agents.ciris.ai",
         }
 
         if use_mock_llm:

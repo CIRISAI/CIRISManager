@@ -65,6 +65,7 @@ class TestComposeGenerator:
         assert env["CIRIS_API_HOST"] == "0.0.0.0"
         assert env["CIRIS_API_PORT"] == "8080"
         assert env["CIRIS_MOCK_LLM"] == "true"
+        assert env["OAUTH_CALLBACK_BASE_URL"] == "https://agents.ciris.ai"
 
         # Check volumes - now using bind mounts
         volumes = service["volumes"]
