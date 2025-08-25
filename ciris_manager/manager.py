@@ -230,14 +230,14 @@ class CIRISManager:
         # Create subdirectories with proper permissions matching CIRIS agent expectations
         # Based on CIRIS File Permission System requirements
         directories = {
-            "data": 0o755,          # Database files - readable by all
+            "data": 0o755,  # Database files - readable by all
             "data_archive": 0o755,  # Archived thoughts/tasks - audit trail accessible
-            "logs": 0o755,          # Log files - must be inspectable
-            "config": 0o755,        # Configuration files - config is public
-            "audit_keys": 0o700,    # Audit signing keys - prevent key compromise
-            ".secrets": 0o700,      # Secrets storage - protect sensitive data
+            "logs": 0o755,  # Log files - must be inspectable
+            "config": 0o755,  # Configuration files - config is public
+            "audit_keys": 0o700,  # Audit signing keys - prevent key compromise
+            ".secrets": 0o700,  # Secrets storage - protect sensitive data
         }
-        
+
         for dir_name, permissions in directories.items():
             dir_path = agent_dir / dir_name
             dir_path.mkdir(parents=True, exist_ok=True)
