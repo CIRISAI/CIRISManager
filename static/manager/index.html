@@ -749,94 +749,88 @@
     <script src="/manager/sdk-wrapper.js"></script>
     
     <!-- Create Agent Dialog -->
-    <div id="create-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div id="create-dialog" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div class="p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-bold">Create New Agent</h2>
-                    <button onclick="hideCreateDialog()" class="text-gray-500 hover:text-gray-700">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                
-                <form id="create-agent-form" onsubmit="createAgent(event)">
+                <h2 class="text-2xl font-bold mb-4">Create New Agent</h2>
+                <form id="create-agent-form" onsubmit="handleCreateAgent(event)">
                     <div class="space-y-4">
-                        <!-- Agent Name -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1">Agent Name</label>
-                            <input type="text" 
-                                   id="agent-name" 
-                                   name="name" 
-                                   required 
-                                   placeholder="my-agent"
-                                   pattern="[a-z0-9-]+"
-                                   class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                            <p class="text-xs text-gray-500 mt-1">Lowercase letters, numbers, and hyphens only</p>
-                        </div>
-                        
                         <!-- Template Selection -->
                         <div>
                             <label class="block text-sm font-medium mb-1">Template</label>
-                            <select id="template-select" 
-                                    name="template"
-                                    onchange="checkTemplateApproval()"
-                                    class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <select id="template-select" name="template" required class="w-full p-2 border rounded-lg" onchange="checkTemplateApproval()">
                                 <option value="">Select a template...</option>
                             </select>
                         </div>
-                        
-                        <!-- Wise Authority Signature Field (hidden by default) -->
+
+                        <!-- Agent Name -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Agent Name</label>
+                            <input type="text" name="name" required class="w-full p-2 border rounded-lg" placeholder="my-agent">
+                        </div>
+
+                        <!-- WA Signature (hidden by default) -->
                         <div id="wa-signature-field" class="hidden">
-                            <label class="block text-sm font-medium mb-1">Wise Authority Signature</label>
-                            <input type="text" 
-                                   id="wa-signature" 
-                                   name="wa_signature"
-                                   placeholder="Required for non-pre-approved templates"
-                                   class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                            <p class="text-xs text-gray-500 mt-1">Authorization required for this template</p>
+                            <label class="block text-sm font-medium mb-1">WA Signature</label>
+                            <input type="text" name="wa_signature" class="w-full p-2 border rounded-lg" placeholder="Required for non-approved templates">
                         </div>
-                        
+
+                        <!-- Mock LLM Toggle -->
+                        <div>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="use_mock_llm" checked class="rounded">
+                                <span class="text-sm font-medium">Use Mock LLM</span>
+                                <span class="text-xs text-gray-500">(for testing/development)</span>
+                            </label>
+                        </div>
+
+                        <!-- Discord Adapter Toggle -->
+                        <div>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="enable_discord" class="rounded">
+                                <span class="text-sm font-medium">Enable Discord Adapter</span>
+                                <span class="text-xs text-gray-500">(requires DISCORD_BOT_TOKEN in env vars)</span>
+                            </label>
+                        </div>
+
+                        <!-- WA Review Checkbox (shown for echo templates) -->
+                        <div id="wa-review-section" class="hidden bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <label class="flex items-start gap-2">
+                                <input type="checkbox" id="wa-review-checkbox" name="wa_review_completed" class="mt-1 rounded">
+                                <div>
+                                    <span class="text-sm font-medium text-amber-900">WA Review Completed</span>
+                                    <p class="text-xs text-amber-700 mt-1">
+                                        I confirm that this Echo agent (Tier 4/5) has been reviewed and approved by the WA team.
+                                    </p>
+                                </div>
+                            </label>
+                        </div>
+
                         <!-- Environment Variables -->
-                        <div id="env-vars-section" class="hidden">
-                            <label class="block text-sm font-medium mb-1">Environment Variables</label>
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <label class="block text-sm font-medium">Environment Variables</label>
+                                <button type="button" onclick="loadEnvFromFile()" class="text-xs text-blue-600 hover:underline">
+                                    <i class="fas fa-file-import mr-1"></i>Load from .env
+                                </button>
+                            </div>
                             <div id="env-vars-container" class="space-y-2">
-                                <!-- Dynamic env vars will be added here -->
+                                <!-- Template defaults will be loaded here -->
                             </div>
+                            <button type="button" onclick="addEnvVar()" class="mt-2 px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-sm">
+                                <i class="fas fa-plus mr-1"></i>Add Variable
+                            </button>
+                            <p class="text-xs text-gray-500 mt-2">Template defaults are pre-loaded. Add or modify as needed.</p>
                         </div>
-                        
-                        <!-- Advanced Options -->
-                        <details class="border rounded-lg p-3">
-                            <summary class="cursor-pointer font-medium text-sm">Advanced Options</summary>
-                            <div class="mt-3 space-y-3">
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">Docker Image</label>
-                                    <input type="text" 
-                                           id="docker-image" 
-                                           name="image"
-                                           placeholder="ghcr.io/cirisai/ciris-agent:latest"
-                                           class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">Port</label>
-                                    <input type="number" 
-                                           id="agent-port" 
-                                           name="port"
-                                           placeholder="Auto-assign"
-                                           min="8000"
-                                           max="9000"
-                                           class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-                                </div>
-                            </div>
-                        </details>
                     </div>
-                    
-                    <div class="flex justify-end gap-3 mt-6">
-                        <button type="button" onclick="hideCreateDialog()" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+
+                    <!-- Dialog Actions -->
+                    <div class="flex justify-end gap-2 mt-6">
+                        <button type="button" onclick="hideCreateDialog()" class="px-4 py-2 border rounded-lg hover:bg-gray-50">
                             Cancel
                         </button>
                         <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                            <i class="fas fa-plus mr-2"></i>Create Agent
+                            Create Agent
                         </button>
                     </div>
                 </form>
