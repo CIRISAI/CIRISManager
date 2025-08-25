@@ -1084,9 +1084,10 @@ function renderVersionData(data) {
     if (data.current_deployment) {
         const deployment = data.current_deployment;
         
-        // Calculate progress percentage
+        // Calculate progress percentage (updated + deferred = progress)
+        const agentsProcessed = (deployment.agents_updated || 0) + (deployment.agents_deferred || 0);
         const progressPercent = deployment.agents_total > 0 
-            ? Math.round((deployment.agents_updated / deployment.agents_total) * 100)
+            ? Math.round((agentsProcessed / deployment.agents_total) * 100)
             : 0;
         
         // Format start time
@@ -1135,13 +1136,24 @@ function renderVersionData(data) {
                         <span>${
                             deployment.agents_total === 0 && deployment.message && deployment.message.includes('GUI Update') 
                                 ? 'GUI container update'
-                                : `${deployment.agents_updated} of ${deployment.agents_total} agents (${progressPercent}%)`
+                                : (() => {
+                                    const updated = deployment.agents_updated || 0;
+                                    const deferred = deployment.agents_deferred || 0;
+                                    const total = deployment.agents_total || 0;
+                                    if (deferred > 0) {
+                                        return `${updated} updated, ${deferred} deferred of ${total} agents (${progressPercent}%)`;
+                                    } else {
+                                        return `${updated} of ${total} agents (${progressPercent}%)`;
+                                    }
+                                })()
                         }</span>
                     </div>
                     <div class="w-full bg-gray-200 rounded-full h-2">
                         <div class="h-2 rounded-full transition-all duration-500 ${
                             deployment.status === 'failed' ? 'bg-red-500' :
+                            deployment.status === 'completed' && deployment.agents_deferred > 0 ? 'bg-amber-500' :
                             deployment.status === 'completed' ? 'bg-green-500' :
+                            deployment.agents_deferred > 0 ? 'bg-amber-400' :
                             'bg-blue-500'
                         }" style="width: ${progressPercent}%"></div>
                     </div>
@@ -1164,9 +1176,18 @@ function renderVersionData(data) {
                     ` : ''}
                     
                     ${deployment.agents_deferred > 0 ? `
-                        <div class="flex items-center gap-2 text-yellow-600">
-                            <i class="fas fa-clock"></i>
-                            <span>${deployment.agents_deferred} agent(s) deferred update</span>
+                        <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
+                            <div class="flex items-start gap-2">
+                                <i class="fas fa-hourglass-half text-amber-600 mt-0.5"></i>
+                                <div>
+                                    <div class="text-amber-900 font-medium">
+                                        ${deployment.agents_deferred} agent(s) choosing to defer update
+                                    </div>
+                                    <div class="text-amber-700 text-xs mt-1">
+                                        Agents will update when they're ready. This is normal behavior.
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     ` : ''}
                     
