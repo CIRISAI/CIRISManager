@@ -73,7 +73,6 @@ class DockerAgentDiscovery:
             # Get container details
             attrs = container.attrs
             config = attrs.get("Config", {})
-            network_settings = attrs.get("NetworkSettings", {})
 
             # Determine agent ID - REQUIRED for all CIRIS agents
             agent_id = env_dict.get("CIRIS_AGENT_ID")
