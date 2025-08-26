@@ -2753,7 +2753,9 @@ class DeploymentOrchestrator:
                         deployment.agents_in_progress[agent.agent_id] = "shutdown_timeout"
                         self._save_state()
 
-                        logger.warning(f"Container {agent.container_name} did not stop in time - keeping in pending restart list")
+                        logger.warning(
+                            f"Container {agent.container_name} did not stop in time - keeping in pending restart list"
+                        )
                         return AgentUpdateResponse(
                             agent_id=agent.agent_id,
                             decision="notified",
@@ -3086,12 +3088,14 @@ class DeploymentOrchestrator:
                     status = stdout.decode().strip()
                     if status in ["exited", "dead", "removing", "removed"]:
                         # Container finally stopped - restart it
-                        logger.info(f"Agent {agent_id} with shutdown_timeout has now stopped - restarting")
-                        
+                        logger.info(
+                            f"Agent {agent_id} with shutdown_timeout has now stopped - restarting"
+                        )
+
                         # Update state to restarting
                         deployment.agents_in_progress[agent_id] = "restarting"
                         self._save_state()
-                        
+
                         recreated = await self._recreate_agent_container(agent_id)
                         if recreated:
                             # Remove from tracking - successfully updated
