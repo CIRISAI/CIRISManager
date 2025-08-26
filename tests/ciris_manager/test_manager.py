@@ -228,8 +228,10 @@ class TestCIRISManager:
             mock_process.communicate = AsyncMock(return_value=(b"", b""))
             mock_subprocess.return_value = mock_process
 
-            # Create agent
-            result = await manager.create_agent(
+            # Also mock subprocess.run for sudo chown
+            with patch("subprocess.run"):
+                # Create agent
+                result = await manager.create_agent(
                 template="scout", name="Scout", environment={"CUSTOM": "value"}
             )
 
@@ -278,8 +280,10 @@ class TestCIRISManager:
             mock_process.communicate = AsyncMock(return_value=(b"", b""))
             mock_subprocess.return_value = mock_process
 
-            # Create agent with signature
-            result = await manager.create_agent(
+            # Also mock subprocess.run for sudo chown
+            with patch("subprocess.run"):
+                # Create agent with signature
+                result = await manager.create_agent(
                 template="custom", name="Custom", wa_signature="test_signature"
             )
 
@@ -308,9 +312,11 @@ class TestCIRISManager:
             mock_process.communicate = AsyncMock(return_value=(b"", b"Error: failed"))
             mock_subprocess.return_value = mock_process
 
-            # Should raise RuntimeError
-            with pytest.raises(RuntimeError, match="Failed to start"):
-                await manager.create_agent(template="scout", name="Scout")
+            # Also mock subprocess.run for sudo chown
+            with patch("subprocess.run"):
+                # Should raise RuntimeError
+                with pytest.raises(RuntimeError, match="Failed to start"):
+                    await manager.create_agent(template="scout", name="Scout")
 
     @pytest.mark.asyncio
     async def test_container_management_loop(self, manager):
@@ -404,9 +410,11 @@ class TestCIRISManager:
             mock_process.communicate = AsyncMock(return_value=(b"", b""))
             mock_subprocess.return_value = mock_process
 
-            # Create agents
-            result1 = await manager.create_agent("scout", "Scout1")
-            result2 = await manager.create_agent("scout", "Scout2")
+            # Also mock subprocess.run for sudo chown
+            with patch("subprocess.run"):
+                # Create agents
+                result1 = await manager.create_agent("scout", "Scout1")
+                result2 = await manager.create_agent("scout", "Scout2")
 
         assert result1["port"] == 8080
         assert result2["port"] == 8081
@@ -439,13 +447,15 @@ class TestCIRISManager:
             return mock_process
 
         with patch("asyncio.create_subprocess_exec", side_effect=mock_subprocess):
-            # Create multiple agents concurrently
-            tasks = []
-            for i in range(5):
-                task = asyncio.create_task(manager.create_agent("scout", f"Scout{i}"))
-                tasks.append(task)
+            # Also mock subprocess.run for sudo chown
+            with patch("subprocess.run"):
+                # Create multiple agents concurrently
+                tasks = []
+                for i in range(5):
+                    task = asyncio.create_task(manager.create_agent("scout", f"Scout{i}"))
+                    tasks.append(task)
 
-            results = await asyncio.gather(*tasks)
+                results = await asyncio.gather(*tasks)
 
         # All should succeed with unique ports
         ports = [r["port"] for r in results]
