@@ -246,12 +246,14 @@ class CIRISManager:
 
         # Change ownership to match container's ciris user (uid=1000, gid=1000)
         # IMPORTANT: Container ciris user is 1000, not 1005 like host ciris user!
+        # Use sudo since manager runs as ciris-manager user
         import subprocess
 
         try:
             # Change ownership to uid/gid 1000 (container's ciris user)
+            # Using sudo as configured in /etc/sudoers.d/ciris-manager
             subprocess.run(
-                ["chown", "-R", "1000:1000", str(agent_dir)],
+                ["sudo", "chown", "-R", "1000:1000", str(agent_dir)],
                 check=True,
                 capture_output=True,
                 text=True,
