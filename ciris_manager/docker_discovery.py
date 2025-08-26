@@ -105,7 +105,7 @@ class DockerAgentDiscovery:
             registry_agent = (
                 self.agent_registry.get_agent(agent_id) if self.agent_registry else None
             )
-            
+
             # Registry is the source of truth for port, template, deployment
             api_port = None
             template = "unknown"
@@ -113,7 +113,7 @@ class DockerAgentDiscovery:
 
             if registry_agent:
                 # ALWAYS use port from registry - it's the allocated port
-                api_port = registry_agent.api_port if hasattr(registry_agent, 'api_port') else None
+                api_port = registry_agent.api_port if hasattr(registry_agent, "api_port") else None
                 template = registry_agent.template
                 # Get deployment from metadata
                 if hasattr(registry_agent, "metadata") and registry_agent.metadata:
