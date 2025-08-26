@@ -218,7 +218,7 @@ class TestDockerDiscoveryCoverage:
         # Create mock registry with agent
         mock_registry = Mock()
         mock_agent = Mock()
-        mock_agent.api_port = 8081
+        mock_agent.port = 8081  # Registry stores it as 'port', not 'api_port'
         mock_agent.template = "scout"
         mock_agent.metadata = {"deployment": "CIRIS_DISCORD_PILOT"}
         mock_registry.get_agent.return_value = mock_agent
