@@ -214,8 +214,16 @@ class TestDockerDiscoveryCoverage:
         assert agent_info.api_port is None  # No port info
 
     def test_extract_agent_info_with_ports(self):
-        """Test _extract_agent_info correctly extracts port information."""
-        discovery = DockerAgentDiscovery()
+        """Test _extract_agent_info correctly extracts port information from registry."""
+        # Create mock registry with agent
+        mock_registry = Mock()
+        mock_agent = Mock()
+        mock_agent.api_port = 8081
+        mock_agent.template = "scout"
+        mock_agent.metadata = {"deployment": "CIRIS_DISCORD_PILOT"}
+        mock_registry.get_agent.return_value = mock_agent
+        
+        discovery = DockerAgentDiscovery(agent_registry=mock_registry)
         discovery.client = Mock()
 
         container = Mock()
@@ -241,4 +249,4 @@ class TestDockerDiscoveryCoverage:
         agent_info = discovery._extract_agent_info(container, env_dict)
 
         assert agent_info is not None
-        assert agent_info.api_port == 8081  # Port is returned as int
+        assert agent_info.api_port == 8081  # Port comes from registry now, not NetworkSettings
