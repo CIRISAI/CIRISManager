@@ -2353,7 +2353,7 @@ function hideAgentSettingsModal() {
 }
 
 // Reload Discord Adapter for the current agent
-async function reloadDiscordAdapter() {
+async function reloadDiscordAdapter(buttonElement) {
     const agentId = document.getElementById('settings-agent-id').textContent;
     
     if (!agentId) {
@@ -2362,15 +2362,17 @@ async function reloadDiscordAdapter() {
     }
     
     // Get the agent's port from the global agents data
-    const agent = agentsData.find(a => a.agent_id === agentId);
+    const agent = agents.find(a => a.agent_id === agentId);
     if (!agent || !agent.api_port) {
         showError('Cannot find agent port');
         return;
     }
     
+    // Get button reference
+    const button = buttonElement || event.target;
+    
     try {
         // Show loading state
-        const button = event.target.closest('button');
         const originalHTML = button.innerHTML;
         button.disabled = true;
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Reloading...';
@@ -2429,7 +2431,6 @@ async function reloadDiscordAdapter() {
         console.error('Error reloading Discord adapter:', error);
         
         // Restore button on error
-        const button = event.target.closest('button');
         if (button) {
             button.disabled = false;
             button.innerHTML = '<i class="fas fa-sync"></i> Reload Discord Adapter';
