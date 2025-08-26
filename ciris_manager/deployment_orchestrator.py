@@ -2146,6 +2146,9 @@ class DeploymentOrchestrator:
                         f"Error checking agent {sanitize_agent_id(agent.agent_id)} health: {e}"
                     )
 
+            # Check for agents that timed out during shutdown
+            await self.check_timed_out_shutdowns()
+
             # Wait before next check
             await asyncio.sleep(10)
 
@@ -2744,18 +2747,17 @@ class DeploymentOrchestrator:
                                 ready_at=None,
                             )
                     else:
-                        # Remove from tracking since it didn't stop
-                        if agent.agent_id in deployment.agents_pending_restart:
-                            deployment.agents_pending_restart.remove(agent.agent_id)
-                        if agent.agent_id in deployment.agents_in_progress:
-                            del deployment.agents_in_progress[agent.agent_id]
+                        # Container didn't stop in time - keep it in pending_restart
+                        # It may still stop later and need to be restarted
+                        # Update progress state to indicate timeout
+                        deployment.agents_in_progress[agent.agent_id] = "shutdown_timeout"
                         self._save_state()
 
-                        logger.warning(f"Container {agent.container_name} did not stop in time")
+                        logger.warning(f"Container {agent.container_name} did not stop in time - keeping in pending restart list")
                         return AgentUpdateResponse(
                             agent_id=agent.agent_id,
                             decision="notified",
-                            reason="Container did not stop in expected time",
+                            reason="Container did not stop in expected time, will monitor for delayed shutdown",
                             ready_at=None,
                         )
                 else:
@@ -3045,6 +3047,73 @@ class DeploymentOrchestrator:
             deployment.message = f"Recovery failed: {str(e)}"
             self.current_deployment = None
             self._save_state()
+
+    async def check_timed_out_shutdowns(self) -> None:
+        """
+        Periodically check for agents that timed out during shutdown and restart them if needed.
+        This handles agents that take longer than expected to gracefully shutdown.
+        """
+        if not self.current_deployment:
+            return
+
+        deployment = self.deployments.get(self.current_deployment)
+        if not deployment or deployment.status != "in_progress":
+            return
+
+        # Check agents with shutdown_timeout status
+        agents_to_check = [
+            agent_id
+            for agent_id, status in deployment.agents_in_progress.items()
+            if status == "shutdown_timeout"
+        ]
+
+        for agent_id in agents_to_check:
+            try:
+                # Check container status
+                container_name = f"ciris-{agent_id}"
+                status_result = await asyncio.create_subprocess_exec(
+                    "docker",
+                    "inspect",
+                    container_name,
+                    "--format",
+                    "{{.State.Status}}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await status_result.communicate()
+
+                if status_result.returncode == 0:
+                    status = stdout.decode().strip()
+                    if status in ["exited", "dead", "removing", "removed"]:
+                        # Container finally stopped - restart it
+                        logger.info(f"Agent {agent_id} with shutdown_timeout has now stopped - restarting")
+                        
+                        # Update state to restarting
+                        deployment.agents_in_progress[agent_id] = "restarting"
+                        self._save_state()
+                        
+                        recreated = await self._recreate_agent_container(agent_id)
+                        if recreated:
+                            # Remove from tracking - successfully updated
+                            if agent_id in deployment.agents_pending_restart:
+                                deployment.agents_pending_restart.remove(agent_id)
+                            if agent_id in deployment.agents_in_progress:
+                                del deployment.agents_in_progress[agent_id]
+                            deployment.agents_updated += 1
+                            self._save_state()
+                            logger.info(f"Successfully restarted timed-out agent {agent_id}")
+                        else:
+                            # Failed to recreate
+                            if agent_id in deployment.agents_pending_restart:
+                                deployment.agents_pending_restart.remove(agent_id)
+                            if agent_id in deployment.agents_in_progress:
+                                del deployment.agents_in_progress[agent_id]
+                            deployment.agents_failed += 1
+                            self._save_state()
+                            logger.error(f"Failed to restart timed-out agent {agent_id}")
+
+            except Exception as e:
+                logger.error(f"Error checking timed-out agent {agent_id}: {e}")
 
     async def _update_nginx_container(
         self, gui_image: str, nginx_image: Optional[str] = None
