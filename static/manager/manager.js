@@ -2352,6 +2352,93 @@ function hideAgentSettingsModal() {
     modal.classList.add('hidden');
 }
 
+// Reload Discord Adapter for the current agent
+async function reloadDiscordAdapter() {
+    const agentId = document.getElementById('settings-agent-id').textContent;
+    
+    if (!agentId) {
+        showError('No agent selected');
+        return;
+    }
+    
+    // Get the agent's port from the global agents data
+    const agent = agentsData.find(a => a.agent_id === agentId);
+    if (!agent || !agent.api_port) {
+        showError('Cannot find agent port');
+        return;
+    }
+    
+    try {
+        // Show loading state
+        const button = event.target.closest('button');
+        const originalHTML = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Reloading...';
+        
+        // First, save any pending changes
+        await saveAgentSettings(new Event('submit'), true); // true = silent save
+        
+        // Wait a moment for settings to apply
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Get auth token from the agent
+        const loginResponse = await fetch(`/api/${agentId}/auth/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username: 'admin',
+                password: 'ciris_admin_password'
+            })
+        });
+        
+        if (!loginResponse.ok) {
+            throw new Error('Failed to authenticate with agent');
+        }
+        
+        const authData = await loginResponse.json();
+        const token = authData.access_token;
+        
+        // Reload the Discord adapter
+        const reloadResponse = await fetch(`/api/${agentId}/system/adapters/discord/reload`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                auto_start: true
+            })
+        });
+        
+        if (!reloadResponse.ok) {
+            const errorData = await reloadResponse.json();
+            throw new Error(errorData.detail || 'Failed to reload Discord adapter');
+        }
+        
+        const result = await reloadResponse.json();
+        
+        // Restore button
+        button.disabled = false;
+        button.innerHTML = originalHTML;
+        
+        showSuccess(`Discord adapter reloaded successfully${result.message ? ': ' + result.message : ''}`);
+        
+    } catch (error) {
+        console.error('Error reloading Discord adapter:', error);
+        
+        // Restore button on error
+        const button = event.target.closest('button');
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = '<i class="fas fa-sync"></i> Reload Discord Adapter';
+        }
+        
+        showError('Failed to reload Discord adapter: ' + error.message);
+    }
+}
+
 // Add environment variable row to settings modal
 function addSettingsEnvVarRow(key = '', value = '') {
     const container = document.getElementById('env-vars-settings');
@@ -2424,7 +2511,7 @@ async function loadSettingsEnvFromFile() {
 }
 
 // Save agent settings
-async function saveAgentSettings(event) {
+async function saveAgentSettings(event, silent = false) {
     event.preventDefault();
     
     const agentId = document.getElementById('settings-agent-id').dataset.agentId;
@@ -2495,18 +2582,23 @@ async function saveAgentSettings(event) {
         
         const result = await response.json();
         
-        // Hide modal
-        hideAgentSettingsModal();
-        
-        // Show success message
-        alert(`Agent ${agentId} configuration updated successfully. The container is being restarted.`);
-        
-        // Refresh agent list
-        await fetchData();
+        // Only hide modal and show message if not silent
+        if (!silent) {
+            // Hide modal
+            hideAgentSettingsModal();
+            
+            // Show success message
+            alert(`Agent ${agentId} configuration updated successfully. The container is being restarted.`);
+            
+            // Refresh agent list
+            await fetchData();
+        }
         
     } catch (error) {
         console.error('Failed to save agent settings:', error);
-        alert('Failed to save agent settings: ' + error.message);
+        if (!silent) {
+            alert('Failed to save agent settings: ' + error.message);
+        }
     }
 }
 
