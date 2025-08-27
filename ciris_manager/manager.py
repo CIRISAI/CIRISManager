@@ -252,13 +252,13 @@ class CIRISManager:
         # For now, log if there might be permission issues
         import os
         import shutil
-        
+
         try:
             # Check if we can write to the directory
             test_file = agent_dir / ".test_permissions"
             test_file.touch()
             test_file.unlink()
-            
+
             # We have write access, ensure subdirectories are accessible
             for item in agent_dir.iterdir():
                 if item.is_dir():
@@ -287,7 +287,9 @@ class CIRISManager:
                 logger.info(f"Copied init script to {init_script_dst}")
             except PermissionError as e:
                 logger.warning(f"Could not copy init script due to permissions: {e}")
-                logger.warning(f"Manual fix: sudo cp {init_script_src} {init_script_dst} && sudo chmod 755 {init_script_dst}")
+                logger.warning(
+                    f"Manual fix: sudo cp {init_script_src} {init_script_dst} && sudo chmod 755 {init_script_dst}"
+                )
         else:
             logger.warning(f"Init script not found at {init_script_src}")
 

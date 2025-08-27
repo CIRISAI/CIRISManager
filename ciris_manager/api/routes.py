@@ -1051,26 +1051,28 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Backup current config
             backup_path = compose_path.with_suffix(".yml.bak")
-            
+
             # Try to create backup, handling permission issues gracefully
             try:
                 # Read the original content
                 async with aiofiles.open(compose_path, "r") as f:
                     original_content = await f.read()
-                    
+
                 # Try to write backup
                 try:
                     async with aiofiles.open(backup_path, "w") as f:
                         await f.write(original_content)
                 except PermissionError:
                     # If we can't write backup, that's okay - continue with update
-                    logger.warning(f"Could not create backup file at {backup_path} - continuing without backup")
+                    logger.warning(
+                        f"Could not create backup file at {backup_path} - continuing without backup"
+                    )
             except Exception as e:
                 logger.warning(f"Could not read original file for backup: {e}")
 
             # Write updated docker-compose.yml
             content = yaml.dump(compose_data, default_flow_style=False, sort_keys=False)
-            
+
             # Try to write directly first
             try:
                 async with aiofiles.open(compose_path, "w") as f:
@@ -1079,12 +1081,12 @@ def create_routes(manager: Any) -> APIRouter:
                 # If direct write fails, write to temp location and move
                 import tempfile
                 import shutil
-                
+
                 # Write to temp file in /tmp (always writable)
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as tmp:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as tmp:
                     tmp.write(content)
                     temp_path = tmp.name
-                
+
                 # Try to move file - this might work even if direct write doesn't
                 try:
                     shutil.move(temp_path, str(compose_path))
