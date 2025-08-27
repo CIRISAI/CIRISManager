@@ -2603,6 +2603,94 @@ async function saveAgentSettings(event, silent = false) {
     }
 }
 
+// Save agent settings without restarting the container
+async function saveAgentSettingsWithoutRestart(event) {
+    event.preventDefault();
+    
+    const agentId = document.getElementById('settings-agent-id').dataset.agentId;
+    const mockLlm = document.getElementById('settings-mock-llm').checked;
+    const discordAdapter = document.getElementById('settings-discord').checked;
+    
+    try {
+        // Prepare configuration update
+        const configUpdate = {
+            environment: {},
+            restart: false  // Key difference - tell API not to restart
+        };
+        
+        // Quick settings
+        configUpdate.environment.CIRIS_MOCK_LLM = mockLlm ? 'true' : 'false';
+        configUpdate.environment.CIRIS_ENABLE_DISCORD = discordAdapter ? 'true' : 'false';
+        
+        // Discord configuration (if enabled)
+        if (discordAdapter) {
+            const botToken = document.getElementById('discord-bot-token').value;
+            const channelIds = document.getElementById('discord-channel-ids').value;
+            const deferralChannel = document.getElementById('discord-deferral-channel').value;
+            const waUserIds = document.getElementById('wa-user-ids').value;
+            
+            if (botToken) configUpdate.environment.DISCORD_BOT_TOKEN = botToken;
+            if (channelIds) {
+                // Clean up channel IDs (handle newlines and commas)
+                const cleanedIds = channelIds.replace(/\n/g, ',').replace(/\s+/g, '');
+                configUpdate.environment.DISCORD_CHANNEL_IDS = cleanedIds;
+            }
+            if (deferralChannel) configUpdate.environment.DISCORD_DEFERRAL_CHANNEL_ID = deferralChannel;
+            if (waUserIds) {
+                // Clean up WA user IDs  
+                const cleanedWaIds = waUserIds.replace(/\n/g, ',').replace(/\s+/g, '');
+                configUpdate.environment.WA_USER_IDS = cleanedWaIds;
+            }
+        }
+        
+        // API configuration
+        const openaiKey = document.getElementById('openai-api-key').value;
+        const llmProvider = document.getElementById('llm-provider').value;
+        if (openaiKey) configUpdate.environment.OPENAI_API_KEY = openaiKey;
+        if (llmProvider) configUpdate.environment.LLM_PROVIDER = llmProvider;
+        
+        // All other environment variables
+        const envKeys = document.querySelectorAll('.env-settings-key');
+        const envValues = document.querySelectorAll('.env-settings-value');
+        
+        envKeys.forEach((key, index) => {
+            if (key.value && envValues[index]) {
+                configUpdate.environment[key.value] = envValues[index].value;
+            }
+        });
+        
+        // Send PATCH request to update agent configuration without restart
+        const response = await fetch(`/manager/v1/agents/${agentId}/config`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify(configUpdate)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to save agent configuration');
+        }
+        
+        const result = await response.json();
+        
+        // Hide modal
+        hideAgentSettingsModal();
+        
+        // Show success message with different text
+        alert(`Agent ${agentId} configuration saved successfully. Changes will be applied on next restart.`);
+        
+        // Refresh agent list
+        await fetchData();
+        
+    } catch (error) {
+        console.error('Failed to save agent settings:', error);
+        alert('Failed to save agent settings: ' + error.message);
+    }
+}
+
 // Dashboard Functions
 
 // Staged Deployment Management Functions

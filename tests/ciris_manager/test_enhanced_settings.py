@@ -339,6 +339,99 @@ class TestEnhancedSettings:
         assert response.status_code == 200
         assert "updated" in response.json()["status"]
 
+    def test_update_agent_config_without_restart(self, client, mock_manager):
+        """Test updating agent configuration without restarting container."""
+
+        config_update = {
+            "environment": {"TEST_VAR": "test_value"},
+            "restart": False  # Don't restart the container
+        }
+
+        # Mock file operations
+        compose_content = """
+version: '3'
+services:
+  test:
+    image: test:latest
+    environment:
+      EXISTING_VAR: existing_value
+"""
+
+        def mock_aiofiles_open(path, mode):
+            mock_file = AsyncMock()
+            if "r" in mode:
+                mock_file.read = AsyncMock(return_value=compose_content)
+            else:
+                mock_file.write = AsyncMock(return_value=None)
+            mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+            mock_file.__aexit__ = AsyncMock(return_value=None)
+            return mock_file
+
+        with patch("aiofiles.open", side_effect=mock_aiofiles_open):
+            with patch("pathlib.Path.exists", return_value=True):
+                # Note: We should NOT call docker-compose up when restart=False
+                with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                    response = client.patch(
+                        "/manager/v1/agents/test-agent/config", json=config_update
+                    )
+                    
+                    # Subprocess should NOT have been called
+                    mock_subprocess.assert_not_called()
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["status"] == "updated"
+        assert "will be applied on next restart" in result["message"].lower()
+
+    def test_update_agent_config_with_restart_default(self, client, mock_manager):
+        """Test updating agent configuration with default restart behavior."""
+
+        config_update = {
+            "environment": {"TEST_VAR": "test_value"}
+            # No restart field - should default to True
+        }
+
+        # Mock file operations
+        compose_content = """
+version: '3'
+services:
+  test:
+    image: test:latest
+    environment:
+      EXISTING_VAR: existing_value
+"""
+
+        def mock_aiofiles_open(path, mode):
+            mock_file = AsyncMock()
+            if "r" in mode:
+                mock_file.read = AsyncMock(return_value=compose_content)
+            else:
+                mock_file.write = AsyncMock(return_value=None)
+            mock_file.__aenter__ = AsyncMock(return_value=mock_file)
+            mock_file.__aexit__ = AsyncMock(return_value=None)
+            return mock_file
+
+        with patch("aiofiles.open", side_effect=mock_aiofiles_open):
+            with patch("pathlib.Path.exists", return_value=True):
+                # Should call docker-compose up when restart is not specified
+                with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                    mock_proc = AsyncMock()
+                    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                    mock_proc.returncode = 0
+                    mock_subprocess.return_value = mock_proc
+
+                    response = client.patch(
+                        "/manager/v1/agents/test-agent/config", json=config_update
+                    )
+                    
+                    # Subprocess SHOULD have been called
+                    mock_subprocess.assert_called_once()
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["status"] == "updated"
+        assert "container recreated" in result["message"].lower()
+
 
 class TestEnvFileParser:
     """Test .env file parsing functionality."""

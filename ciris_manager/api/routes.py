@@ -1098,26 +1098,37 @@ def create_routes(manager: Any) -> APIRouter:
                         pass
                     raise RuntimeError(f"Failed to update config file: {move_error}")
 
-            # Recreate container with new config
-            agent_dir = Path("/opt/ciris/agents") / agent_id
-            proc = await asyncio.create_subprocess_exec(
-                "docker-compose",
-                "up",
-                "-d",
-                cwd=str(agent_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode != 0:
-                raise RuntimeError(f"Failed to recreate container: {stderr.decode()}")
+            # Check if we should restart the container
+            should_restart = config_update.get("restart", True)  # Default to True for backward compatibility
+            
+            if should_restart:
+                # Recreate container with new config
+                agent_dir = Path("/opt/ciris/agents") / agent_id
+                proc = await asyncio.create_subprocess_exec(
+                    "docker-compose",
+                    "up",
+                    "-d",
+                    cwd=str(agent_dir),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await proc.communicate()
+                if proc.returncode != 0:
+                    raise RuntimeError(f"Failed to recreate container: {stderr.decode()}")
 
-            logger.info(f"Agent {agent_id} config updated by {user['email']}")
-            return {
-                "status": "updated",
-                "agent_id": agent_id,
-                "message": "Configuration updated and container recreated",
-            }
+                logger.info(f"Agent {agent_id} config updated and restarted by {user['email']}")
+                return {
+                    "status": "updated",
+                    "agent_id": agent_id,
+                    "message": "Configuration updated and container recreated",
+                }
+            else:
+                logger.info(f"Agent {agent_id} config updated (no restart) by {user['email']}")
+                return {
+                    "status": "updated",
+                    "agent_id": agent_id,
+                    "message": "Configuration saved. Changes will be applied on next restart.",
+                }
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to recreate container: {e}")
