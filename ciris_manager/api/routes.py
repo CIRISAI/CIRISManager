@@ -1099,8 +1099,10 @@ def create_routes(manager: Any) -> APIRouter:
                     raise RuntimeError(f"Failed to update config file: {move_error}")
 
             # Check if we should restart the container
-            should_restart = config_update.get("restart", True)  # Default to True for backward compatibility
-            
+            should_restart = config_update.get(
+                "restart", True
+            )  # Default to True for backward compatibility
+
             if should_restart:
                 # Recreate container with new config
                 agent_dir = Path("/opt/ciris/agents") / agent_id
