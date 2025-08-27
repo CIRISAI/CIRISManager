@@ -137,7 +137,7 @@ class TestEnhancedSettings:
                     mock_proc.returncode = 0
                     mock_subprocess.return_value = mock_proc
 
-                        response = client.patch(
+                    response = client.patch(
                             "/manager/v1/agents/test-agent/config", json=config_update
                         )
 
@@ -286,7 +286,7 @@ class TestEnhancedSettings:
                     mock_proc.returncode = 0
                     mock_subprocess.return_value = mock_proc
 
-                        response = client.patch(
+                    response = client.patch(
                             "/manager/v1/agents/test-agent/config", json=config_update
                         )
 
@@ -332,7 +332,7 @@ class TestEnhancedSettings:
                     mock_proc.returncode = 0
                     mock_subprocess.return_value = mock_proc
 
-                        response = client.patch(
+                    response = client.patch(
                             "/manager/v1/agents/test-agent/config", json=config_update
                         )
 
