@@ -1092,7 +1092,7 @@ def create_routes(manager: Any) -> APIRouter:
                     # Clean up temp file
                     try:
                         Path(temp_path).unlink()
-                    except:
+                    except Exception:
                         pass
                     raise RuntimeError(f"Failed to update config file: {move_error}")
 

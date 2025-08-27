@@ -264,7 +264,7 @@ class CIRISManager:
                 if item.is_dir():
                     try:
                         os.chmod(item, 0o755)
-                    except:
+                    except Exception:
                         pass  # Ignore permission errors on subdirectories
         except PermissionError:
             logger.warning(
