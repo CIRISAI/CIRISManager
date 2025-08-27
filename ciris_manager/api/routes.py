@@ -1051,14 +1051,38 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Backup current config
             backup_path = compose_path.with_suffix(".yml.bak")
-            import shutil
+            import subprocess
 
-            shutil.copy2(str(compose_path), str(backup_path))
+            # Use sudo to create backup (configured in /etc/sudoers.d/ciris-manager)
+            result = subprocess.run(
+                ["sudo", "cp", str(compose_path), str(backup_path)],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to create backup: {result.stderr}")
 
-            # Write updated docker-compose.yml
+            # Write updated docker-compose.yml to temp file then move with sudo
+            temp_path = compose_path.with_suffix(".yml.tmp")
             content = yaml.dump(compose_data, default_flow_style=False, sort_keys=False)
-            async with aiofiles.open(compose_path, "w") as f:
+            async with aiofiles.open(temp_path, "w") as f:
                 await f.write(content)
+            
+            # Move temp file to final location with sudo
+            result = subprocess.run(
+                ["sudo", "mv", str(temp_path), str(compose_path)],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to update config: {result.stderr}")
+            
+            # Ensure correct ownership
+            result = subprocess.run(
+                ["sudo", "chown", "1000:1000", str(compose_path)],
+                capture_output=True,
+                text=True,
+            )
 
             # Recreate container with new config
             agent_dir = Path("/opt/ciris/agents") / agent_id

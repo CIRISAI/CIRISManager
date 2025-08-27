@@ -266,13 +266,28 @@ class CIRISManager:
             logger.error("Agent may have permission issues - manual intervention required")
 
         # Copy init script to agent directory
-        import shutil
-
         init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
         init_script_dst = agent_dir / "init_permissions.sh"
         if init_script_src.exists():
-            shutil.copy2(init_script_src, init_script_dst)
-            init_script_dst.chmod(0o755)
+            # Use sudo to copy and set permissions (configured in /etc/sudoers.d/ciris-manager)
+            subprocess.run(
+                ["sudo", "cp", str(init_script_src), str(init_script_dst)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["sudo", "chmod", "755", str(init_script_dst)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["sudo", "chown", "1000:1000", str(init_script_dst)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             logger.info(f"Copied init script to {init_script_dst}")
         else:
             logger.warning(f"Init script not found at {init_script_src}")
