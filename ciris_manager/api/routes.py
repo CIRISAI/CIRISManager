@@ -1067,7 +1067,7 @@ def create_routes(manager: Any) -> APIRouter:
             content = yaml.dump(compose_data, default_flow_style=False, sort_keys=False)
             async with aiofiles.open(temp_path, "w") as f:
                 await f.write(content)
-            
+
             # Move temp file to final location with sudo
             result = subprocess.run(
                 ["sudo", "mv", str(temp_path), str(compose_path)],
@@ -1076,7 +1076,7 @@ def create_routes(manager: Any) -> APIRouter:
             )
             if result.returncode != 0:
                 raise RuntimeError(f"Failed to update config: {result.stderr}")
-            
+
             # Ensure correct ownership
             result = subprocess.run(
                 ["sudo", "chown", "1000:1000", str(compose_path)],
