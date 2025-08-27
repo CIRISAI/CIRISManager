@@ -3,7 +3,7 @@ Test environment variable loading functionality.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, MagicMock, AsyncMock, patch
 import yaml
 from fastapi.testclient import TestClient
 
@@ -315,7 +315,10 @@ MIXED_QUOTES="it's a mixed value"
         with patch("aiofiles.open", side_effect=mock_aiofiles_open):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-                    with patch("shutil.copy2"):  # Mock the backup operation
+                    mock_result = MagicMock()
+                    mock_result.returncode = 0
+                    mock_result.stderr = ""
+                    with patch("subprocess.run", return_value=mock_result):  # Mock the sudo operations
                         mock_proc = AsyncMock()
                         mock_proc.communicate = AsyncMock(return_value=(b"", b""))
                         mock_proc.returncode = 0
@@ -370,7 +373,10 @@ MIXED_QUOTES="it's a mixed value"
         with patch("aiofiles.open", side_effect=mock_aiofiles_open):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-                    with patch("shutil.copy2"):  # Mock the backup operation
+                    mock_result = MagicMock()
+                    mock_result.returncode = 0
+                    mock_result.stderr = ""
+                    with patch("subprocess.run", return_value=mock_result):  # Mock the sudo operations
                         mock_proc = AsyncMock()
                         mock_proc.communicate = AsyncMock(return_value=(b"", b""))
                         mock_proc.returncode = 0

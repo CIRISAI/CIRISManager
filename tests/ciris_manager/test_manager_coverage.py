@@ -227,8 +227,10 @@ class TestManagerCoverage:
             mock_nginx.ensure_managed_sections = Mock(return_value=True)
             mock_nginx.add_agent_route = Mock(return_value=True)
             mock_nginx_class.return_value = mock_nginx
-
-            manager = CIRISManager(config)
+            
+            # Mock DockerImageCleanup to avoid Docker connection
+            with patch("ciris_manager.manager.DockerImageCleanup"):
+                manager = CIRISManager(config)
             manager.nginx_manager = mock_nginx
 
             # Pre-allocate port
@@ -242,9 +244,14 @@ class TestManagerCoverage:
                 mock_process.returncode = 0
                 mock_process.communicate = AsyncMock(return_value=(b"", b""))
                 mock_subprocess.return_value = mock_process
-
-                # Create agent - should get next available port
-                result = await manager.create_agent("test", "Test")
+                
+                # Mock subprocess.run for sudo operations
+                mock_result = Mock()
+                mock_result.returncode = 0
+                mock_result.stderr = ""
+                with patch("subprocess.run", return_value=mock_result):
+                    # Create agent - should get next available port
+                    result = await manager.create_agent("test", "Test")
 
                 assert result["port"] == 8081  # Next available
 
