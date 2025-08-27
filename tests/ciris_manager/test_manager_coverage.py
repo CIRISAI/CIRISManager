@@ -244,14 +244,9 @@ class TestManagerCoverage:
                 mock_process.returncode = 0
                 mock_process.communicate = AsyncMock(return_value=(b"", b""))
                 mock_subprocess.return_value = mock_process
-                
-                # Mock subprocess.run for sudo operations
-                mock_result = Mock()
-                mock_result.returncode = 0
-                mock_result.stderr = ""
-                with patch("subprocess.run", return_value=mock_result):
-                    # Create agent - should get next available port
-                    result = await manager.create_agent("test", "Test")
+
+                # Create agent - should get next available port
+                result = await manager.create_agent("test", "Test")
 
                 assert result["port"] == 8081  # Next available
 

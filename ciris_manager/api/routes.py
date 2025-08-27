@@ -1051,38 +1051,50 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Backup current config
             backup_path = compose_path.with_suffix(".yml.bak")
-            import subprocess
+            
+            # Try to create backup, handling permission issues gracefully
+            try:
+                # Read the original content
+                async with aiofiles.open(compose_path, "r") as f:
+                    original_content = await f.read()
+                    
+                # Try to write backup
+                try:
+                    async with aiofiles.open(backup_path, "w") as f:
+                        await f.write(original_content)
+                except PermissionError:
+                    # If we can't write backup, that's okay - continue with update
+                    logger.warning(f"Could not create backup file at {backup_path} - continuing without backup")
+            except Exception as e:
+                logger.warning(f"Could not read original file for backup: {e}")
 
-            # Use sudo to create backup (configured in /etc/sudoers.d/ciris-manager)
-            result = subprocess.run(
-                ["sudo", "cp", str(compose_path), str(backup_path)],
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"Failed to create backup: {result.stderr}")
-
-            # Write updated docker-compose.yml to temp file then move with sudo
-            temp_path = compose_path.with_suffix(".yml.tmp")
+            # Write updated docker-compose.yml
             content = yaml.dump(compose_data, default_flow_style=False, sort_keys=False)
-            async with aiofiles.open(temp_path, "w") as f:
-                await f.write(content)
-
-            # Move temp file to final location with sudo
-            result = subprocess.run(
-                ["sudo", "mv", str(temp_path), str(compose_path)],
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"Failed to update config: {result.stderr}")
-
-            # Ensure correct ownership
-            result = subprocess.run(
-                ["sudo", "chown", "1000:1000", str(compose_path)],
-                capture_output=True,
-                text=True,
-            )
+            
+            # Try to write directly first
+            try:
+                async with aiofiles.open(compose_path, "w") as f:
+                    await f.write(content)
+            except PermissionError:
+                # If direct write fails, write to temp location and move
+                import tempfile
+                import shutil
+                
+                # Write to temp file in /tmp (always writable)
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as tmp:
+                    tmp.write(content)
+                    temp_path = tmp.name
+                
+                # Try to move file - this might work even if direct write doesn't
+                try:
+                    shutil.move(temp_path, str(compose_path))
+                except Exception as move_error:
+                    # Clean up temp file
+                    try:
+                        Path(temp_path).unlink()
+                    except:
+                        pass
+                    raise RuntimeError(f"Failed to update config file: {move_error}")
 
             # Recreate container with new config
             agent_dir = Path("/opt/ciris/agents") / agent_id

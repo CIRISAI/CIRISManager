@@ -247,48 +247,47 @@ class CIRISManager:
         # Change ownership to match container's ciris user (uid=1000, gid=1000)
         # IMPORTANT: Container ciris user is 1000, not 1005 like host ciris user!
         # Use sudo since manager runs as ciris-manager user
-        import subprocess
-
+        # Note: We can't use sudo in systemd service with NoNewPrivileges=true
+        # The directories should be created with proper permissions from the start
+        # For now, log if there might be permission issues
+        import os
+        import shutil
+        
         try:
-            # Change ownership to uid/gid 1000 (container's ciris user)
-            # Using sudo as configured in /etc/sudoers.d/ciris-manager
-            subprocess.run(
-                ["sudo", "chown", "-R", "1000:1000", str(agent_dir)],
-                check=True,
-                capture_output=True,
-                text=True,
+            # Check if we can write to the directory
+            test_file = agent_dir / ".test_permissions"
+            test_file.touch()
+            test_file.unlink()
+            
+            # We have write access, ensure subdirectories are accessible
+            for item in agent_dir.iterdir():
+                if item.is_dir():
+                    try:
+                        os.chmod(item, 0o755)
+                    except:
+                        pass  # Ignore permission errors on subdirectories
+        except PermissionError:
+            logger.warning(
+                f"Limited permissions for {agent_dir} - agent may have issues. "
+                f"Manual fix required: sudo chown -R 1000:1000 {agent_dir}"
             )
-            logger.info(
-                f"Changed ownership of {agent_dir} to uid/gid 1000 for container compatibility"
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to set proper ownership for agent directories: {e.stderr}")
-            logger.error("Agent may have permission issues - manual intervention required")
 
         # Copy init script to agent directory
         init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
         init_script_dst = agent_dir / "init_permissions.sh"
         if init_script_src.exists():
-            # Use sudo to copy and set permissions (configured in /etc/sudoers.d/ciris-manager)
-            subprocess.run(
-                ["sudo", "cp", str(init_script_src), str(init_script_dst)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            subprocess.run(
-                ["sudo", "chmod", "755", str(init_script_dst)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            subprocess.run(
-                ["sudo", "chown", "1000:1000", str(init_script_dst)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            logger.info(f"Copied init script to {init_script_dst}")
+            try:
+                # Try regular copy first
+                shutil.copy2(init_script_src, init_script_dst)
+                # Try to set permissions
+                try:
+                    init_script_dst.chmod(0o755)
+                except PermissionError:
+                    logger.warning(f"Could not set execute permission on {init_script_dst}")
+                logger.info(f"Copied init script to {init_script_dst}")
+            except PermissionError as e:
+                logger.warning(f"Could not copy init script due to permissions: {e}")
+                logger.warning(f"Manual fix: sudo cp {init_script_src} {init_script_dst} && sudo chmod 755 {init_script_dst}")
         else:
             logger.warning(f"Init script not found at {init_script_src}")
 

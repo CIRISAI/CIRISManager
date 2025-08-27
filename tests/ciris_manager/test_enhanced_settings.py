@@ -132,14 +132,10 @@ class TestEnhancedSettings:
         with patch("aiofiles.open", side_effect=mock_aiofiles_open):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-                    mock_result = MagicMock()
-                    mock_result.returncode = 0
-                    mock_result.stderr = ""
-                    with patch("subprocess.run", return_value=mock_result):  # Mock the sudo operations
-                        mock_proc = AsyncMock()
-                        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
-                        mock_proc.returncode = 0
-                        mock_subprocess.return_value = mock_proc
+                    mock_proc = AsyncMock()
+                    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                    mock_proc.returncode = 0
+                    mock_subprocess.return_value = mock_proc
 
                         response = client.patch(
                             "/manager/v1/agents/test-agent/config", json=config_update
@@ -285,14 +281,10 @@ class TestEnhancedSettings:
         with patch("aiofiles.open", side_effect=mock_aiofiles_open):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-                    mock_result = MagicMock()
-                    mock_result.returncode = 0
-                    mock_result.stderr = ""
-                    with patch("subprocess.run", return_value=mock_result):  # Mock the sudo operations
-                        mock_proc = AsyncMock()
-                        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
-                        mock_proc.returncode = 0
-                        mock_subprocess.return_value = mock_proc
+                    mock_proc = AsyncMock()
+                    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                    mock_proc.returncode = 0
+                    mock_subprocess.return_value = mock_proc
 
                         response = client.patch(
                             "/manager/v1/agents/test-agent/config", json=config_update
@@ -335,14 +327,10 @@ class TestEnhancedSettings:
         with patch("aiofiles.open", side_effect=mock_aiofiles_open):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-                    mock_result = MagicMock()
-                    mock_result.returncode = 0
-                    mock_result.stderr = ""
-                    with patch("subprocess.run", return_value=mock_result):  # Mock the sudo operations
-                        mock_proc = AsyncMock()
-                        mock_proc.communicate = AsyncMock(return_value=(b"", b""))
-                        mock_proc.returncode = 0
-                        mock_subprocess.return_value = mock_proc
+                    mock_proc = AsyncMock()
+                    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+                    mock_proc.returncode = 0
+                    mock_subprocess.return_value = mock_proc
 
                         response = client.patch(
                             "/manager/v1/agents/test-agent/config", json=config_update
