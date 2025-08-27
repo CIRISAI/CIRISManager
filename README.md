@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/CIRISAI/CIRISManager)
+
 # CIRISManager
 
 Production-grade lifecycle management for CIRIS agents with automatic nginx routing, OAuth authentication, canary deployments, and comprehensive agent configuration management.
