@@ -246,31 +246,59 @@ class CIRISManager:
 
         # Change ownership to match container's ciris user (uid=1000, gid=1000)
         # IMPORTANT: Container ciris user is 1000, not 1005 like host ciris user!
-        # Use sudo since manager runs as ciris-manager user
-        # Note: We can't use sudo in systemd service with NoNewPrivileges=true
-        # The directories should be created with proper permissions from the start
-        # For now, log if there might be permission issues
+        # Try to set ownership using subprocess with sudo (if available)
         import os
-        import shutil
-
+        import subprocess
+        
         try:
-            # Check if we can write to the directory
-            test_file = agent_dir / ".test_permissions"
-            test_file.touch()
-            test_file.unlink()
-
-            # We have write access, ensure subdirectories are accessible
-            for item in agent_dir.iterdir():
-                if item.is_dir():
-                    try:
-                        os.chmod(item, 0o755)
-                    except Exception:
-                        pass  # Ignore permission errors on subdirectories
-        except PermissionError:
+            # Try to change ownership to uid 1000 (container user)
+            # This will work if:
+            # 1. Manager is running as root (unlikely)
+            # 2. Manager has sudo access without password (possible in some setups)
+            # 3. A setuid helper script is available
+            
+            # First try direct chown (works if running as root)
+            try:
+                os.chown(agent_dir, 1000, 1000)
+                for dir_name in directories.keys():
+                    dir_path = agent_dir / dir_name
+                    os.chown(dir_path, 1000, 1000)
+                logger.info(f"Successfully set ownership to uid:gid 1000:1000 for {agent_dir}")
+            except PermissionError:
+                # Try using a setuid helper script if it exists
+                helper_script = Path("/usr/local/bin/ciris-fix-permissions")
+                if helper_script.exists():
+                    result = subprocess.run(
+                        [str(helper_script), str(agent_dir)],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode == 0:
+                        logger.info(f"Fixed permissions using helper script for {agent_dir}")
+                    else:
+                        raise PermissionError("Helper script failed")
+                else:
+                    raise PermissionError("No helper script available")
+                    
+        except Exception as e:
             logger.warning(
-                f"Limited permissions for {agent_dir} - agent may have issues. "
+                f"Could not set ownership to uid 1000 for {agent_dir}: {e}\n"
+                f"Agent may fail to start due to permission issues.\n"
                 f"Manual fix required: sudo chown -R 1000:1000 {agent_dir}"
             )
+            
+            # Write a script to fix permissions that can be run manually
+            fix_script = agent_dir / "fix_permissions.sh"
+            fix_script.write_text(f"""#!/bin/bash
+# Fix permissions for agent {agent_id}
+echo "Fixing permissions for {agent_dir}..."
+chmod 755 {agent_dir}/data {agent_dir}/data_archive {agent_dir}/logs {agent_dir}/config
+chmod 700 {agent_dir}/audit_keys {agent_dir}/.secrets
+chown -R 1000:1000 {agent_dir}/data {agent_dir}/data_archive {agent_dir}/logs {agent_dir}/config {agent_dir}/audit_keys {agent_dir}/.secrets
+echo "Permissions fixed. Agent should now be able to start."
+""")
+            fix_script.chmod(0o755)
+            logger.info(f"Created fix_permissions.sh script in {agent_dir} - run with sudo to fix")
 
         # Copy init script to agent directory
         init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
