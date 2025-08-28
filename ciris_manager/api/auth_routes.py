@@ -156,6 +156,7 @@ def create_auth_routes() -> APIRouter:
             response.set_cookie(
                 key="manager_token",
                 value=result["access_token"],
+                path="/",  # Available for all paths
                 httponly=True,
                 secure=request.url.scheme == "https",
                 samesite="lax",
@@ -179,7 +180,7 @@ def create_auth_routes() -> APIRouter:
     @router.post("/oauth/logout")
     async def logout(response: Response) -> Dict[str, str]:
         """Logout by clearing the JWT cookie."""
-        response.delete_cookie("manager_token")
+        response.delete_cookie("manager_token", path="/")
         return {"message": "Logged out successfully"}
 
     @router.get("/oauth/user")
