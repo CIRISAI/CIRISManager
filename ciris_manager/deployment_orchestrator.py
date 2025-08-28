@@ -2756,6 +2756,16 @@ class DeploymentOrchestrator:
                         logger.warning(
                             f"Container {agent.container_name} did not stop in time - keeping in pending restart list"
                         )
+                        
+                        # Start a background task to monitor and restart when it eventually stops
+                        asyncio.create_task(
+                            self._monitor_and_restart_delayed_agent(
+                                agent.agent_id, 
+                                deployment_id,
+                                notification
+                            )
+                        )
+                        
                         return AgentUpdateResponse(
                             agent_id=agent.agent_id,
                             decision="notified",
@@ -2824,6 +2834,113 @@ class DeploymentOrchestrator:
                 reason=str(e),
                 ready_at=None,
             )
+
+    async def _monitor_and_restart_delayed_agent(
+        self, 
+        agent_id: str, 
+        deployment_id: str,
+        notification: UpdateNotification
+    ) -> None:
+        """
+        Monitor an agent that didn't stop within the initial timeout and restart it
+        with the new image when it eventually does stop.
+        
+        This handles the case where agents take longer than expected to gracefully shutdown
+        but still need to be updated to the new version.
+        """
+        try:
+            logger.info(f"Starting delayed restart monitor for agent {agent_id}")
+            container_name = f"ciris-{agent_id}"
+            max_wait = 600  # Wait up to 10 minutes total
+            check_interval = 10  # Check every 10 seconds
+            elapsed = 0
+            
+            while elapsed < max_wait:
+                # Check if container has stopped
+                try:
+                    import docker
+                    client = docker.from_env()
+                    container = client.containers.get(container_name)
+                    
+                    if container.status == "exited":
+                        logger.info(f"Container {container_name} has stopped after delay, pulling new image and restarting...")
+                        
+                        # Pull the new image first
+                        compose_path = self.agent_dir / agent_id / "docker-compose.yml"
+                        if compose_path.exists():
+                            # Pull new image
+                            pull_cmd = ["docker-compose", "-f", str(compose_path), "pull"]
+                            pull_process = await asyncio.create_subprocess_exec(
+                                *pull_cmd,
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE
+                            )
+                            pull_stdout, pull_stderr = await pull_process.communicate()
+                            
+                            if pull_process.returncode == 0:
+                                logger.info(f"Successfully pulled new image for {agent_id}")
+                            else:
+                                logger.error(f"Failed to pull image for {agent_id}: {pull_stderr.decode()}")
+                        
+                        # Recreate the container with new image
+                        recreated = await self._recreate_agent_container(agent_id)
+                        
+                        if recreated:
+                            logger.info(f"Successfully restarted {agent_id} with new image after delayed shutdown")
+                            
+                            # Update deployment state
+                            if deployment_id in self.deployments:
+                                deployment = self.deployments[deployment_id]
+                                if agent_id in deployment.agents_pending_restart:
+                                    deployment.agents_pending_restart.remove(agent_id)
+                                if agent_id in deployment.agents_in_progress:
+                                    del deployment.agents_in_progress[agent_id]
+                                deployment.agents_updated += 1
+                                self._save_state()
+                                
+                                # Update agent metadata  
+                                if self.manager:
+                                    await self._update_agent_metadata(agent_id, notification)
+                        else:
+                            logger.error(f"Failed to restart {agent_id} after delayed shutdown")
+                            
+                            # Mark as failed in deployment
+                            if deployment_id in self.deployments:
+                                deployment = self.deployments[deployment_id]
+                                if agent_id in deployment.agents_pending_restart:
+                                    deployment.agents_pending_restart.remove(agent_id)
+                                if agent_id in deployment.agents_in_progress:
+                                    del deployment.agents_in_progress[agent_id]
+                                deployment.agents_failed += 1
+                                self._save_state()
+                        
+                        return  # Exit monitor after handling restart
+                        
+                except docker.errors.NotFound:
+                    logger.warning(f"Container {container_name} not found, may have been removed")
+                    return
+                except Exception as e:
+                    logger.error(f"Error checking container status: {e}")
+                    
+                # Wait before checking again
+                await asyncio.sleep(check_interval)
+                elapsed += check_interval
+            
+            # Timeout - container never stopped
+            logger.error(f"Agent {agent_id} never stopped after {max_wait} seconds, giving up on update")
+            
+            # Mark as failed in deployment
+            if deployment_id in self.deployments:
+                deployment = self.deployments[deployment_id]
+                if agent_id in deployment.agents_pending_restart:
+                    deployment.agents_pending_restart.remove(agent_id)
+                if agent_id in deployment.agents_in_progress:
+                    del deployment.agents_in_progress[agent_id]
+                deployment.agents_failed += 1
+                self._save_state()
+                
+        except Exception as e:
+            logger.error(f"Error in delayed restart monitor for {agent_id}: {e}")
 
     async def _wait_for_container_stop(self, container_name: str, timeout: int = 60) -> bool:
         """
