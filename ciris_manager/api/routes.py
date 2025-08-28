@@ -1045,9 +1045,15 @@ def create_routes(manager: Any) -> APIRouter:
                                 # Don't save CIRIS_ENABLE_DISCORD itself
                                 del config_update["environment"]["CIRIS_ENABLE_DISCORD"]
 
-                            # Update other environment variables normally
+                            # Update other environment variables
+                            # Handle deletions (when value is None or empty string from UI)
                             for key, value in config_update["environment"].items():
-                                service["environment"][key] = value
+                                if value is None or value == "":
+                                    # Remove the variable if it exists
+                                    service["environment"].pop(key, None)
+                                else:
+                                    # Update or add the variable
+                                    service["environment"][key] = value
 
             # Backup current config
             backup_path = compose_path.with_suffix(".yml.bak")
