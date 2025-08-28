@@ -59,7 +59,7 @@ class DeploymentOrchestrator:
 
         # Track background tasks to prevent garbage collection
         self._background_tasks: set = set()
-        
+
         # Agent directory path
         self.agent_dir = Path("/opt/ciris/agents")
 
