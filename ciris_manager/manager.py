@@ -249,25 +249,22 @@ class CIRISManager:
         # Try to set ownership using subprocess with sudo (if available)
         import os
         import subprocess
-        
+        import shutil
+
         try:
             # Try to change ownership to uid 1000 (container user)
             # The ciris-manager user has sudo access to chown without password
             # per /etc/sudoers.d/ciris-manager configuration
-            
+
             # Use sudo chown which should work with our sudoers config
             # Note: This works even with NoNewPrivileges=true in systemd
             # because sudo is a separate process with its own privileges
-            
-            success = True
-            
+
             # Change ownership of main directory
             result = subprocess.run(
-                ["sudo", "chown", "-R", "1000:1000", str(agent_dir)],
-                capture_output=True,
-                text=True
+                ["sudo", "chown", "-R", "1000:1000", str(agent_dir)], capture_output=True, text=True
             )
-            
+
             if result.returncode == 0:
                 logger.info(f"Successfully set ownership to uid:gid 1000:1000 for {agent_dir}")
             else:
@@ -283,9 +280,7 @@ class CIRISManager:
                     helper_script = Path("/usr/local/bin/ciris-fix-permissions")
                     if helper_script.exists():
                         result = subprocess.run(
-                            [str(helper_script), str(agent_dir)],
-                            capture_output=True,
-                            text=True
+                            [str(helper_script), str(agent_dir)], capture_output=True, text=True
                         )
                         if result.returncode == 0:
                             logger.info(f"Fixed permissions using helper script for {agent_dir}")
@@ -293,14 +288,14 @@ class CIRISManager:
                             raise PermissionError("Helper script failed")
                     else:
                         raise PermissionError("No permission fixing method available")
-                    
+
         except Exception as e:
             logger.warning(
                 f"Could not set ownership to uid 1000 for {agent_dir}: {e}\n"
                 f"Agent may fail to start due to permission issues.\n"
                 f"Manual fix required: sudo chown -R 1000:1000 {agent_dir}"
             )
-            
+
             # Write a script to fix permissions that can be run manually
             fix_script = agent_dir / "fix_permissions.sh"
             fix_script.write_text(f"""#!/bin/bash
