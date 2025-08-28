@@ -252,33 +252,47 @@ class CIRISManager:
         
         try:
             # Try to change ownership to uid 1000 (container user)
-            # This will work if:
-            # 1. Manager is running as root (unlikely)
-            # 2. Manager has sudo access without password (possible in some setups)
-            # 3. A setuid helper script is available
+            # The ciris-manager user has sudo access to chown without password
+            # per /etc/sudoers.d/ciris-manager configuration
             
-            # First try direct chown (works if running as root)
-            try:
-                os.chown(agent_dir, 1000, 1000)
-                for dir_name in directories.keys():
-                    dir_path = agent_dir / dir_name
-                    os.chown(dir_path, 1000, 1000)
+            # Use sudo chown which should work with our sudoers config
+            # Note: This works even with NoNewPrivileges=true in systemd
+            # because sudo is a separate process with its own privileges
+            
+            success = True
+            
+            # Change ownership of main directory
+            result = subprocess.run(
+                ["sudo", "chown", "-R", "1000:1000", str(agent_dir)],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode == 0:
                 logger.info(f"Successfully set ownership to uid:gid 1000:1000 for {agent_dir}")
-            except PermissionError:
-                # Try using a setuid helper script if it exists
-                helper_script = Path("/usr/local/bin/ciris-fix-permissions")
-                if helper_script.exists():
-                    result = subprocess.run(
-                        [str(helper_script), str(agent_dir)],
-                        capture_output=True,
-                        text=True
-                    )
-                    if result.returncode == 0:
-                        logger.info(f"Fixed permissions using helper script for {agent_dir}")
+            else:
+                # If sudo doesn't work, try direct chown (works if running as root)
+                try:
+                    os.chown(agent_dir, 1000, 1000)
+                    for dir_name in directories.keys():
+                        dir_path = agent_dir / dir_name
+                        os.chown(dir_path, 1000, 1000)
+                    logger.info(f"Successfully set ownership using direct chown for {agent_dir}")
+                except PermissionError:
+                    # Try using a setuid helper script if it exists
+                    helper_script = Path("/usr/local/bin/ciris-fix-permissions")
+                    if helper_script.exists():
+                        result = subprocess.run(
+                            [str(helper_script), str(agent_dir)],
+                            capture_output=True,
+                            text=True
+                        )
+                        if result.returncode == 0:
+                            logger.info(f"Fixed permissions using helper script for {agent_dir}")
+                        else:
+                            raise PermissionError("Helper script failed")
                     else:
-                        raise PermissionError("Helper script failed")
-                else:
-                    raise PermissionError("No helper script available")
+                        raise PermissionError("No permission fixing method available")
                     
         except Exception as e:
             logger.warning(
