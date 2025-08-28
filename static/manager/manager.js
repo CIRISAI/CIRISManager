@@ -2475,6 +2475,7 @@ async function showAgentSettings(agentId) {
             
             // Populate Discord settings
             if (config.environment) {
+                document.getElementById('discord-server-id').value = config.environment.DISCORD_SERVER_ID || '';
                 document.getElementById('discord-bot-token').value = config.environment.DISCORD_BOT_TOKEN || '';
                 document.getElementById('discord-channel-ids').value = config.environment.DISCORD_CHANNEL_IDS || '';
                 document.getElementById('discord-deferral-channel').value = config.environment.DISCORD_DEFERRAL_CHANNEL_ID || '';
@@ -2702,11 +2703,13 @@ async function saveAgentSettings(event, silent = false) {
         
         // Discord configuration (if enabled)
         if (discordAdapter) {
+            const serverId = document.getElementById('discord-server-id').value;
             const botToken = document.getElementById('discord-bot-token').value;
             const channelIds = document.getElementById('discord-channel-ids').value;
             const deferralChannel = document.getElementById('discord-deferral-channel').value;
             const waUserIds = document.getElementById('wa-user-ids').value;
             
+            if (serverId) configUpdate.environment.DISCORD_SERVER_ID = serverId;
             if (botToken) configUpdate.environment.DISCORD_BOT_TOKEN = botToken;
             if (channelIds) {
                 // Clean up channel IDs (handle newlines and commas)
@@ -2795,11 +2798,13 @@ async function saveAgentSettingsWithoutRestart(event) {
         
         // Discord configuration (if enabled)
         if (discordAdapter) {
+            const serverId = document.getElementById('discord-server-id').value;
             const botToken = document.getElementById('discord-bot-token').value;
             const channelIds = document.getElementById('discord-channel-ids').value;
             const deferralChannel = document.getElementById('discord-deferral-channel').value;
             const waUserIds = document.getElementById('wa-user-ids').value;
             
+            if (serverId) configUpdate.environment.DISCORD_SERVER_ID = serverId;
             if (botToken) configUpdate.environment.DISCORD_BOT_TOKEN = botToken;
             if (channelIds) {
                 // Clean up channel IDs (handle newlines and commas)
