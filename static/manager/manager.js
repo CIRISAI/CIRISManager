@@ -480,7 +480,7 @@ async function checkTemplateApproval() {
         // Fetch template details to check stewardship tier
         try {
             const response = await fetch(`/manager/v1/templates/${template}/details`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('managerToken')}` }
+                credentials: 'include'
             });
             
             if (response.ok) {
@@ -1506,8 +1506,8 @@ async function showShutdownReasons(deploymentId) {
     try {
         const response = await fetch(`/manager/v1/updates/shutdown-reasons/${deploymentId}`, {
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
-            }
+            },
+            credentials: 'include'
         });
         
         if (!response.ok) {
@@ -2072,12 +2072,12 @@ async function cancelDeployment(deploymentId) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
             },
             body: JSON.stringify({
                 deployment_id: deploymentId,
                 reason: 'Clearing failed deployment to allow retry'
-            })
+            }),
+                credentials: 'include'
         });
         
         console.log('Cancel response status:', response.status);
@@ -2108,8 +2108,8 @@ async function triggerNewDeployment() {
     try {
         const checkResponse = await fetch('/manager/v1/updates/pending', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         if (checkResponse.ok) {
@@ -2177,7 +2177,8 @@ async function refreshDiscordChannels(button) {
             headers: {
                 'Authorization': `Bot ${token}`,
                 'Content-Type': 'application/json'
-            }
+            },
+                credentials: 'include'
         });
         
         if (!response.ok) {
@@ -2455,7 +2456,7 @@ async function showAgentSettings(agentId) {
     try {
         // Get current agent configuration from docker-compose
         const response = await fetch(`/manager/v1/agents/${agentId}/config`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('managerToken')}` }
+            credentials: 'include'
         });
         
         if (response.ok) {
@@ -2564,7 +2565,8 @@ async function reloadDiscordAdapter(buttonElement) {
             body: JSON.stringify({
                 username: 'admin',
                 password: 'ciris_admin_password'
-            })
+            }),
+                credentials: 'include'
         });
         
         if (!loginResponse.ok) {
@@ -2583,7 +2585,8 @@ async function reloadDiscordAdapter(buttonElement) {
             },
             body: JSON.stringify({
                 auto_start: true
-            })
+            }),
+                credentials: 'include'
         });
         
         if (!reloadResponse.ok) {
@@ -2876,8 +2879,8 @@ async function checkPendingDeployment() {
         // ONLY use the all endpoint - no fallbacks
         const response = await fetch('/manager/v1/updates/pending/all', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         if (!response.ok) {
@@ -2905,8 +2908,8 @@ async function checkPendingDeploymentOLD() {
     try {
         const response = await fetch('/manager/v1/updates/pending', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         console.log('Pending deployment response status:', response.status);
@@ -3084,7 +3087,8 @@ async function fetchDeploymentPreview(deploymentId) {
         const response = await fetch(`/manager/v1/updates/preview/${deploymentId}`, {
             headers: {
                 'Authorization': `Bearer ${localStorage.getItem('idToken')}`
-            }
+            },
+                credentials: 'include'
         });
         
         if (!response.ok) {
@@ -3302,13 +3306,13 @@ async function executeDeploymentAction(action, deploymentId) {
         const response = await fetch(`/manager/v1/updates/${action}`, {
             method: 'POST',
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ 
                 deployment_id: deploymentId,
                 reason: action === 'reject' ? 'Manual rejection by operator' : undefined
-            })
+            }),
+                credentials: 'include'
         });
         
         if (!response.ok) {
@@ -3357,8 +3361,8 @@ async function updateCurrentImages() {
     try {
         const response = await fetch('/manager/v1/updates/current-images', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         if (!response.ok) throw new Error('Failed to fetch current images');
@@ -3378,8 +3382,8 @@ async function updateDeploymentStatus() {
     try {
         const response = await fetch('/manager/v1/updates/status', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         if (!response.ok) throw new Error('Failed to fetch deployment status');
@@ -3457,7 +3461,8 @@ async function toggleDeploymentEvents(deploymentId) {
             const response = await fetch(`/manager/v1/updates/events/${deploymentId}`, {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-                }
+                },
+                    credentials: 'include'
             });
             
             if (response.ok) {
@@ -3556,8 +3561,8 @@ async function updateDeploymentHistory() {
     try {
         const response = await fetch('/manager/v1/updates/history?limit=10', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         if (!response.ok) throw new Error('Failed to fetch deployment history');
@@ -3589,8 +3594,8 @@ async function updateAgentVersions() {
     try {
         const response = await fetch('/manager/v1/agents', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         if (!response.ok) throw new Error('Failed to fetch agent versions');
@@ -3653,8 +3658,8 @@ async function updateRollbackOptions() {
         // Fetch rollback options from the new endpoint
         const response = await fetch('/manager/v1/updates/rollback-options', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         if (!response.ok) {
@@ -3836,8 +3841,8 @@ async function confirmRollback() {
         // Get the latest deployment ID first
         const statusResponse = await fetch('/manager/v1/updates/status', {
             headers: { 
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}` 
-            }
+            },
+            credentials: 'include'
         });
         
         if (!statusResponse.ok) throw new Error('Failed to get deployment status');
@@ -3862,14 +3867,14 @@ async function confirmRollback() {
         const response = await fetch(`/manager/v1/updates/rollback`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 deployment_id: deploymentId,
                 target_version: pendingRollback.targetVersion,
                 target_versions: targetVersions
-            })
+            }),
+                credentials: 'include'
         });
         
         if (!response.ok) {
