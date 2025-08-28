@@ -645,17 +645,47 @@
                             </h3>
                             <div class="space-y-3">
                                 <div>
+                                    <label class="block text-sm font-medium mb-1">Server ID</label>
+                                    <input type="text" id="discord-server-id" name="DISCORD_SERVER_ID" 
+                                           class="w-full p-2 border rounded-lg font-mono text-sm"
+                                           placeholder="Discord server/guild ID">
+                                </div>
+                                <div>
                                     <label class="block text-sm font-medium mb-1">Bot Token</label>
                                     <input type="password" id="discord-bot-token" name="DISCORD_BOT_TOKEN" 
                                            class="w-full p-2 border rounded-lg font-mono text-sm"
                                            placeholder="Your Discord bot token">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium mb-1">Monitored Channel IDs</label>
-                                    <textarea id="discord-channel-ids" name="DISCORD_CHANNEL_IDS" 
-                                              class="w-full p-2 border rounded-lg font-mono text-sm" rows="3"
-                                              placeholder="Channel IDs (one per line or comma-separated)"></textarea>
-                                    <p class="text-xs text-gray-500 mt-1">Enter Discord channel IDs this agent should monitor</p>
+                                    <label class="block text-sm font-medium mb-1">Monitored Channels</label>
+                                    
+                                    <!-- Refresh Button and Error Display -->
+                                    <button type="button" onclick="refreshDiscordChannels(this)" 
+                                            class="w-full mb-3 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2">
+                                        <i class="fas fa-sync"></i>
+                                        Use Token to Refresh Channel List
+                                    </button>
+                                    
+                                    <!-- Error Display -->
+                                    <div id="discord-channel-error" class="hidden mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                        <p class="text-sm text-red-800 font-medium">
+                                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                                            <span id="discord-channel-error-text"></span>
+                                        </p>
+                                    </div>
+                                    
+                                    <!-- Channel List -->
+                                    <div id="discord-channel-list" class="hidden space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3">
+                                        <!-- Channels will be populated here -->
+                                    </div>
+                                    
+                                    <!-- Fallback: Raw IDs Input -->
+                                    <div id="discord-channel-ids-fallback">
+                                        <textarea id="discord-channel-ids" name="DISCORD_CHANNEL_IDS" 
+                                                  class="w-full p-2 border rounded-lg font-mono text-sm" rows="3"
+                                                  placeholder="Channel IDs (one per line or comma-separated)"></textarea>
+                                        <p class="text-xs text-gray-500 mt-1">Enter Discord channel IDs manually or click refresh to load channel list</p>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium mb-1">Deferral Channel ID</label>

@@ -2140,6 +2140,177 @@ async function triggerNewDeployment() {
     console.warn('WARNING: triggerNewDeployment does not actually trigger anything yet - manual CD trigger required');
 }
 
+// Refresh Discord channel list using bot token
+async function refreshDiscordChannels(button) {
+    const errorDiv = document.getElementById('discord-channel-error');
+    const errorText = document.getElementById('discord-channel-error-text');
+    const channelList = document.getElementById('discord-channel-list');
+    const fallbackDiv = document.getElementById('discord-channel-ids-fallback');
+    
+    // Clear previous error
+    errorDiv.classList.add('hidden');
+    
+    // Get token and server ID
+    const token = document.getElementById('discord-bot-token').value;
+    const serverId = document.getElementById('discord-server-id').value;
+    
+    if (!token) {
+        errorText.textContent = 'Discord bot token is required. Enter it above and try again.';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    if (!serverId) {
+        errorText.textContent = 'Discord server ID is required. Enter it above and try again.';
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    
+    // Update button state
+    const originalHTML = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Fetching channels...';
+    button.disabled = true;
+    
+    try {
+        // Call Discord API to get channels
+        const response = await fetch(`https://discord.com/api/v10/guilds/${serverId}/channels`, {
+            headers: {
+                'Authorization': `Bot ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            let errorMessage = 'Failed to fetch channels: ';
+            
+            if (response.status === 401) {
+                errorMessage += 'Invalid bot token';
+            } else if (response.status === 403) {
+                errorMessage += 'Bot does not have access to this server';
+            } else if (response.status === 404) {
+                errorMessage += 'Server not found (check server ID)';
+            } else {
+                errorMessage += errorData.message || `HTTP ${response.status}`;
+            }
+            
+            throw new Error(errorMessage);
+        }
+        
+        const channels = await response.json();
+        
+        // Get currently selected channel IDs
+        const currentIds = document.getElementById('discord-channel-ids').value
+            .split(/[,\n]/)
+            .map(id => id.trim())
+            .filter(id => id);
+        
+        // Group channels by category
+        const categories = {};
+        const noCategory = [];
+        
+        // First, find all categories
+        channels.filter(ch => ch.type === 4).forEach(cat => {
+            categories[cat.id] = {
+                name: cat.name,
+                channels: []
+            };
+        });
+        
+        // Then assign channels to categories
+        channels.filter(ch => ch.type === 0 || ch.type === 2).forEach(ch => {
+            if (ch.parent_id && categories[ch.parent_id]) {
+                categories[ch.parent_id].channels.push(ch);
+            } else {
+                noCategory.push(ch);
+            }
+        });
+        
+        // Build channel list HTML
+        let html = '<div class="space-y-4">';
+        
+        // Channels without category
+        if (noCategory.length > 0) {
+            html += '<div>';
+            html += '<p class="font-medium text-gray-700 mb-2">Uncategorized</p>';
+            html += '<div class="space-y-1 ml-4">';
+            noCategory.forEach(ch => {
+                const isChecked = currentIds.includes(ch.id);
+                const channelIcon = ch.type === 2 ? 'fa-volume-up' : 'fa-hashtag';
+                html += `
+                    <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                        <input type="checkbox" 
+                               class="discord-channel-checkbox" 
+                               data-channel-id="${ch.id}"
+                               data-channel-name="${ch.name}"
+                               ${isChecked ? 'checked' : ''}>
+                        <i class="fas ${channelIcon} text-gray-400 text-xs"></i>
+                        <span class="text-sm">${ch.name}</span>
+                    </label>
+                `;
+            });
+            html += '</div>';
+            html += '</div>';
+        }
+        
+        // Categorized channels
+        Object.entries(categories).forEach(([catId, cat]) => {
+            if (cat.channels.length > 0) {
+                html += '<div>';
+                html += `<p class="font-medium text-gray-700 mb-2">${cat.name}</p>`;
+                html += '<div class="space-y-1 ml-4">';
+                cat.channels.forEach(ch => {
+                    const isChecked = currentIds.includes(ch.id);
+                    const channelIcon = ch.type === 2 ? 'fa-volume-up' : 'fa-hashtag';
+                    html += `
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                            <input type="checkbox" 
+                                   class="discord-channel-checkbox" 
+                                   data-channel-id="${ch.id}"
+                                   data-channel-name="${ch.name}"
+                                   ${isChecked ? 'checked' : ''}>
+                            <i class="fas ${channelIcon} text-gray-400 text-xs"></i>
+                            <span class="text-sm">${ch.name}</span>
+                        </label>
+                    `;
+                });
+                html += '</div>';
+                html += '</div>';
+            }
+        });
+        
+        html += '</div>';
+        
+        // Show channel list, hide fallback
+        channelList.innerHTML = html;
+        channelList.classList.remove('hidden');
+        fallbackDiv.classList.add('hidden');
+        
+        // Add change handler to update the hidden textarea
+        channelList.querySelectorAll('.discord-channel-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', updateDiscordChannelIds);
+        });
+        
+        // Update the textarea with current selections
+        updateDiscordChannelIds();
+        
+    } catch (error) {
+        console.error('Failed to fetch Discord channels:', error);
+        errorText.textContent = error.message;
+        errorDiv.classList.remove('hidden');
+    } finally {
+        button.innerHTML = originalHTML;
+        button.disabled = false;
+    }
+}
+
+// Update the hidden channel IDs textarea based on checkboxes
+function updateDiscordChannelIds() {
+    const checkedBoxes = document.querySelectorAll('.discord-channel-checkbox:checked');
+    const channelIds = Array.from(checkedBoxes).map(cb => cb.dataset.channelId);
+    document.getElementById('discord-channel-ids').value = channelIds.join(',');
+}
+
 // Notify Eric about OAuth setup request
 async function notifyEric(event) {
     const agentId = document.getElementById('oauth-agent-id').textContent;
