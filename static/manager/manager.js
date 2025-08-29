@@ -7,9 +7,99 @@ let templates = null;
 let managerStatus = null;
 let refreshInterval = null;
 
+// Check if user is authenticated
+async function checkAuth() {
+    const token = localStorage.getItem('managerToken');
+    if (!token) {
+        redirectToLogin();
+        return false;
+    }
+    
+    try {
+        // Verify token is still valid
+        const response = await fetch('/manager/v1/oauth/user', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                localStorage.removeItem('managerToken');
+                redirectToLogin();
+                return false;
+            }
+            throw new Error(`Auth check failed: ${response.status}`);
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Auth check error:', error);
+        redirectToLogin();
+        return false;
+    }
+}
+
+// Redirect to login page
+function redirectToLogin() {
+    window.location.href = '/manager/v1/oauth/login';
+}
+
+// Handle 401 responses globally
+async function handleAuthError(response) {
+    if (response.status === 401) {
+        localStorage.removeItem('managerToken');
+        redirectToLogin();
+        throw new Error('Authentication expired');
+    }
+    return response;
+}
+
+// Wrapper for authenticated fetch requests
+async function authenticatedFetch(url, options = {}) {
+    const token = localStorage.getItem('managerToken');
+    if (!token) {
+        redirectToLogin();
+        throw new Error('No authentication token');
+    }
+    
+    // Add auth header to options
+    const authOptions = {
+        ...options,
+        headers: {
+            ...options.headers,
+            'Authorization': `Bearer ${token}`
+        }
+    };
+    
+    const response = await fetch(url, authOptions);
+    
+    // Check for auth errors
+    if (response.status === 401) {
+        localStorage.removeItem('managerToken');
+        redirectToLogin();
+        throw new Error('Authentication expired');
+    }
+    
+    return response;
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
-    // Check if user is authenticated
+    // Check if token is in URL (from OAuth redirect)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('token');
+    
+    if (tokenFromUrl) {
+        // Store token and remove from URL
+        localStorage.setItem('managerToken', tokenFromUrl);
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    
+    // Check if user is authenticated first
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+        return; // Already redirecting to login
+    }
+    
     try {
         await fetchData();
         document.getElementById('loading').classList.add('hidden');
@@ -17,9 +107,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Start auto-refresh every 5 seconds
         refreshInterval = setInterval(fetchData, 5000);
+        
+        // Check auth status every 30 seconds
+        setInterval(checkAuth, 30000);
     } catch (error) {
         if (error.message.includes('401')) {
-            window.location.href = '/manager/v1/oauth/login';
+            redirectToLogin();
         } else {
             showError(error.message);
         }
@@ -30,12 +123,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function fetchData() {
     try {
         hideError();
+        
+        const token = localStorage.getItem('managerToken');
+        if (!token) {
+            redirectToLogin();
+            return;
+        }
 
         // Fetch agents and status in parallel
         const [agentsResponse, statusResponse] = await Promise.all([
-            fetch('/manager/v1/agents', { credentials: 'include' }),
-            fetch('/manager/v1/status', { credentials: 'include' })
+            fetch('/manager/v1/agents', { 
+                headers: { 'Authorization': `Bearer ${token}` }
+            }),
+            fetch('/manager/v1/status', { 
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
         ]);
+
+        // Handle authentication errors
+        await handleAuthError(agentsResponse);
+        await handleAuthError(statusResponse);
 
         if (!agentsResponse.ok) throw new Error(`Failed to fetch agents: ${agentsResponse.status}`);
         if (!statusResponse.ok) throw new Error(`Failed to fetch status: ${statusResponse.status}`);
