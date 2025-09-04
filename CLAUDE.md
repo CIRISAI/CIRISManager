@@ -259,6 +259,59 @@ The auth system automatically:
 - Falls back to default admin credentials for legacy agents
 - Handles token decryption securely
 
+#### Extracting Agent Service Tokens
+
+To get the decrypted service token for a specific agent (useful for external tools like Lens):
+
+```bash
+# Connect to production server
+ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
+
+# Extract token for a specific agent (replace 'agent-name' with actual agent ID)
+python3 -c "
+import json
+from cryptography.fernet import Fernet
+
+# Get encryption key from systemd service file
+key = '_AFlp77JRC55GooNp4BxfS7jIuDWlbhzJcRxPzjE00E='
+
+# Read agent metadata
+with open('/opt/ciris/agents/metadata.json') as f:
+    metadata = json.load(f)
+
+# Find and decrypt token for specific agent
+agent_name = 'agent-name'  # Replace with actual agent ID
+for agent_id, agent_data in metadata.get('agents', {}).items():
+    if agent_name.lower() in agent_id.lower():
+        if 'service_token' in agent_data:
+            cipher = Fernet(key.encode())
+            decrypted = cipher.decrypt(agent_data['service_token'].encode()).decode()
+            print(f'Agent: {agent_id}')
+            print(f'Service Token: {decrypted}')
+            break
+else:
+    print(f'Agent {agent_name} not found')
+    print('Available agents:', list(metadata.get('agents', {}).keys()))
+"
+```
+
+**Example usage:**
+```bash
+# Get token for echo-speculative
+python3 -c "..." # (replace 'agent-name' with 'echo-speculative')
+# Output: Service Token: fqE_hW_PeaowhIVd4Rxy4P-n_0gO0YCEv1aEnuv38pA
+
+# Get token for echo-nemesis  
+python3 -c "..." # (replace 'agent-name' with 'echo-nemesis')
+# Output: Service Token: HRlKm01-GUP9tBmwO2yW3VK-SUl-HDkQ2n8qJraf7BY
+```
+
+**Security Notes:**
+- Service tokens are encrypted at rest in metadata.json
+- Encryption key is stored securely in the systemd service file
+- Only root access on production server can decrypt tokens
+- Tokens should be handled securely and not logged in plaintext
+
 ### Production Directory Structure
 ```
 /opt/ciris/
