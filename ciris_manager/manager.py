@@ -263,9 +263,7 @@ class CIRISManager:
             # Method 1: Try sudo chown (most reliable)
             logger.debug(f"Attempting sudo chown for {agent_dir}")
             result = subprocess.run(
-                ["sudo", "chown", "-R", "1000:1000", str(agent_dir)], 
-                capture_output=True, 
-                text=True
+                ["sudo", "chown", "-R", "1000:1000", str(agent_dir)], capture_output=True, text=True
             )
 
             if result.returncode == 0:
@@ -277,7 +275,7 @@ class CIRISManager:
                     logger.warning(f"  stdout: {result.stdout}")
                 if result.stderr:
                     logger.warning(f"  stderr: {result.stderr}")
-                
+
                 # Method 2: Try direct chown (works if running as root)
                 logger.debug("Attempting direct os.chown")
                 try:
@@ -288,7 +286,7 @@ class CIRISManager:
                     logger.info(f"Successfully set ownership using direct chown for {agent_dir}")
                 except PermissionError as pe:
                     logger.debug(f"Direct chown failed: {pe}")
-                    
+
                     # Method 3: Try using a setuid helper script if it exists
                     helper_script = Path("/usr/local/bin/ciris-fix-permissions")
                     if helper_script.exists():
@@ -935,12 +933,12 @@ echo "Permissions fixed. Agent should now be able to start."
             6-character lowercase string safe for URLs
         """
         return "".join(secrets.choice(self.SAFE_CHARS) for _ in range(6))
-    
+
     def _run_emergency_permission_fix(self, agent_dir: Path, agent_id: str) -> None:
         """Emergency permission fixing using a temporary script."""
         import tempfile
         import subprocess
-        
+
         script_content = f"""#!/bin/bash
 set -e
 echo "Emergency permission fix for agent {agent_id}..."
@@ -958,28 +956,26 @@ chmod 755 "{agent_dir}/"*.sh 2>/dev/null || true
 
 echo "✓ Emergency permission fix completed"
 """
-        
+
         # Write script to a temporary location
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
             f.write(script_content)
             script_path = f.name
-        
+
         try:
             # Make script executable
             import os
+
             os.chmod(script_path, 0o755)
-            
+
             # Execute the script with sudo
             result = subprocess.run(
-                ["sudo", "bash", script_path], 
-                capture_output=True, 
-                text=True,
-                timeout=30
+                ["sudo", "bash", script_path], capture_output=True, text=True, timeout=30
             )
-            
+
             if result.returncode != 0:
                 raise RuntimeError(f"Emergency script failed: {result.stderr}")
-                
+
         finally:
             # Clean up temp script
             try:
