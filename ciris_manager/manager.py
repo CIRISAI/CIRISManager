@@ -377,16 +377,17 @@ echo "Permissions fixed. Agent should now be able to start."
         # Write compose file
         compose_path = agent_dir / "docker-compose.yml"
         self.compose_generator.write_compose_file(compose_config, compose_path)
-        
+
         # Ensure compose file has correct permissions for manager to update later
         # The manager needs to be able to update this file when settings change
         try:
             import pwd
             import grp
+
             # Get ciris-manager user/group IDs
             ciris_manager_user = pwd.getpwnam("ciris-manager")
             ciris_manager_group = grp.getgrnam("ciris-manager")
-            
+
             # Set ownership to ciris-manager:ciris-manager so manager can update it
             os.chown(compose_path, ciris_manager_user.pw_uid, ciris_manager_group.gr_gid)
             compose_path.chmod(0o664)  # rw-rw-r-- (owner and group can write)
@@ -395,16 +396,20 @@ echo "Permissions fixed. Agent should now be able to start."
             logger.warning(f"Could not set compose file ownership: {e}")
             # Try sudo approach as fallback
             try:
-                result = subprocess.run([
-                    "sudo", "chown", "ciris-manager:ciris-manager", str(compose_path)
-                ], capture_output=True, text=True)
+                result = subprocess.run(
+                    ["sudo", "chown", "ciris-manager:ciris-manager", str(compose_path)],
+                    capture_output=True,
+                    text=True,
+                )
                 if result.returncode == 0:
-                    subprocess.run([
-                        "sudo", "chmod", "664", str(compose_path)
-                    ], capture_output=True, text=True)
+                    subprocess.run(
+                        ["sudo", "chmod", "664", str(compose_path)], capture_output=True, text=True
+                    )
                     logger.debug("Set compose file ownership using sudo")
                 else:
-                    logger.warning(f"Could not set compose file ownership via sudo: {result.stderr}")
+                    logger.warning(
+                        f"Could not set compose file ownership via sudo: {result.stderr}"
+                    )
             except Exception as sudo_error:
                 logger.warning(f"Sudo fallback failed: {sudo_error}")
 
