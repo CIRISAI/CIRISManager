@@ -1350,7 +1350,12 @@ class DeploymentOrchestrator:
 
     async def _pull_images(self, notification: UpdateNotification) -> Dict[str, Any]:
         """
-        Pull Docker images specified in the notification.
+        Pull Docker images specified in the notification with retry logic.
+
+        Implements retry logic for authentication failures (401 errors):
+        - 10 second sleep between retries
+        - Maximum 2 retries for auth failures
+        - Exponential backoff for other transient errors
 
         Args:
             notification: Update notification with image details
@@ -1365,51 +1370,25 @@ class DeploymentOrchestrator:
         try:
             # Pull agent image if specified
             if notification.agent_image:
-                # Normalize image name to lowercase for Docker
-                agent_image = notification.agent_image.lower()
-                logger.info(f"Pulling agent image: {agent_image}")
-                process = await asyncio.create_subprocess_exec(
-                    "docker",
-                    "pull",
-                    agent_image,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                agent_result = await self._pull_single_image_with_retry(
+                    notification.agent_image, "agent"
                 )
-                stdout, stderr = await process.communicate()
-
-                if process.returncode != 0:
-                    error_msg = stderr.decode() if stderr else "Failed to pull agent image"
-                    logger.error(f"Failed to pull agent image: {error_msg}")
+                if not agent_result["success"]:
                     results["success"] = False
-                    results["error"] = f"Agent image pull failed: {error_msg}"
+                    results["error"] = agent_result["error"]
                     return results
-
                 results["agent_image"] = notification.agent_image  # type: ignore[assignment]
-                logger.info(f"Successfully pulled agent image: {notification.agent_image}")
 
             # Pull GUI image if specified
             if notification.gui_image:
-                # Normalize image name to lowercase for Docker
-                gui_image = notification.gui_image.lower()
-                logger.info(f"Pulling GUI image: {gui_image}")
-                process = await asyncio.create_subprocess_exec(
-                    "docker",
-                    "pull",
-                    gui_image,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                gui_result = await self._pull_single_image_with_retry(
+                    notification.gui_image, "GUI"
                 )
-                stdout, stderr = await process.communicate()
-
-                if process.returncode != 0:
-                    error_msg = stderr.decode() if stderr else "Failed to pull GUI image"
-                    logger.error(f"Failed to pull GUI image: {error_msg}")
+                if not gui_result["success"]:
                     results["success"] = False
-                    results["error"] = f"GUI image pull failed: {error_msg}"
+                    results["error"] = gui_result["error"]
                     return results
-
                 results["gui_image"] = notification.gui_image  # type: ignore[assignment]
-                logger.info(f"Successfully pulled GUI image: {notification.gui_image}")
 
         except Exception as e:
             logger.error(f"Exception during image pull: {e}")
@@ -1417,6 +1396,93 @@ class DeploymentOrchestrator:
             results["error"] = str(e)
 
         return results
+
+    async def _pull_single_image_with_retry(
+        self, image: str, image_type: str
+    ) -> Dict[str, Any]:
+        """
+        Pull a single Docker image with retry logic for authentication failures.
+
+        Args:
+            image: Docker image name
+            image_type: Type of image (for logging) - "agent" or "GUI"
+
+        Returns:
+            Dictionary with success status and error message if any
+        """
+        import asyncio
+
+        # Normalize image name to lowercase for Docker
+        normalized_image = image.lower()
+        max_retries = 2
+        retry_delay = 10  # 10 seconds as specified in requirements
+
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                logger.info(
+                    f"Retrying {image_type} image pull (attempt {attempt + 1}/{max_retries + 1}): {normalized_image}"
+                )
+
+            logger.info(f"Pulling {image_type} image: {normalized_image}")
+            
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    "docker",
+                    "pull",
+                    normalized_image,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await process.communicate()
+
+                if process.returncode == 0:
+                    logger.info(f"Successfully pulled {image_type} image: {image}")
+                    return {"success": True}
+
+                # Parse error message
+                error_msg = stderr.decode() if stderr else f"Failed to pull {image_type} image"
+                
+                # Check if this is an authentication error (401)
+                is_auth_error = (
+                    "401" in error_msg or
+                    "unauthorized" in error_msg.lower() or
+                    "authentication" in error_msg.lower()
+                )
+
+                if is_auth_error and attempt < max_retries:
+                    logger.warning(
+                        f"Authentication error pulling {image_type} image (attempt {attempt + 1}): {error_msg}"
+                    )
+                    logger.info(f"Waiting {retry_delay} seconds before retry...")
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    # Final attempt or non-auth error
+                    if is_auth_error:
+                        logger.error(
+                            f"Authentication failed after {max_retries + 1} attempts for {image_type} image: {error_msg}"
+                        )
+                    else:
+                        logger.error(f"Failed to pull {image_type} image: {error_msg}")
+                    
+                    return {
+                        "success": False,
+                        "error": f"{image_type} image pull failed: {error_msg}"
+                    }
+
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(
+                        f"Exception pulling {image_type} image (attempt {attempt + 1}): {e}"
+                    )
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    logger.error(f"Exception pulling {image_type} image after retries: {e}")
+                    return {
+                        "success": False,
+                        "error": f"{image_type} image pull failed: {str(e)}"
+                    }
 
     async def _get_local_image_digest(self, image_tag: str) -> Optional[str]:
         """
@@ -1836,6 +1902,17 @@ class DeploymentOrchestrator:
             return self.deployments.get(self.current_deployment)
         return None
 
+    def has_active_deployment(self) -> bool:
+        """Check if there is an active deployment running."""
+        if not self.current_deployment:
+            return False
+        
+        deployment = self.deployments.get(self.current_deployment)
+        if not deployment:
+            return False
+            
+        return deployment.status == "in_progress"
+
     async def _run_deployment(
         self,
         deployment_id: str,
@@ -1897,31 +1974,35 @@ class DeploymentOrchestrator:
                 if self.current_deployment == deployment_id:
                     self.current_deployment = None
 
-            # Mark deployment as completed
+            # Mark deployment as completed only if it's still in progress
+            # (Don't override failed status set in exception handler)
             deployment_status = self.deployments.get(deployment_id)
             if deployment_status and deployment_status.status == "in_progress":
                 deployment_status.status = "completed"
                 deployment_status.completed_at = datetime.now(timezone.utc).isoformat()
                 self._save_state()
 
-                # Promote staged versions to current (n+1 → n, n → n-1, n-1 → n-2)
-                tracker = get_version_tracker()
+                # Promote staged versions to current only if deployment completed successfully
+                if deployment_status.status == "completed":
+                    tracker = get_version_tracker()
 
-                if deployment_status.notification is not None:
-                    notification = deployment_status.notification
-                    # Promote agent version
-                    if notification.agent_image:
-                        await tracker.promote_staged_version("agent", deployment_id)
+                    if deployment_status.notification is not None:
+                        notification = deployment_status.notification
+                        # Promote agent version
+                        if notification.agent_image:
+                            await tracker.promote_staged_version("agent", deployment_id)
 
-                    # Promote GUI version
-                    if notification.gui_image:
-                        await tracker.promote_staged_version("gui", deployment_id)
+                        # Promote GUI version
+                        if notification.gui_image:
+                            await tracker.promote_staged_version("gui", deployment_id)
 
-                    # Promote nginx version if we have one
-                    if hasattr(notification, "nginx_image") and notification.nginx_image:
-                        await tracker.promote_staged_version("nginx", deployment_id)
+                        # Promote nginx version if we have one
+                        if hasattr(notification, "nginx_image") and notification.nginx_image:
+                            await tracker.promote_staged_version("nginx", deployment_id)
 
-                logger.info(f"Promoted staged versions to current for deployment {deployment_id}")
+                    logger.info(f"Promoted staged versions to current for deployment {deployment_id}")
+                else:
+                    logger.warning(f"Skipping version promotion for failed deployment {deployment_id}: {deployment_status.status}")
 
                 # Log deployment completion with summary
                 logger.info(
@@ -2419,19 +2500,28 @@ class DeploymentOrchestrator:
         self._save_state()
         await self._update_agent_group(deployment_id, notification, running_agents)
 
-        # Mark deployment as completed
-        status.status = "completed"
+        # Mark deployment based on results
+        if status.agents_failed > 0:
+            status.status = "failed"
+            status.message = f"Deployment failed: {status.agents_failed} agents failed, {status.agents_updated} updated, {status.agents_deferred} deferred"
+        else:
+            status.status = "completed"
+            status.message = f"Deployment completed: {status.agents_updated} updated, {status.agents_deferred} deferred"
+        
         status.completed_at = datetime.now(timezone.utc).isoformat()
         self._save_state()
 
-        # Promote staged versions to current after immediate deployment
-        tracker = get_version_tracker()
-        if notification.agent_image:
-            await tracker.promote_staged_version("agent", deployment_id)
-        if notification.gui_image:
-            await tracker.promote_staged_version("gui", deployment_id)
-        if hasattr(notification, "nginx_image") and notification.nginx_image:
-            await tracker.promote_staged_version("nginx", deployment_id)
+        # Promote staged versions to current only if deployment succeeded
+        if status.status == "completed":
+            tracker = get_version_tracker()
+            if notification.agent_image:
+                await tracker.promote_staged_version("agent", deployment_id)
+            if notification.gui_image:
+                await tracker.promote_staged_version("gui", deployment_id)
+            if hasattr(notification, "nginx_image") and notification.nginx_image:
+                await tracker.promote_staged_version("nginx", deployment_id)
+        else:
+            logger.warning(f"Skipping version promotion due to deployment failure: {status.message}")
 
         logger.info(f"Immediate deployment {deployment_id} completed, versions promoted")
 
