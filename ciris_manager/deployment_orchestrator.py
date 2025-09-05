@@ -1475,6 +1475,9 @@ class DeploymentOrchestrator:
                     logger.error(f"Exception pulling {image_type} image after retries: {e}")
                     return {"success": False, "error": f"{image_type} image pull failed: {str(e)}"}
 
+        # This should never be reached, but mypy requires it
+        return {"success": False, "error": f"Unexpected error in {image_type} image pull"}
+
     async def _get_local_image_digest(self, image_tag: str) -> Optional[str]:
         """
         Get the digest of a locally pulled Docker image.

@@ -1056,7 +1056,9 @@ echo "✓ Emergency permission fix completed"
         elapsed = 0
 
         while elapsed < max_wait_time:
-            if not self.deployment_orchestrator.has_active_deployment():
+            if not (hasattr(self, "deployment_orchestrator") and 
+                    self.deployment_orchestrator and
+                    self.deployment_orchestrator.has_active_deployment()):
                 logger.info("No active deployments detected, proceeding with initial cleanup")
                 await self._run_initial_cleanup()
                 return
