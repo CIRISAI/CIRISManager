@@ -265,6 +265,15 @@ http {
     upstream cirislens {
         server 127.0.0.1:8000;
     }
+
+    # eee.ciris.ai upstreams
+    upstream oauth2_proxy {
+        server 127.0.0.1:4180;
+    }
+
+    upstream engine {
+        server 127.0.0.1:8080;
+    }
 """
 
         # Add agent upstreams
@@ -532,6 +541,89 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+
+    # === EEE.CIRIS.AI SERVER ===
+    # HTTP Server - Redirect to HTTPS
+    server {
+        listen 80;
+        server_name eee.ciris.ai;
+
+        # Health check endpoint (must be available on HTTP)
+        location /health {
+            access_log off;
+            proxy_pass http://engine/v1/system/health;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Redirect everything else to HTTPS
+        location / {
+            return 301 https://$server_name$request_uri;
+        }
+    }
+
+    # HTTPS Server for eee.ciris.ai
+    server {
+        listen 443 ssl http2;
+        server_name eee.ciris.ai;
+
+        # SSL configuration (using same cert as agents.ciris.ai for now)
+        ssl_certificate /etc/letsencrypt/live/agents.ciris.ai/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/agents.ciris.ai/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        # Health check endpoint
+        location /health {
+            access_log off;
+            proxy_pass http://engine/v1/system/health;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # API endpoints go directly to engine
+        location /api/ {
+            proxy_pass http://engine/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
+        }
+
+        # OAuth2 callback endpoint
+        location /oauth2/callback {
+            proxy_pass http://oauth2_proxy/oauth2/callback;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # All other requests go through oauth2-proxy
+        location / {
+            proxy_pass http://oauth2_proxy/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # OAuth2 proxy specific headers
+            proxy_set_header X-Forwarded-User $remote_user;
+            proxy_set_header X-Auth-Request-User $remote_user;
+            proxy_set_header X-Auth-Request-Email $upstream_http_x_auth_request_email;
         }
     }
 }
