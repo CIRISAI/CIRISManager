@@ -198,12 +198,12 @@ jobs:
             cd /opt/ciris-manager
 
             # Pull latest nginx image
-            docker-compose -f docker-compose-production.yml pull nginx || true
+            docker-compose -f docker-compose-production.yml pull nginx >/dev/null 2>&1 || true
 
             # Use up -d which handles existing containers properly
-            docker-compose -f docker-compose-production.yml up -d nginx || {
+            docker-compose -f docker-compose-production.yml up -d nginx >/dev/null 2>&1 || {
               echo "Failed to start nginx with docker-compose, trying direct restart..."
-              docker restart ciris-nginx || echo "Warning: Could not restart nginx"
+              docker restart ciris-nginx >/dev/null 2>&1 || echo "Warning: Could not restart nginx"
             }
 
             # Restart CIRISManager
