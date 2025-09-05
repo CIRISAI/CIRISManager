@@ -2180,6 +2180,7 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Telemetry has been moved to external CIRISLens service
 
+    print("CRITICAL DEBUG: Before jailbreaker initialization section", flush=True)
     logger.info("DEBUG: About to start jailbreaker initialization block")
 
     # DEBUG: Log actual environment variables
