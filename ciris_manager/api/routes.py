@@ -2203,6 +2203,7 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Initialize jailbreaker service if configured
     try:
+        print("CRITICAL DEBUG: Entering jailbreaker try block", flush=True)
         logger.info("Starting jailbreaker initialization...")
         from ciris_manager.jailbreaker import (
             JailbreakerConfig,
@@ -2211,11 +2212,16 @@ def create_routes(manager: Any) -> APIRouter:
         )
         from pathlib import Path
 
+        print("CRITICAL DEBUG: Jailbreaker imports successful", flush=True)
         logger.info("Jailbreaker imports successful")
 
         # Check if Discord credentials are available
         discord_client_id = os.getenv("DISCORD_CLIENT_ID")
         discord_client_secret = os.getenv("DISCORD_CLIENT_SECRET")
+        print(
+            f"CRITICAL DEBUG: Discord credentials - client_id={bool(discord_client_id)}, client_secret={bool(discord_client_secret)}",
+            flush=True,
+        )
         logger.info(
             f"Discord credentials check: client_id={bool(discord_client_id)}, client_secret={bool(discord_client_secret)}"
         )
@@ -2224,9 +2230,14 @@ def create_routes(manager: Any) -> APIRouter:
         )
 
         if discord_client_id and discord_client_secret:
+            print("CRITICAL DEBUG: Discord credentials found, creating config...", flush=True)
             logger.info("Discord credentials found, creating config...")
             # Create jailbreaker config
             jailbreaker_config = JailbreakerConfig.from_env()
+            print(
+                f"CRITICAL DEBUG: Config created for target agent: {jailbreaker_config.target_agent_id}",
+                flush=True,
+            )
             logger.info(f"Config created for target agent: {jailbreaker_config.target_agent_id}")
 
             # Get agent directory from manager config
@@ -2248,11 +2259,17 @@ def create_routes(manager: Any) -> APIRouter:
             router.include_router(jailbreaker_router, prefix="", tags=["jailbreaker"])
             logger.info("Jailbreaker routes added")
 
+            print("CRITICAL DEBUG: Jailbreaker service initialized successfully", flush=True)
             logger.info("Jailbreaker service initialized successfully")
         else:
+            print(
+                "CRITICAL DEBUG: Jailbreaker service not initialized - Discord credentials not configured",
+                flush=True,
+            )
             logger.info("Jailbreaker service not initialized - Discord credentials not configured")
 
     except Exception as e:
+        print(f"CRITICAL DEBUG: Exception in jailbreaker initialization: {e}", flush=True)
         logger.error(f"DEBUG: Exception in jailbreaker initialization: {e}", exc_info=True)
         logger.error(f"Failed to initialize jailbreaker service: {e}", exc_info=True)
 
