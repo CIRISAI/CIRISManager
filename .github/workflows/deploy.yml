@@ -110,9 +110,9 @@ jobs:
 
             # Activate venv and update dependencies
             source venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
-            pip install -e .
+            pip install --upgrade pip >/dev/null
+            pip install -r requirements.txt >/dev/null
+            pip install -e . >/dev/null
 
             # Ensure config directory exists
             mkdir -p /etc/ciris-manager
