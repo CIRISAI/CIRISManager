@@ -81,7 +81,7 @@ class DiscordAuthClient:
         response.raise_for_status()
 
         token_response = response.json()
-        access_token = token_response["access_token"]
+        access_token: str = token_response["access_token"]
 
         logger.debug("Successfully obtained Discord access token")
         return access_token

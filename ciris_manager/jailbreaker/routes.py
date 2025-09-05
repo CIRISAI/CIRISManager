@@ -147,7 +147,7 @@ def create_jailbreaker_routes(jailbreaker_service: JailbreakerService) -> APIRou
                     detail=result.message,
                     headers={
                         "Retry-After": str(
-                            result.next_allowed_reset - int(__import__("time").time())
+                            (result.next_allowed_reset or 0) - int(__import__("time").time())
                         )
                     },
                 )
