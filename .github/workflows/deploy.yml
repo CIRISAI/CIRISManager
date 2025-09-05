@@ -177,9 +177,18 @@ jobs:
             chown -R ciris-manager:ciris /home/ciris/static
             chmod -R 755 /home/ciris/static
 
-            # Create or update environment file for systemd service
-            echo "# Auto-generated environment file for CIRISManager" > /etc/ciris-manager/environment
-            echo "CIRIS_DEPLOY_TOKEN=${{ secrets.CIRIS_DEPLOY_TOKEN }}" >> /etc/ciris-manager/environment
+            # Ensure environment file exists and update deployment token
+            if [ ! -f "/etc/ciris-manager/environment" ]; then
+              echo "# Auto-generated environment file for CIRISManager" > /etc/ciris-manager/environment
+            fi
+
+            # Update or add CIRIS_DEPLOY_TOKEN without overwriting other variables
+            if grep -q "^CIRIS_DEPLOY_TOKEN=" /etc/ciris-manager/environment; then
+              sed -i "s/^CIRIS_DEPLOY_TOKEN=.*/CIRIS_DEPLOY_TOKEN=${{ secrets.CIRIS_DEPLOY_TOKEN }}/" /etc/ciris-manager/environment
+            else
+              echo "CIRIS_DEPLOY_TOKEN=${{ secrets.CIRIS_DEPLOY_TOKEN }}" >> /etc/ciris-manager/environment
+            fi
+
             chmod 600 /etc/ciris-manager/environment
 
             # Deploy or update nginx container
