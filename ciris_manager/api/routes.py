@@ -22,6 +22,7 @@ from .rate_limit import create_limit
 logger = logging.getLogger(__name__)
 
 # CRITICAL DEBUG: Test if routes.py module is being imported at all
+print("ROUTES.PY MODULE LOADED - JAILBREAKER DEBUG", flush=True)
 logger.info("CRITICAL DEBUG: routes.py module imported successfully")
 
 
