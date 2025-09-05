@@ -2177,40 +2177,50 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Initialize jailbreaker service if configured
     try:
+        logger.info("Starting jailbreaker initialization...")
         from ciris_manager.jailbreaker import (
             JailbreakerConfig,
             JailbreakerService,
             create_jailbreaker_routes,
         )
         from pathlib import Path
+        logger.info("Jailbreaker imports successful")
 
         # Check if Discord credentials are available
         discord_client_id = os.getenv("DISCORD_CLIENT_ID")
         discord_client_secret = os.getenv("DISCORD_CLIENT_SECRET")
+        logger.info(f"Discord credentials check: client_id={bool(discord_client_id)}, client_secret={bool(discord_client_secret)}")
 
         if discord_client_id and discord_client_secret:
+            logger.info("Discord credentials found, creating config...")
             # Create jailbreaker config
             jailbreaker_config = JailbreakerConfig.from_env()
+            logger.info(f"Config created for target agent: {jailbreaker_config.target_agent_id}")
 
             # Get agent directory from manager config
             agents_dir = Path(manager.config.manager.agents_directory)
+            logger.info(f"Agents directory: {agents_dir}")
 
             # Initialize jailbreaker service
+            logger.info("Creating jailbreaker service...")
             jailbreaker_service = JailbreakerService(
                 config=jailbreaker_config,
                 agent_dir=agents_dir,
                 container_manager=manager.container_manager,
             )
+            logger.info("Jailbreaker service created")
 
             # Create and include jailbreaker routes
+            logger.info("Creating jailbreaker routes...")
             jailbreaker_router = create_jailbreaker_routes(jailbreaker_service)
             router.include_router(jailbreaker_router, prefix="", tags=["jailbreaker"])
+            logger.info("Jailbreaker routes added")
 
             logger.info("Jailbreaker service initialized successfully")
         else:
-            logger.info("Jailbreaker service not initialized - Discord credentials not configured")
+            logger.info(f"Jailbreaker service not initialized - Discord credentials not configured (client_id={repr(discord_client_id)}, client_secret={repr(discord_client_secret)})")
 
     except Exception as e:
-        logger.warning(f"Failed to initialize jailbreaker service: {e}")
+        logger.error(f"Failed to initialize jailbreaker service: {e}", exc_info=True)
 
     return router
