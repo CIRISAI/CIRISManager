@@ -1,6 +1,6 @@
 /**
  * Analytics API for telemetry data analysis
- * 
+ *
  * Provides methods for analyzing trends, patterns, and anomalies
  * in telemetry data.
  */
@@ -42,7 +42,7 @@ export interface PerformanceBaseline {
 
 export class AnalyticsAPI {
   constructor(private axios: AxiosInstance) {}
-  
+
   /**
    * Analyze trends for a specific metric
    */
@@ -60,10 +60,10 @@ export class AnalyticsAPI {
       },
       interval: hours <= 24 ? '1h' : '1d'
     };
-    
+
     const response = await this.executeQuery(query, options);
     const data = response.data;
-    
+
     if (data.length < 2) {
       return {
         metric,
@@ -74,11 +74,11 @@ export class AnalyticsAPI {
         timeRange: `${hours}h`
       };
     }
-    
+
     const current = data[data.length - 1].value;
     const previous = data[0].value;
     const changePercent = ((current - previous) / previous) * 100;
-    
+
     return {
       metric,
       trend: changePercent > 5 ? 'increasing' : changePercent < -5 ? 'decreasing' : 'stable',
@@ -88,7 +88,7 @@ export class AnalyticsAPI {
       timeRange: `${hours}h`
     };
   }
-  
+
   /**
    * Detect anomalies in telemetry data
    */
@@ -97,7 +97,7 @@ export class AnalyticsAPI {
     options?: RequestOptions
   ): Promise<AnomalyDetection[]> {
     const anomalies: AnomalyDetection[] = [];
-    
+
     // Check CPU anomalies
     const cpuQuery: TelemetryQuery = {
       query_type: 'distribution',
@@ -107,17 +107,17 @@ export class AnalyticsAPI {
         end: new Date().toISOString()
       }
     };
-    
+
     const cpuResponse = await this.executeQuery(cpuQuery, options);
     const cpuData = cpuResponse.data;
-    
+
     // Calculate statistics
     const cpuValues = cpuData.map(d => d.value);
     const mean = cpuValues.reduce((a, b) => a + b, 0) / cpuValues.length;
     const stdDev = Math.sqrt(
       cpuValues.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / cpuValues.length
     );
-    
+
     // Detect outliers (values beyond 3 standard deviations)
     cpuData.forEach(item => {
       if (Math.abs(item.value - mean) > 3 * stdDev) {
@@ -134,7 +134,7 @@ export class AnalyticsAPI {
         });
       }
     });
-    
+
     // Check memory anomalies
     const memoryQuery: TelemetryQuery = {
       query_type: 'distribution',
@@ -144,10 +144,10 @@ export class AnalyticsAPI {
         end: new Date().toISOString()
       }
     };
-    
+
     const memoryResponse = await this.executeQuery(memoryQuery, options);
     const memoryData = memoryResponse.data;
-    
+
     // Detect high memory usage (>90%)
     memoryData.forEach(item => {
       if (item.value > 90) {
@@ -161,10 +161,10 @@ export class AnalyticsAPI {
         });
       }
     });
-    
+
     return anomalies;
   }
-  
+
   /**
    * Calculate performance baselines
    */
@@ -174,7 +174,7 @@ export class AnalyticsAPI {
     options?: RequestOptions
   ): Promise<PerformanceBaseline[]> {
     const baselines: PerformanceBaseline[] = [];
-    
+
     for (const metric of metrics) {
       const query: TelemetryQuery = {
         query_type: 'aggregate',
@@ -185,12 +185,12 @@ export class AnalyticsAPI {
         },
         aggregation: 'avg'
       };
-      
+
       const response = await this.executeQuery(query, options);
       const values = response.data.map(d => d.value).sort((a, b) => a - b);
-      
+
       if (values.length === 0) continue;
-      
+
       const mean = values.reduce((a, b) => a + b, 0) / values.length;
       const median = values[Math.floor(values.length / 2)];
       const stdDev = Math.sqrt(
@@ -198,7 +198,7 @@ export class AnalyticsAPI {
       );
       const p95 = values[Math.floor(values.length * 0.95)];
       const p99 = values[Math.floor(values.length * 0.99)];
-      
+
       baselines.push({
         metric,
         mean,
@@ -209,10 +209,10 @@ export class AnalyticsAPI {
         samples: values.length
       });
     }
-    
+
     return baselines;
   }
-  
+
   /**
    * Analyze agent performance over time
    */
@@ -229,35 +229,35 @@ export class AnalyticsAPI {
     trends: TrendAnalysis[];
   }> {
     const hours = days * 24;
-    
+
     // Get agent metrics
     const response = await this.axios.get<{ history: any[] }>(
       `/telemetry/agent/${agentName}`,
-      { 
+      {
         params: { hours },
         signal: options?.signal,
         timeout: options?.timeout
       }
     );
-    
+
     const history = response.data.history;
-    
+
     // Calculate metrics
     const totalSamples = history.length;
     const healthySamples = history.filter(h => h.api_healthy).length;
     const availability = (healthySamples / totalSamples) * 100;
-    
+
     const responseTimes = history.map(h => h.api_response_time_ms || 0);
     const averageResponseTime = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
-    
+
     const totalMessages = history.reduce((sum, h) => sum + (h.message_count_24h || 0), 0);
     const totalCost = history.reduce((sum, h) => sum + (h.cost_cents_24h || 0), 0);
     const totalIncidents = history.reduce((sum, h) => sum + (h.incident_count_24h || 0), 0);
     const incidentRate = totalMessages > 0 ? (totalIncidents / totalMessages) * 100 : 0;
-    
+
     // Analyze trends
     const trends: TrendAnalysis[] = [];
-    
+
     // Response time trend
     const responseTimeTrend = await this.analyzeTrend(
       `agent.${agentName}.response_time`,
@@ -265,7 +265,7 @@ export class AnalyticsAPI {
       options
     );
     trends.push(responseTimeTrend);
-    
+
     // Message volume trend
     const messageTrend = await this.analyzeTrend(
       `agent.${agentName}.messages`,
@@ -273,7 +273,7 @@ export class AnalyticsAPI {
       options
     );
     trends.push(messageTrend);
-    
+
     // Cost trend
     const costTrend = await this.analyzeTrend(
       `agent.${agentName}.cost`,
@@ -281,7 +281,7 @@ export class AnalyticsAPI {
       options
     );
     trends.push(costTrend);
-    
+
     return {
       availability,
       averageResponseTime,
@@ -291,7 +291,7 @@ export class AnalyticsAPI {
       trends
     };
   }
-  
+
   /**
    * Compare agent performance
    */
@@ -307,7 +307,7 @@ export class AnalyticsAPI {
     percentile: number;
   }>> {
     const results: Array<{ agentName: string; value: number }> = [];
-    
+
     for (const agentName of agentNames) {
       const query: TelemetryQuery = {
         query_type: 'aggregate',
@@ -318,23 +318,23 @@ export class AnalyticsAPI {
         },
         aggregation: 'avg'
       };
-      
+
       const response = await this.executeQuery(query, options);
       const value = response.data[0]?.value || 0;
-      
+
       results.push({ agentName, value });
     }
-    
+
     // Sort and rank
     results.sort((a, b) => b.value - a.value);
-    
+
     return results.map((result, index) => ({
       ...result,
       rank: index + 1,
       percentile: ((results.length - index) / results.length) * 100
     }));
   }
-  
+
   /**
    * Predict resource usage
    */
@@ -350,19 +350,19 @@ export class AnalyticsAPI {
     // Get historical data
     const cpuTrend = await this.analyzeTrend('total_cpu_percent', hours * 2, options);
     const memoryTrend = await this.analyzeTrend('total_memory_mb', hours * 2, options);
-    
+
     // Simple linear prediction
     const cpuGrowthRate = cpuTrend.changePercent / 100;
     const memoryGrowthRate = memoryTrend.changePercent / 100;
-    
+
     const predictedCpu = cpuTrend.currentValue * (1 + cpuGrowthRate);
     const predictedMemory = memoryTrend.currentValue * (1 + memoryGrowthRate);
-    
+
     // Confidence based on trend stability
-    const confidence = 
+    const confidence =
       cpuTrend.trend === 'stable' && memoryTrend.trend === 'stable' ? 0.9 :
       cpuTrend.trend === memoryTrend.trend ? 0.7 : 0.5;
-    
+
     // Generate recommendation
     let recommendation = '';
     if (predictedCpu > 80) {
@@ -374,7 +374,7 @@ export class AnalyticsAPI {
     } else {
       recommendation = 'Resource usage is within normal parameters';
     }
-    
+
     return {
       predictedCpu,
       predictedMemory,
@@ -382,7 +382,7 @@ export class AnalyticsAPI {
       recommendation
     };
   }
-  
+
   private async executeQuery(
     query: TelemetryQuery,
     options?: RequestOptions

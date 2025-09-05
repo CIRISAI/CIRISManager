@@ -1,9 +1,9 @@
 import { AxiosInstance } from 'axios';
-import { 
+import {
   DeploymentStatus,
   UpdateNotification,
   PendingDeployment,
-  RollbackRequest 
+  RollbackRequest
 } from '../types';
 
 /**
@@ -105,7 +105,7 @@ export class DeploymentsAPI {
   watchDeployment(deploymentId: string, onUpdate: (status: DeploymentStatus) => void): () => void {
     // Polling implementation for now
     let intervalId: NodeJS.Timeout | null = null;
-    
+
     const startPolling = async () => {
       // Initial fetch
       try {

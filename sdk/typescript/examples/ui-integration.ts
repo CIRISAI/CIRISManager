@@ -44,7 +44,7 @@ class AgentManagerUI {
         memory_limit: '1G',
         cpu_limit: '2.0'
       });
-      
+
       this.showSuccess(`Agent ${agent.agent_name} created`);
       await this.loadAgents();
     } catch (error) {
@@ -65,7 +65,7 @@ class AgentManagerUI {
   watchAgentStatus(agentId: string) {
     // Stop previous watching if any
     this.stopWatching?.();
-    
+
     this.stopWatching = client.agents.watchStatus(agentId, (status) => {
       this.updateAgentStatus(agentId, status);
     });
@@ -97,7 +97,7 @@ class DeploymentUI {
   async checkPendingDeployments() {
     try {
       const pending = await client.deployments.getPending();
-      
+
       if (pending.length > 0) {
         this.showPendingDeployments(pending);
       }
@@ -109,10 +109,10 @@ class DeploymentUI {
   async launchDeployment(deploymentId: string) {
     try {
       const status = await client.deployments.launch(deploymentId);
-      
+
       // Start watching the deployment
       this.watchDeployment(status.deployment_id);
-      
+
       this.showDeploymentStatus(status);
     } catch (error) {
       this.showError('Failed to launch deployment', error);
@@ -125,7 +125,7 @@ class DeploymentUI {
         target_version: targetVersion,
         reason: 'User initiated rollback'
       });
-      
+
       this.watchDeployment(status.deployment_id);
       this.showDeploymentStatus(status);
     } catch (error) {
@@ -135,10 +135,10 @@ class DeploymentUI {
 
   watchDeployment(deploymentId: string) {
     this.stopWatching?.();
-    
+
     this.stopWatching = client.deployments.watchDeployment(deploymentId, (status) => {
       this.updateDeploymentProgress(status);
-      
+
       if (status.status === 'completed') {
         this.showSuccess('Deployment completed successfully');
         this.stopWatching?.();

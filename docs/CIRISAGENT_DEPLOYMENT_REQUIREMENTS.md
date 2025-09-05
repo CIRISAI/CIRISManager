@@ -24,17 +24,17 @@ def verify_service_token(authorization: str = Header(...)) -> bool:
     """Verify service token from CIRISManager."""
     if not authorization.startswith("Bearer service:"):
         raise HTTPException(status_code=401, detail="Invalid auth scheme")
-    
+
     provided_token = authorization[len("Bearer service:"):]
     expected_token = os.getenv("CIRIS_SERVICE_TOKEN")
-    
+
     if not expected_token:
         raise HTTPException(status_code=500, detail="Service token not configured")
-    
+
     # CRITICAL: Use constant-time comparison to prevent timing attacks
     if not hmac.compare_digest(provided_token, expected_token):
         raise HTTPException(status_code=401, detail="Invalid service token")
-    
+
     return True
 ```
 
@@ -64,25 +64,25 @@ async def shutdown(
 ```python
 async def can_shutdown_for_update() -> tuple[bool, str]:
     """Check if agent can safely shutdown for update."""
-    
+
     # Check 1: Critical tasks
     if await is_processing_critical_task():
         return False, "Processing critical user task"
-    
+
     # Check 2: Active connections
     active_count = await get_active_connection_count()
     if active_count > 0:
         return False, f"{active_count} active user connections"
-    
+
     # Check 3: Pending operations
     if await has_pending_operations():
         return False, "Pending operations in queue"
-    
+
     # Check 4: Recent activity
     last_activity = await get_last_activity_time()
     if time.time() - last_activity < 30:  # Active in last 30 seconds
         return False, "Recent user activity detected"
-    
+
     return True, "Ready for update"
 ```
 
@@ -114,17 +114,17 @@ async def verify_service_token(authorization: str = Header(None)) -> bool:
     """Verify service token from CIRISManager."""
     if not authorization:
         return False  # Allow regular auth to handle this
-    
+
     if not authorization.startswith("Bearer service:"):
         return False  # Not a service token
-    
+
     provided_token = authorization[len("Bearer service:"):]
     expected_token = os.getenv("CIRIS_SERVICE_TOKEN")
-    
+
     if not expected_token:
         logger.error("CIRIS_SERVICE_TOKEN not configured")
         return False
-    
+
     # CRITICAL: Constant-time comparison
     return hmac.compare_digest(provided_token, expected_token)
 
@@ -135,20 +135,20 @@ async def shutdown(
     response: Response = None
 ):
     """Handle shutdown requests from users or CIRISManager."""
-    
+
     # Check if this is a CD update request
     is_cd_update = "CD update" in request.reason or "deployment" in request.reason
     is_service_auth = await verify_service_token(authorization)
-    
+
     # CD updates MUST use service token
     if is_cd_update and not is_service_auth:
         logger.warning(f"CD update attempted without service token: {request.reason}")
         raise HTTPException(status_code=401, detail="Service token required for CD updates")
-    
+
     # For CD updates, check if we can safely shutdown
     if is_cd_update:
         can_shutdown, reason = await can_shutdown_for_update()
-        
+
         if not can_shutdown:
             logger.info(f"Rejecting CD update: {reason}")
             response.status_code = 503
@@ -157,7 +157,7 @@ async def shutdown(
                 "reason": reason,
                 "retry_after": 300  # Suggest retry in 5 minutes
             }
-        
+
         logger.info(f"Accepting CD update: {request.reason}")
         # Initiate graceful shutdown
         asyncio.create_task(graceful_shutdown(request.reason))
@@ -165,11 +165,11 @@ async def shutdown(
             "status": "shutdown initiated",
             "reason": request.reason
         }
-    
+
     # Handle regular user shutdowns (existing logic)
     if not request.confirm:
         raise HTTPException(status_code=400, detail="Confirmation required")
-    
+
     # Existing shutdown logic for users...
     logger.info(f"User-initiated shutdown: {request.reason}")
     asyncio.create_task(graceful_shutdown(request.reason))
@@ -178,10 +178,10 @@ async def shutdown(
 async def graceful_shutdown(reason: str):
     """Perform graceful shutdown."""
     logger.info(f"Starting graceful shutdown: {reason}")
-    
+
     # 1. Stop accepting new requests
     app.state.shutting_down = True
-    
+
     # 2. Wait for active requests to complete (max 30 seconds)
     start_time = time.time()
     while await get_active_request_count() > 0:
@@ -189,10 +189,10 @@ async def graceful_shutdown(reason: str):
             logger.warning("Timeout waiting for requests to complete")
             break
         await asyncio.sleep(1)
-    
+
     # 3. Save state if needed
     await save_agent_state()
-    
+
     # 4. Exit
     logger.info("Shutdown complete")
     os._exit(0)

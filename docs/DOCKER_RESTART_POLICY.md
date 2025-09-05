@@ -203,7 +203,7 @@ For existing deployments:
 
 **Cause**: Using `restart: unless-stopped` policy
 
-**Fix**: 
+**Fix**:
 1. Update docker-compose.yml to use `restart: no`
 2. Recreate container: `docker-compose up -d --force-recreate`
 

@@ -245,7 +245,7 @@ Modify retention:
 ```sql
 -- Change container metrics retention to 14 days
 SELECT alter_job(
-  (SELECT job_id FROM timescaledb_information.jobs 
+  (SELECT job_id FROM timescaledb_information.jobs
    WHERE hypertable_name = 'container_metrics'),
   config => '{"drop_after": "14 days"}'
 );
@@ -341,8 +341,8 @@ ANALYZE;
 REINDEX DATABASE telemetry;
 
 -- Check slow queries
-SELECT * FROM pg_stat_statements 
-ORDER BY total_time DESC 
+SELECT * FROM pg_stat_statements
+ORDER BY total_time DESC
 LIMIT 10;
 ```
 

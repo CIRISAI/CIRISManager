@@ -12,7 +12,7 @@ This script validates all nginx routes including:
 
 Usage:
     python validate_prod_routes.py [--host HOST] [--agent AGENT] [--verbose]
-    
+
 Examples:
     python validate_prod_routes.py
     python validate_prod_routes.py --host https://agents.ciris.ai --agent datum

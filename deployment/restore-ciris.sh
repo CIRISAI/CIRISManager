@@ -15,7 +15,7 @@ BACKUP_FILE=$1
 RESTORE_DIR="/tmp/ciris-restore-$$"
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then 
+if [ "$EUID" -ne 0 ]; then
     echo "Please run as root (use sudo)"
     exit 1
 fi
@@ -152,10 +152,10 @@ if [ "$start_services" = "yes" ]; then
     echo "Starting services..."
     systemctl start ciris-manager
     systemctl start ciris-manager-api
-    
+
     # Wait for services to start
     sleep 5
-    
+
     # Check status
     echo ""
     echo "Service status:"

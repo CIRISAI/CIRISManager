@@ -64,13 +64,13 @@ async def _rollback_agents(deployment):
     for agent_id in affected_agents:
         # Get N-1 version from metadata
         n1_image = agent.metadata["previous_images"]["n-1"]
-        
+
         # Stop failed container
         docker stop <container>
-        
+
         # Restart with N-1 image
         docker run -d --restart unless-stopped <n1_image>
-        
+
         # Update metadata
         agent.metadata["current_images"]["agent"] = n1_image
 ```

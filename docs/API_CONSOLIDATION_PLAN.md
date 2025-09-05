@@ -54,25 +54,25 @@ Currently handles:
   POST   /                           # Create new agent
   GET    /{agent_id}                 # Get specific agent
   DELETE /{agent_id}                 # Delete agent
-  
+
   # Lifecycle Management
   POST   /{agent_id}/start           # Start agent
-  POST   /{agent_id}/stop            # Stop agent  
+  POST   /{agent_id}/stop            # Stop agent
   POST   /{agent_id}/restart         # Restart agent
   POST   /{agent_id}/shutdown        # Graceful shutdown
-  
+
   # Configuration
   GET    /{agent_id}/config          # Get agent config
   PATCH  /{agent_id}/config          # Update agent config
-  
+
   # OAuth
   GET    /{agent_id}/oauth/status    # OAuth status
   POST   /{agent_id}/oauth/setup     # Setup OAuth
   POST   /{agent_id}/oauth/verify    # Verify OAuth
-  
+
   # Deployment Association
   PUT    /{agent_id}/deployment      # Set deployment
-  
+
   # Grouped Queries
   GET    /by-deployment/{deployment} # Get agents by deployment
   GET    /by-template/{template}     # Get agents by template
@@ -86,29 +86,29 @@ Currently handles:
   # Current State
   GET    /current                    # Current versions of all components
   GET    /current/{component_type}   # Current version of specific component
-  
+
   # Version Information
   GET    /agents                     # All agent versions (moved from /agents/versions)
   GET    /agent/{agent_id}           # Specific agent version info
   GET    /gui                        # GUI version info
   GET    /nginx                      # Nginx version info
-  
+
   # Adoption & Metrics
   GET    /adoption                   # Version adoption across fleet
   GET    /adoption/{version}         # Adoption for specific version
   GET    /metrics                    # Version deployment metrics
-  
+
   # History & Rollback
   GET    /history                    # Complete version history
   GET    /history/{component_type}   # History for specific component
   GET    /rollback-options           # Available rollback versions
   GET    /rollback-options/{component_type}  # Rollback for specific component
-  
+
   # Staging
   GET    /staged                     # All staged versions
   POST   /stage                      # Stage a new version
   POST   /promote/{component_type}   # Promote staged to current
-  
+
   # Comparisons
   GET    /diff/{version1}/{version2} # Compare two versions
   GET    /changelog/{version}        # Changelog for version
@@ -125,20 +125,20 @@ Currently handles:
   GET    /{deployment_id}            # Get deployment details
   GET    /{deployment_id}/status     # Deployment status
   GET    /{deployment_id}/events     # SSE events stream
-  
+
   # Deployment Control
   POST   /{deployment_id}/launch     # Launch deployment
   POST   /{deployment_id}/pause      # Pause deployment
   POST   /{deployment_id}/cancel     # Cancel deployment
   POST   /{deployment_id}/rollback   # Initiate rollback
-  
+
   # Single Agent Deployments
   POST   /agent/{agent_id}/deploy    # Deploy to single agent
-  
+
   # Pending Operations
   GET    /pending                    # Pending deployments summary
   GET    /pending/details            # Detailed pending info
-  
+
   # Rollback Management
   GET    /rollback-proposals         # Active rollback proposals
   POST   /rollback-proposals/{id}/approve  # Approve rollback
@@ -150,7 +150,7 @@ Currently handles:
 ### Step 1: Add New Endpoints (Non-Breaking)
 **Timeline: Week 1**
 - Implement new `/versions/*` endpoints
-- Implement new `/deployments/*` endpoints  
+- Implement new `/deployments/*` endpoints
 - Keep old endpoints functional with deprecation warnings
 
 ### Step 2: Update SDK and Documentation
@@ -207,7 +207,7 @@ Currently handles:
 # Old
 GET /agents/versions
 
-# New  
+# New
 GET /versions/agents
 ```
 

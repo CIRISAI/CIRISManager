@@ -1,6 +1,6 @@
 /**
  * Type definitions for CIRIS Manager API
- * 
+ *
  * These can be auto-generated from OpenAPI spec using openapi-typescript
  */
 

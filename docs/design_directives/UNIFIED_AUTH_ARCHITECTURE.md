@@ -56,7 +56,7 @@ The system recognizes three distinct authentication contexts:
 #### **3.3 User Authentication (End User Access)**
 
 * **Primary Method**: Username/password
-* **Alternate Methods**: 
+* **Alternate Methods**:
   - Social login (if configured by agent)
   - Anonymous access (if allowed by agent)
 * **Scope**: Access to `/agent/{name}/api/*` endpoints
@@ -204,7 +204,7 @@ agents:
 auth:
   mode: development
 
-# Agent config  
+# Agent config
 agents:
   test-agent:
     auth:

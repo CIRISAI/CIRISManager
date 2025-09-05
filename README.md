@@ -168,7 +168,7 @@ manager:
   port: 8888
   agents_directory: /opt/ciris/agents
   templates_directory: /opt/ciris-manager/agent_templates
-  
+
 # Authentication
 auth:
   mode: production  # Options: production, development
@@ -176,7 +176,7 @@ auth:
   jwt_expiry_hours: 24
   allowed_domains:
     - "@ciris.ai"  # Restrict to domain
-  
+
 # OAuth configuration
 oauth:
   google:
@@ -184,7 +184,7 @@ oauth:
     client_id: ${GOOGLE_CLIENT_ID}
     client_secret: ${GOOGLE_CLIENT_SECRET}
     redirect_uri: https://agents.ciris.ai/manager/v1/oauth/callback
-    
+
 # Nginx integration
 nginx:
   enabled: true
@@ -192,7 +192,7 @@ nginx:
   container_name: ciris-nginx
   ssl_cert: /etc/nginx/ssl/cert.pem
   ssl_key: /etc/nginx/ssl/key.pem
-  
+
 # Container monitoring
 watchdog:
   enabled: true
@@ -200,12 +200,12 @@ watchdog:
   crash_threshold: 3   # crashes
   crash_window: 300    # seconds
   restart_delay: 10    # seconds between restart attempts
-  
+
 # Docker configuration
 docker:
   compose_file: /opt/ciris/docker-compose.yml
   network: ciris-network
-  
+
 # Port allocation
 port_manager:
   start_port: 8000
@@ -213,14 +213,14 @@ port_manager:
   reserved_ports:
     - 8888  # Manager API
     - 8080  # GUI container
-    
+
 # Logging
 logging:
   level: INFO
   file: /var/log/ciris-manager/manager.log
   max_size: 10485760  # 10MB
   backup_count: 5
-  
+
 # Deployment orchestration
 deployment:
   strategies:
@@ -753,12 +753,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Build and push Docker image
         run: |
           docker build -t ghcr.io/cirisai/ciris-manager:latest .
           docker push ghcr.io/cirisai/ciris-manager:latest
-      
+
       - name: Deploy to production
         run: |
           ssh deploy@agents.ciris.ai "
@@ -767,7 +767,7 @@ jobs:
             pip install -r requirements.txt
             sudo systemctl restart ciris-manager
           "
-      
+
       - name: Notify deployment
         run: |
           curl -X POST https://agents.ciris.ai/manager/v1/updates/notify \
@@ -1192,7 +1192,7 @@ htop -p $(pgrep -f ciris-manager)
    ```bash
    # Generate JWT secret
    openssl rand -hex 32
-   
+
    # Generate deployment token
    uuidgen | sha256sum | cut -d' ' -f1
    ```
@@ -1226,7 +1226,7 @@ htop -p $(pgrep -f ciris-manager)
    git pull
    pip install -r requirements.txt
    sudo systemctl restart ciris-manager
-   
+
    # Update containers
    docker-compose pull
    docker-compose up -d
@@ -1238,14 +1238,14 @@ htop -p $(pgrep -f ciris-manager)
    #!/bin/bash
    BACKUP_DIR="/backup/ciris-manager/$(date +%Y%m%d)"
    mkdir -p $BACKUP_DIR
-   
+
    # Backup configurations
    cp -r /etc/ciris-manager $BACKUP_DIR/
    cp -r /opt/ciris/agents $BACKUP_DIR/
-   
+
    # Backup agent registry
    cp /opt/ciris/metadata.json $BACKUP_DIR/
-   
+
    # Compress
    tar -czf $BACKUP_DIR.tar.gz $BACKUP_DIR
    rm -rf $BACKUP_DIR
@@ -1307,6 +1307,6 @@ CIRISManager is built with:
 
 ---
 
-**Version**: 2.0.0  
-**Last Updated**: August 2025  
+**Version**: 2.0.0
+**Last Updated**: August 2025
 **Maintainers**: CIRIS AI Team

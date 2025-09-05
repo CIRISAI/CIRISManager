@@ -1,6 +1,6 @@
 /**
  * CIRIS Telemetry SDK Client
- * 
+ *
  * Comprehensive client for interacting with the CIRIS telemetry system.
  * Provides type-safe access to all telemetry endpoints.
  */
@@ -20,19 +20,19 @@ import {
   TelemetryResponse,
   TelemetrySnapshot,
   OrchestratorStats,
-  
+
   // Query types
   TelemetryQuery,
-  
+
   // Error types
   TelemetryError,
   CollectionError,
   StorageError,
-  
+
   // Options
   TelemetryClientOptions,
   RequestOptions,
-  
+
   // WebSocket types
   TelemetryWebSocketMessage,
   TelemetrySubscription
@@ -49,7 +49,7 @@ export class CIRISTelemetryClient {
   private wsMaxReconnectAttempts = 5;
   private wsReconnectDelay = 1000;
   private cache: Map<string, { data: any; expiry: number }> = new Map();
-  
+
   constructor(private options: TelemetryClientOptions) {
     this.axios = axios.create({
       baseURL: options.baseUrl,
@@ -59,23 +59,23 @@ export class CIRISTelemetryClient {
         ...(options.apiKey && { 'Authorization': `Bearer ${options.apiKey}` })
       }
     });
-    
+
     // Add request interceptor for retry logic
     this.axios.interceptors.response.use(
       response => response,
       this.handleAxiosError.bind(this)
     );
-    
+
     // Start cache cleanup interval if enabled
     if (options.enableCache) {
       setInterval(() => this.cleanupCache(), 60000); // Clean every minute
     }
   }
-  
+
   // ============================================================================
   // HEALTH & STATUS
   // ============================================================================
-  
+
   /**
    * Get telemetry system health status
    */
@@ -88,7 +88,7 @@ export class CIRISTelemetryClient {
     );
     return response;
   }
-  
+
   /**
    * Get current system status summary
    */
@@ -96,18 +96,18 @@ export class CIRISTelemetryClient {
     const cacheKey = 'status';
     const cached = this.getCached(cacheKey);
     if (cached) return cached;
-    
+
     const response = await this.request<SystemSummary>(
       'GET',
       '/telemetry/status',
       undefined,
       options
     );
-    
+
     this.setCache(cacheKey, response, 5000); // Cache for 5 seconds
     return response;
   }
-  
+
   /**
    * Get orchestrator statistics
    */
@@ -120,11 +120,11 @@ export class CIRISTelemetryClient {
     );
     return response;
   }
-  
+
   // ============================================================================
   // HISTORICAL DATA
   // ============================================================================
-  
+
   /**
    * Get historical telemetry data
    */
@@ -137,18 +137,18 @@ export class CIRISTelemetryClient {
     const cacheKey = `history_${hours}_${interval}`;
     const cached = this.getCached(cacheKey);
     if (cached) return cached;
-    
+
     const response = await this.request<HistoryResponse>(
       'GET',
       '/telemetry/history',
       { params },
       options
     );
-    
+
     this.setCache(cacheKey, response, 60000); // Cache for 1 minute
     return response;
   }
-  
+
   /**
    * Get agent-specific metrics
    */
@@ -166,7 +166,7 @@ export class CIRISTelemetryClient {
     );
     return response;
   }
-  
+
   /**
    * Get container-specific metrics
    */
@@ -184,11 +184,11 @@ export class CIRISTelemetryClient {
     );
     return response;
   }
-  
+
   // ============================================================================
   // PUBLIC API
   // ============================================================================
-  
+
   /**
    * Get public status (sanitized data)
    */
@@ -196,18 +196,18 @@ export class CIRISTelemetryClient {
     const cacheKey = 'public_status';
     const cached = this.getCached(cacheKey);
     if (cached) return cached;
-    
+
     const response = await this.request<PublicStatus>(
       'GET',
       '/telemetry/public/status',
       undefined,
       options
     );
-    
+
     this.setCache(cacheKey, response, 30000); // Cache for 30 seconds
     return response;
   }
-  
+
   /**
    * Get public history (sanitized data)
    */
@@ -220,22 +220,22 @@ export class CIRISTelemetryClient {
     const cacheKey = `public_history_${hours}_${interval}`;
     const cached = this.getCached(cacheKey);
     if (cached) return cached;
-    
+
     const response = await this.request<PublicHistoryEntry[]>(
       'GET',
       '/telemetry/public/history',
       { params },
       options
     );
-    
+
     this.setCache(cacheKey, response, 60000); // Cache for 1 minute
     return response;
   }
-  
+
   // ============================================================================
   // QUERIES
   // ============================================================================
-  
+
   /**
    * Execute a complex telemetry query
    */
@@ -251,7 +251,7 @@ export class CIRISTelemetryClient {
     );
     return response;
   }
-  
+
   /**
    * Get a complete telemetry snapshot
    */
@@ -264,11 +264,11 @@ export class CIRISTelemetryClient {
     );
     return response;
   }
-  
+
   // ============================================================================
   // MANAGEMENT
   // ============================================================================
-  
+
   /**
    * Trigger immediate telemetry collection
    */
@@ -279,13 +279,13 @@ export class CIRISTelemetryClient {
       undefined,
       options
     );
-    
+
     // Clear cache after triggering collection
     this.clearCache();
-    
+
     return response;
   }
-  
+
   /**
    * Clean up old telemetry data
    */
@@ -301,11 +301,11 @@ export class CIRISTelemetryClient {
     );
     return response;
   }
-  
+
   // ============================================================================
   // WEBSOCKET SUPPORT
   // ============================================================================
-  
+
   /**
    * Connect to telemetry WebSocket for real-time updates
    */
@@ -316,16 +316,16 @@ export class CIRISTelemetryClient {
     if (this.wsConnection?.readyState === WebSocket.OPEN) {
       return;
     }
-    
+
     const wsUrl = this.options.baseUrl.replace(/^http/, 'ws') + '/telemetry/ws';
-    
+
     try {
       this.wsConnection = new WebSocket(wsUrl);
-      
+
       this.wsConnection.onopen = () => {
         console.log('Telemetry WebSocket connected');
         this.wsReconnectAttempts = 0;
-        
+
         // Re-subscribe to all active subscriptions
         this.wsSubscriptions.forEach(sub => {
           this.wsConnection?.send(JSON.stringify({
@@ -334,7 +334,7 @@ export class CIRISTelemetryClient {
           }));
         });
       };
-      
+
       this.wsConnection.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data) as TelemetryWebSocketMessage;
@@ -343,12 +343,12 @@ export class CIRISTelemetryClient {
           console.error('Failed to parse WebSocket message:', error);
         }
       };
-      
+
       this.wsConnection.onerror = (event) => {
         console.error('Telemetry WebSocket error:', event);
         onError?.(new Error('WebSocket error'));
       };
-      
+
       this.wsConnection.onclose = () => {
         console.log('Telemetry WebSocket disconnected');
         this.handleWebSocketReconnect(onMessage, onError);
@@ -358,7 +358,7 @@ export class CIRISTelemetryClient {
       onError?.(error as Error);
     }
   }
-  
+
   /**
    * Subscribe to specific metrics via WebSocket
    */
@@ -366,15 +366,15 @@ export class CIRISTelemetryClient {
     if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket not connected');
     }
-    
+
     this.wsSubscriptions.set(subscription.id, subscription);
-    
+
     this.wsConnection.send(JSON.stringify({
       type: 'subscribe',
       subscription
     }));
   }
-  
+
   /**
    * Unsubscribe from metrics
    */
@@ -382,15 +382,15 @@ export class CIRISTelemetryClient {
     if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
       return;
     }
-    
+
     this.wsSubscriptions.delete(subscriptionId);
-    
+
     this.wsConnection.send(JSON.stringify({
       type: 'unsubscribe',
       subscriptionId
     }));
   }
-  
+
   /**
    * Disconnect WebSocket
    */
@@ -401,18 +401,18 @@ export class CIRISTelemetryClient {
       this.wsSubscriptions.clear();
     }
   }
-  
+
   // ============================================================================
   // UTILITY METHODS
   // ============================================================================
-  
+
   /**
    * Clear all cached data
    */
   clearCache(): void {
     this.cache.clear();
   }
-  
+
   /**
    * Set base URL (useful for switching environments)
    */
@@ -420,7 +420,7 @@ export class CIRISTelemetryClient {
     this.options.baseUrl = url;
     this.axios.defaults.baseURL = url;
   }
-  
+
   /**
    * Set API key
    */
@@ -428,11 +428,11 @@ export class CIRISTelemetryClient {
     this.options.apiKey = apiKey;
     this.axios.defaults.headers['Authorization'] = `Bearer ${apiKey}`;
   }
-  
+
   // ============================================================================
   // PRIVATE METHODS
   // ============================================================================
-  
+
   private async request<T>(
     method: string,
     url: string,
@@ -455,7 +455,7 @@ export class CIRISTelemetryClient {
       throw this.handleError(error);
     }
   }
-  
+
   private handleAxiosError(error: AxiosError): Promise<never> {
     if (error.response?.status === 503) {
       throw new CollectionError(
@@ -463,17 +463,17 @@ export class CIRISTelemetryClient {
         error.response.data
       );
     }
-    
+
     if (error.response?.status === 500) {
       throw new StorageError(
         'Telemetry storage error',
         error.response.data
       );
     }
-    
+
     throw error;
   }
-  
+
   private handleError(error: any): Error {
     if (axios.isAxiosError(error)) {
       const message = error.response?.data?.detail || error.message;
@@ -485,26 +485,26 @@ export class CIRISTelemetryClient {
     }
     return error;
   }
-  
+
   private getCached(key: string): any {
     if (!this.options.enableCache) return null;
-    
+
     const cached = this.cache.get(key);
     if (cached && cached.expiry > Date.now()) {
       return cached.data;
     }
-    
+
     this.cache.delete(key);
     return null;
   }
-  
+
   private setCache(key: string, data: any, timeout?: number): void {
     if (!this.options.enableCache) return;
-    
+
     const expiry = Date.now() + (timeout || this.options.cacheTimeout || 60000);
     this.cache.set(key, { data, expiry });
   }
-  
+
   private cleanupCache(): void {
     const now = Date.now();
     for (const [key, value] of this.cache.entries()) {
@@ -513,7 +513,7 @@ export class CIRISTelemetryClient {
       }
     }
   }
-  
+
   private handleWebSocketReconnect(
     onMessage: (message: TelemetryWebSocketMessage) => void,
     onError?: (error: Error) => void
@@ -523,12 +523,12 @@ export class CIRISTelemetryClient {
       onError?.(new Error('Max reconnection attempts reached'));
       return;
     }
-    
+
     this.wsReconnectAttempts++;
     const delay = this.wsReconnectDelay * Math.pow(2, this.wsReconnectAttempts - 1);
-    
+
     console.log(`Attempting WebSocket reconnection in ${delay}ms...`);
-    
+
     setTimeout(() => {
       this.connectWebSocket(onMessage, onError);
     }, delay);

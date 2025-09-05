@@ -232,8 +232,8 @@ class TestCIRISManager:
             with patch("subprocess.run"):
                 # Create agent
                 result = await manager.create_agent(
-                template="scout", name="Scout", environment={"CUSTOM": "value"}
-            )
+                    template="scout", name="Scout", environment={"CUSTOM": "value"}
+                )
 
         # Verify result - agent_id now includes a 6-char suffix
         assert result["agent_id"].startswith("scout-")
@@ -284,8 +284,8 @@ class TestCIRISManager:
             with patch("subprocess.run"):
                 # Create agent with signature
                 result = await manager.create_agent(
-                template="custom", name="Custom", wa_signature="test_signature"
-            )
+                    template="custom", name="Custom", wa_signature="test_signature"
+                )
 
         # Should succeed - agent_id now includes a 6-char suffix
         assert result["agent_id"].startswith("custom-")

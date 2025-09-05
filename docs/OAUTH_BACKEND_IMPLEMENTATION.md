@@ -1,6 +1,6 @@
 # OAuth Backend Implementation Retrospective
 
-**Date**: 2025-08-03  
+**Date**: 2025-08-03
 **What**: Implemented OAuth backend infrastructure for agent status tracking
 
 ## What We Built
@@ -17,7 +17,7 @@
   - Returns current OAuth configuration status
   - Provides callback URLs for all three providers
   - Structured for future OAuth flow testing
-  
+
 - **POST `/agents/{agent_id}/oauth/complete`**
   - Marks agent's OAuth as configured
   - Updates persistent storage via agent registry
@@ -81,7 +81,7 @@ manager.agent_registry.save_metadata()
 ## Future Enhancements
 
 1. **Actual OAuth Testing** - Extend verify endpoint to test real OAuth flow
-2. **Webhook Notifications** - Notify admins when OAuth needs attention  
+2. **Webhook Notifications** - Notify admins when OAuth needs attention
 3. **Batch Operations** - Configure OAuth for multiple agents at once
 4. **Status Dashboard** - Show OAuth health across all agents
 

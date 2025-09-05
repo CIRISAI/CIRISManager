@@ -1,6 +1,6 @@
 /**
  * Type definitions for CIRIS Telemetry SDK
- * 
+ *
  * These types match the Python schemas exactly to ensure
  * type safety across the entire telemetry system.
  */
@@ -86,17 +86,17 @@ export interface ContainerMetrics {
   container_name: string;        // 1-255 chars
   image: string;
   image_digest?: string;
-  
+
   status: ContainerStatus;
   health: HealthStatus;
   restart_count: number;         // >= 0
-  
+
   resources: ContainerResources;
-  
+
   created_at: string;            // ISO datetime
   started_at?: string;           // ISO datetime
   finished_at?: string;          // ISO datetime
-  
+
   exit_code?: number;
   error_message?: string;
 }
@@ -108,26 +108,26 @@ export interface ContainerMetrics {
 export interface AgentOperationalMetrics {
   agent_id: string;              // 1-255 chars
   agent_name: string;            // 1-255 chars
-  
+
   // Version info for deployment tracking
   version: string;
-  
+
   // Cognitive state for operational awareness
   cognitive_state: CognitiveState;
-  
+
   // Health metrics
   api_healthy: boolean;
   api_response_time_ms?: number;
   uptime_seconds?: number;
-  
+
   // Incident tracking
   incident_count_24h: number;
   last_incident_time?: string;  // ISO datetime
-  
+
   // Usage metrics
   message_count_24h: number;
   cost_cents_24h: number;
-  
+
   // API configuration
   api_port: number;              // 1-65535
   oauth_configured: boolean;
@@ -142,23 +142,23 @@ export interface DeploymentMetrics {
   deployment_id: string;
   status: DeploymentStatus;
   phase: DeploymentPhase;
-  
+
   // Target versions
   agent_image?: string;
   gui_image?: string;
-  
+
   // Agent counts
   agents_total: number;
   agents_staged: number;
   agents_updated: number;
   agents_failed: number;
   agents_deferred: number;
-  
+
   // Timing
   created_at: string;            // ISO datetime
   started_at?: string;
   completed_at?: string;
-  
+
   // Additional info
   message?: string;
   error?: string;
@@ -201,30 +201,30 @@ export interface AgentVersionAdoption {
 
 export interface SystemSummary {
   timestamp: string;              // ISO datetime
-  
+
   // Agent counts
   agents_total: number;
   agents_healthy: number;
   agents_degraded: number;
   agents_down: number;
-  
+
   // Cognitive states
   agents_in_work: number;
   agents_in_dream: number;
   agents_in_solitude: number;
   agents_in_play: number;
-  
+
   // Resource totals
   total_cpu_percent: number;
   total_memory_mb: number;
-  
+
   // Cost tracking
   total_cost_cents_24h: number;
-  
+
   // Usage metrics
   total_messages_24h: number;
   total_incidents_24h: number;
-  
+
   // Deployment status
   active_deployments: number;
   staged_deployments: number;
@@ -289,13 +289,13 @@ export interface TelemetryResponse {
 export interface TelemetrySnapshot {
   snapshot_id: string;
   timestamp: string;
-  
+
   containers: ContainerMetrics[];
   agents: AgentOperationalMetrics[];
   deployments: DeploymentMetrics[];
   versions: VersionState[];
   adoption: AgentVersionAdoption[];
-  
+
   collection_duration_ms: number;
   errors: string[];
 }

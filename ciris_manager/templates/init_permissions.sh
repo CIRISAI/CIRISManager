@@ -12,12 +12,12 @@ ensure_dir() {
     local dir=$1
     local perms=$2
     local desc=$3
-    
+
     if [ ! -d "$dir" ]; then
         echo "Creating $desc directory: $dir"
         mkdir -p "$dir"
     fi
-    
+
     # Check if we can write to the directory
     if ! touch "$dir/.permission_test" 2>/dev/null; then
         echo "WARNING: Cannot write to $dir - attempting to fix permissions"
@@ -31,7 +31,7 @@ ensure_dir() {
         rm -f "$dir/.permission_test"
         echo "✓ $desc directory is writable: $dir"
     fi
-    
+
     # Set the correct permissions
     chmod "$perms" "$dir" 2>/dev/null || true
 }

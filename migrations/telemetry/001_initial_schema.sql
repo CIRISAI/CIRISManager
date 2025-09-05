@@ -18,14 +18,14 @@ BEGIN
         RAISE NOTICE 'Migration 001 already applied, skipping';
         RETURN;
     END IF;
-    
+
     -- Apply migration
     RAISE NOTICE 'Applying migration 001: Initial schema';
 END
 $$;
 
 -- Only create schema if migration hasn't been applied
-INSERT INTO schema_migrations (version, name) 
+INSERT INTO schema_migrations (version, name)
 SELECT 1, '001_initial_schema'
 WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version = 1);
 

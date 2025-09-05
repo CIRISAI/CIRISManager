@@ -57,13 +57,13 @@ def main() -> None:
 Examples:
   # Run the manager service
   ciris-manager --config /etc/ciris-manager/config.yml
-  
+
   # Generate a default config
   ciris-manager --generate-config
-  
+
   # Authenticate with the manager
   ciris-manager auth login your-email@ciris.ai
-  
+
   # Get authentication token
   ciris-manager auth token
         """,

@@ -20,7 +20,7 @@ SELECT
     NOW() as current_time,
     COUNT(DISTINCT agent_id) as total_agents,
     COUNT(DISTINCT CASE WHEN api_healthy THEN agent_id END) as healthy_agents,
-    ROUND(100.0 * COUNT(DISTINCT CASE WHEN api_healthy THEN agent_id END) / 
+    ROUND(100.0 * COUNT(DISTINCT CASE WHEN api_healthy THEN agent_id END) /
           NULLIF(COUNT(DISTINCT agent_id), 0), 1) as health_percentage,
     SUM(message_count_24h) as total_messages_24h,
     SUM(incident_count_24h) as total_incidents_24h,
@@ -45,8 +45,8 @@ ORDER BY bucket DESC;
 -- Public deployment status (no specifics)
 CREATE OR REPLACE VIEW public_deployment_status AS
 SELECT
-    CASE 
-        WHEN COUNT(*) FILTER (WHERE status IN ('in_progress', 'rolling_back')) > 0 
+    CASE
+        WHEN COUNT(*) FILTER (WHERE status IN ('in_progress', 'rolling_back')) > 0
         THEN 'active'
         WHEN COUNT(*) FILTER (WHERE status = 'staged') > 0
         THEN 'staged'

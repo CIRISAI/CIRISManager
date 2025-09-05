@@ -25,7 +25,7 @@ set_secret() {
     local name=$1
     local value=$2
     local env=${3:-"production"}
-    
+
     echo -n "Setting $name for $env environment... "
     if [ "$env" == "repository" ]; then
         echo "$value" | gh secret set "$name" --body=-
@@ -109,16 +109,16 @@ read SETUP_STAGING
 
 if [ "$SETUP_STAGING" == "y" ]; then
     echo "Setting staging environment secrets..."
-    
+
     echo -n "Enter staging database host: "
     read STAGING_DB_HOST
     set_secret "TELEMETRY_DB_HOST" "$STAGING_DB_HOST" "staging"
-    
+
     echo -n "Enter staging database password: "
     read -s STAGING_DB_PASSWORD
     echo
     set_secret "TELEMETRY_DB_PASSWORD" "$STAGING_DB_PASSWORD" "staging"
-    
+
     # Use same values for other settings
     set_secret "TELEMETRY_DB_PORT" "$DB_PORT" "staging"
     set_secret "TELEMETRY_DB_NAME" "$DB_NAME" "staging"

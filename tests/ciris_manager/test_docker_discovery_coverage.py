@@ -222,7 +222,7 @@ class TestDockerDiscoveryCoverage:
         mock_agent.template = "scout"
         mock_agent.metadata = {"deployment": "CIRIS_DISCORD_PILOT"}
         mock_registry.get_agent.return_value = mock_agent
-        
+
         discovery = DockerAgentDiscovery(agent_registry=mock_registry)
         discovery.client = Mock()
 

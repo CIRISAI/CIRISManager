@@ -140,19 +140,19 @@ server {
 
     ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-    
+
     # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
-    
+
     location /manager/ {
         proxy_pass http://localhost:8888;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
+
         # WebSocket support
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -245,13 +245,13 @@ ciris-manager-health-check() {
     echo "=== CIRISManager Health Check ==="
     echo "System Status:"
     systemctl status ciris-manager --no-pager | head -10
-    
+
     echo -e "\nAPI Health:"
     curl -s http://localhost:8888/manager/v1/health | jq .
-    
+
     echo -e "\nActive Agents:"
     curl -s http://localhost:8888/manager/v1/agents | jq '.agents | length'
-    
+
     echo -e "\nResource Usage:"
     docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 }
@@ -264,7 +264,7 @@ ciris-manager-health-check() {
 create_agent() {
     local name=$1
     local template=${2:-basic}
-    
+
     curl -X POST http://localhost:8888/manager/v1/agents \
       -H "Authorization: Bearer $TOKEN" \
       -H "Content-Type: application/json" \
@@ -274,7 +274,7 @@ create_agent() {
 # Delete agent
 delete_agent() {
     local agent_id=$1
-    
+
     curl -X DELETE http://localhost:8888/manager/v1/agents/$agent_id \
       -H "Authorization: Bearer $TOKEN"
 }
@@ -321,16 +321,16 @@ echo "0 2 * * * /opt/ciris-manager/backup/backup.sh" | crontab -
 recover_from_backup() {
     local backup_date=$1
     local backup_dir="/backup/ciris-manager/$backup_date"
-    
+
     # Stop services
     sudo systemctl stop ciris-manager
-    
+
     # Restore agent data
     sudo tar -xzf $backup_dir/agents.tar.gz -C /
-    
+
     # Restore configuration
     sudo cp -r $backup_dir/config/* /etc/ciris-manager/
-    
+
     # Restore Docker volumes
     for archive in $backup_dir/*.tar.gz; do
         volume=$(basename $archive .tar.gz)
@@ -340,7 +340,7 @@ recover_from_backup() {
               alpine tar -xzf /backup/${volume}.tar.gz -C /data
         fi
     done
-    
+
     # Start services
     sudo systemctl start ciris-manager
 }

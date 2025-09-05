@@ -985,7 +985,7 @@ chown -R 1000:1000 "{agent_dir}"
 find "{agent_dir}" -type d -exec chmod 755 {{}} \\;
 chmod 700 "{agent_dir}/audit_keys" "{agent_dir}/.secrets" 2>/dev/null || true
 
-# Set file permissions  
+# Set file permissions
 find "{agent_dir}" -type f -exec chmod 644 {{}} \\;
 chmod 755 "{agent_dir}/"*.sh 2>/dev/null || true
 

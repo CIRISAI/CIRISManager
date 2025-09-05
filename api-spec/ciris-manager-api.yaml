@@ -59,7 +59,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AgentListResponse'
-    
+
     post:
       summary: Create new agent
       tags: [Agents]
@@ -346,7 +346,7 @@ components:
           scopes:
             read: Read access
             write: Write access
-    
+
     ServiceToken:
       type: http
       scheme: bearer

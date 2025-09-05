@@ -3,7 +3,7 @@ Test enhanced settings functionality for agent configuration.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, patch
 import yaml
 from fastapi.testclient import TestClient
 
@@ -138,8 +138,8 @@ class TestEnhancedSettings:
                     mock_subprocess.return_value = mock_proc
 
                     response = client.patch(
-                            "/manager/v1/agents/test-agent/config", json=config_update
-                        )
+                        "/manager/v1/agents/test-agent/config", json=config_update
+                    )
 
         assert response.status_code == 200
         assert response.json()["status"] == "updated"
@@ -287,8 +287,8 @@ class TestEnhancedSettings:
                     mock_subprocess.return_value = mock_proc
 
                     response = client.patch(
-                            "/manager/v1/agents/test-agent/config", json=config_update
-                        )
+                        "/manager/v1/agents/test-agent/config", json=config_update
+                    )
 
         assert response.status_code == 200
 
@@ -333,8 +333,8 @@ class TestEnhancedSettings:
                     mock_subprocess.return_value = mock_proc
 
                     response = client.patch(
-                            "/manager/v1/agents/test-agent/config", json=config_update
-                        )
+                        "/manager/v1/agents/test-agent/config", json=config_update
+                    )
 
         assert response.status_code == 200
         assert "updated" in response.json()["status"]
@@ -344,7 +344,7 @@ class TestEnhancedSettings:
 
         config_update = {
             "environment": {"TEST_VAR": "test_value"},
-            "restart": False  # Don't restart the container
+            "restart": False,  # Don't restart the container
         }
 
         # Mock file operations
@@ -374,7 +374,7 @@ services:
                     response = client.patch(
                         "/manager/v1/agents/test-agent/config", json=config_update
                     )
-                    
+
                     # Subprocess should NOT have been called
                     mock_subprocess.assert_not_called()
 
@@ -423,7 +423,7 @@ services:
                     response = client.patch(
                         "/manager/v1/agents/test-agent/config", json=config_update
                     )
-                    
+
                     # Subprocess SHOULD have been called
                     mock_subprocess.assert_called_once()
 

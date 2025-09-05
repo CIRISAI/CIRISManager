@@ -227,7 +227,7 @@ class TestManagerCoverage:
             mock_nginx.ensure_managed_sections = Mock(return_value=True)
             mock_nginx.add_agent_route = Mock(return_value=True)
             mock_nginx_class.return_value = mock_nginx
-            
+
             # Mock DockerImageCleanup to avoid Docker connection
             with patch("ciris_manager.manager.DockerImageCleanup"):
                 manager = CIRISManager(config)
@@ -248,7 +248,7 @@ class TestManagerCoverage:
                 # Also mock subprocess.run for sudo chown calls
                 with patch("subprocess.run") as mock_run:
                     mock_run.return_value = Mock(returncode=0)
-                    
+
                     # Create agent - should get next available port
                     result = await manager.create_agent("test", "Test")
 

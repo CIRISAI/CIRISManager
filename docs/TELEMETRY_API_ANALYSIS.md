@@ -33,7 +33,7 @@ The current CIRISManager API is a monolithic 2000+ line file mixing operational,
 ```
 /manager/v1/
 ├── /operations/     # Agent lifecycle (create, start, stop, delete)
-├── /deployments/    # CD orchestration 
+├── /deployments/    # CD orchestration
 ├── /telemetry/      # Metrics and monitoring (NEW)
 ├── /auth/           # OAuth and authentication
 └── /public/         # Public-safe endpoints

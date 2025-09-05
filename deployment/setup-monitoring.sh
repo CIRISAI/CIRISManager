@@ -5,7 +5,7 @@
 set -e
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then 
+if [ "$EUID" -ne 0 ]; then
     echo "Please run as root (use sudo)"
     exit 1
 fi
@@ -71,10 +71,10 @@ if [ "$http_code" = "200" ]; then
     exit 0
 else
     echo "[$timestamp] Health check failed: HTTP $http_code" >> "$LOG_FILE"
-    
+
     # Check if services are running
     systemctl is-active --quiet ciris-manager || echo "[$timestamp] ciris-manager service is not running" >> "$LOG_FILE"
-        
+
     exit 1
 fi
 EOF
@@ -128,7 +128,7 @@ timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
 if [ "$usage" -gt "$THRESHOLD" ]; then
     echo "[$timestamp] WARNING: Disk usage at $usage% (threshold: $THRESHOLD%)" >> "$LOG_FILE"
-    
+
     # Log top space consumers
     echo "[$timestamp] Top directories by size:" >> "$LOG_FILE"
     du -h /opt/ciris/agents 2>/dev/null | sort -hr | head -5 >> "$LOG_FILE"

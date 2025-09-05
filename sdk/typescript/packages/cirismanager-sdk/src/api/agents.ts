@@ -1,9 +1,9 @@
 import { AxiosInstance } from 'axios';
-import { 
-  Agent, 
-  AgentConfig, 
+import {
+  Agent,
+  AgentConfig,
   CreateAgentRequest,
-  AgentListResponse 
+  AgentListResponse
 } from '../types';
 
 /**

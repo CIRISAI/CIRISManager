@@ -344,9 +344,9 @@ class TestFailedDeploymentIntegration:
         else:
             ui_function = "hidePendingDeployment"
 
-        assert ui_function == "showFailedDeployment", (
-            f"Failed deployment should route to showFailedDeployment, got {ui_function}"
-        )
+        assert (
+            ui_function == "showFailedDeployment"
+        ), f"Failed deployment should route to showFailedDeployment, got {ui_function}"
 
 
 if __name__ == "__main__":

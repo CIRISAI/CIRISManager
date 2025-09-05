@@ -119,9 +119,9 @@ class TestDeploymentUIFunctions:
             else:
                 actual_function = "hidePendingDeployment"
 
-            assert actual_function == expected_function, (
-                f"For pending={pending}, status={status}, expected {expected_function} but got {actual_function}"
-            )
+            assert (
+                actual_function == expected_function
+            ), f"For pending={pending}, status={status}, expected {expected_function} but got {actual_function}"
 
     def test_trigger_new_deployment_checks_for_blocking_failed(self):
         """Test triggerNewDeployment checks for blocking failed deployments."""

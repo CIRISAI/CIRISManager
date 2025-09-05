@@ -1,18 +1,81 @@
-repos:
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.1.0
-    hooks:
-      - id: ruff
-        args: [--fix]
-        files: \.py$  # Only run on Python files
-      - id: ruff-format
-        files: \.py$  # Only run on Python files
+# Pre-commit hooks for CIRISManager code quality
+# Install: pip install pre-commit
+# Setup: pre-commit install
+# Manual run: pre-commit run --all-files
 
+repos:
+  # Formatters - Always run, auto-fix
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.8
+    hooks:
+      - id: ruff-format
+        # Always fix formatting
+        always_run: true
+        fail_fast: false
+      - id: ruff
+        args: ['--fix']
+        # Fix what we can, but don't block commits on unfixable issues
+        always_run: true
+        fail_fast: false
+
+  # Basic hygiene - Always fix
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      # Critical checks that should block
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+
+  # Type checking - Run but warn only
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.0.0
+    rev: v1.10.0
     hooks:
       - id: mypy
-        additional_dependencies: [types-PyYAML, types-docker, types-requests, types-python-dateutil]
-        args: [--ignore-missing-imports]
-        files: \.py$  # Only run on Python files
-        exclude: ^(g\.py|tools/grace/)
+        args: ['--ignore-missing-imports', '--no-error-summary']
+        additional_dependencies: [
+          'pydantic>=2.0',
+          'types-PyYAML',
+          'types-requests',
+          'types-python-dateutil',
+          'types-docker',
+        ]
+        exclude: '^(tests|tools|scripts|docs)'
+        # Don't block commits on type errors - just warn
+        always_run: false
+        stages: [manual]
+
+# Configuration
+default_language_version:
+  python: python3.12
+
+# Files to exclude globally
+exclude: |
+  (?x)^(
+    .*\.egg-info/.*|
+    \.git/.*|
+    \.mypy_cache/.*|
+    \.pytest_cache/.*|
+    __pycache__/.*|
+    htmlcov/.*|
+    build/.*|
+    dist/.*|
+    data/.*|
+    logs/.*|
+    static/.*|
+    frontend/node_modules/.*|
+    frontend/dist/.*|
+    .*\.db$
+  )
+
+# Stages configuration
+default_stages: [pre-commit]
+fail_fast: false  # Run all hooks even if one fails

@@ -1,6 +1,6 @@
 /**
  * CIRIS Manager TypeScript SDK
- * 
+ *
  * Provides type-safe access to the CIRIS Manager API
  */
 

@@ -159,7 +159,7 @@ class Deployment:
 ciris_manager/api/
 ├── __init__.py
 ├── agents.py       # /agents endpoints
-├── versions.py     # /versions endpoints  
+├── versions.py     # /versions endpoints
 ├── deployments.py  # /deployments endpoints
 ├── templates.py    # /templates endpoints
 ├── system.py       # /system endpoints
@@ -177,14 +177,14 @@ async def list_agents(
 ) -> List[Agent]:
     """List agents with optional filters."""
     agents = discover_agents()
-    
+
     if deployment:
         agents = [a for a in agents if a.deployment == deployment]
     if template:
         agents = [a for a in agents if a.template == template]
     if status:
         agents = [a for a in agents if a.status == status]
-    
+
     return agents
 ```
 
@@ -195,18 +195,18 @@ async def list_agents(
 async def get_fleet_versions() -> FleetVersions:
     """Get version info for all agents."""
     agents = discover_agents()
-    
+
     versions = {}
     adoption = {}
-    
+
     for agent in agents:
         version = get_agent_version(agent.agent_id)
         versions[agent.agent_id] = version
-        
+
         if version not in adoption:
             adoption[version] = []
         adoption[version].append(agent.agent_id)
-    
+
     return FleetVersions(
         versions=versions,
         adoption=adoption,
@@ -238,7 +238,7 @@ async def get_fleet_versions() -> FleetVersions:
 fetch('/manager/v1/agents/versions')
 fetch('/manager/v1/updates/rollback-options')
 
-// NEW  
+// NEW
 fetch('/manager/v1/versions/fleet')
 fetch('/manager/v1/versions/rollback')
 ```

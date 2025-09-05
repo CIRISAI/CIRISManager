@@ -36,11 +36,11 @@ jobs:
             # First release - get last 10 commits
             CHANGELOG=$(git log HEAD~10..HEAD --pretty=format:"%s")
           fi
-          
+
           # Escape for JSON (replace quotes and newlines)
           CHANGELOG_JSON=$(echo "$CHANGELOG" | jq -Rs .)
           echo "changelog=$CHANGELOG_JSON" >> $GITHUB_OUTPUT
-          
+
           # Also output for debugging
           echo "Changelog:"
           echo "$CHANGELOG"
@@ -80,12 +80,12 @@ If you're creating GitHub releases, you can also extract the release notes:
             -H "Accept: application/vnd.github+json" \
             /repos/${{ github.repository }}/releases/tags/${{ github.ref_name }} \
             --jq '.body')
-          
+
           # If no release notes, fall back to commit messages
           if [ -z "$RELEASE_NOTES" ]; then
             RELEASE_NOTES=$(git log ${{ steps.prev_tag.outputs.prev_tag }}..HEAD --pretty=format:"- %s")
           fi
-          
+
           # Escape for JSON
           RELEASE_NOTES_JSON=$(echo "$RELEASE_NOTES" | jq -Rs .)
           echo "notes=$RELEASE_NOTES_JSON" >> $GITHUB_OUTPUT

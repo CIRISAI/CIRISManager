@@ -25,28 +25,28 @@
 <body>
     <h1>Manager.js Unit Tests</h1>
     <div id="test-results"></div>
-    
+
     <!-- Mock DOM elements that manager.js expects -->
     <div id="loading" class="hidden">Loading...</div>
     <div id="app">App Content</div>
     <div id="error-alert" class="hidden">
         <span id="error-message"></span>
     </div>
-    
+
     <!-- Load the manager.js file -->
     <script src="../../static/manager/manager.js"></script>
-    
+
     <!-- Test Suite -->
     <script>
         const results = document.getElementById('test-results');
         let testCount = 0;
         let passCount = 0;
-        
+
         function test(name, fn) {
             testCount++;
             const result = document.createElement('div');
             result.className = 'test-result';
-            
+
             try {
                 fn();
                 result.className += ' pass';
@@ -56,101 +56,101 @@
                 result.className += ' fail';
                 result.textContent = `✗ ${name}: ${error.message}`;
             }
-            
+
             results.appendChild(result);
         }
-        
+
         function assert(condition, message) {
             if (!condition) {
                 throw new Error(message || 'Assertion failed');
             }
         }
-        
+
         // Test showLoading function
         test('showLoading should be defined', () => {
             assert(typeof showLoading === 'function', 'showLoading is not a function');
         });
-        
+
         test('showLoading should show loading and hide app', () => {
             const loading = document.getElementById('loading');
             const app = document.getElementById('app');
-            
+
             // Reset state
             loading.classList.add('hidden');
             app.classList.remove('hidden');
-            
+
             showLoading();
-            
+
             assert(!loading.classList.contains('hidden'), 'Loading should be visible');
             assert(app.classList.contains('hidden'), 'App should be hidden');
         });
-        
+
         // Test hideLoading function
         test('hideLoading should be defined', () => {
             assert(typeof hideLoading === 'function', 'hideLoading is not a function');
         });
-        
+
         test('hideLoading should hide loading and show app', () => {
             const loading = document.getElementById('loading');
             const app = document.getElementById('app');
-            
+
             // Set initial state
             loading.classList.remove('hidden');
             app.classList.add('hidden');
-            
+
             hideLoading();
-            
+
             assert(loading.classList.contains('hidden'), 'Loading should be hidden');
             assert(!app.classList.contains('hidden'), 'App should be visible');
         });
-        
+
         // Test showError function
         test('showError should be defined', () => {
             assert(typeof showError === 'function', 'showError is not a function');
         });
-        
+
         test('showError should display error message', () => {
             const alert = document.getElementById('error-alert');
             const message = document.getElementById('error-message');
-            
+
             showError('Test error message');
-            
+
             assert(!alert.classList.contains('hidden'), 'Error alert should be visible');
             assert(message.textContent === 'Test error message', 'Error message should be set');
         });
-        
+
         // Test hideError function
         test('hideError should be defined', () => {
             assert(typeof hideError === 'function', 'hideError is not a function');
         });
-        
+
         test('hideError should hide error alert', () => {
             const alert = document.getElementById('error-alert');
             alert.classList.remove('hidden');
-            
+
             hideError();
-            
+
             assert(alert.classList.contains('hidden'), 'Error alert should be hidden');
         });
-        
+
         // Test showSuccess function
         test('showSuccess should be defined', () => {
             assert(typeof showSuccess === 'function', 'showSuccess is not a function');
         });
-        
+
         // Test other critical functions
         test('deployToSingleAgent should be defined', () => {
             assert(typeof deployToSingleAgent === 'function', 'deployToSingleAgent is not a function');
         });
-        
+
         test('showDeployVersion should be defined', () => {
             assert(typeof showDeployVersion === 'function', 'showDeployVersion is not a function');
         });
-        
+
         test('closeSingleDeployModal should be defined', () => {
             assert(typeof closeSingleDeployModal === 'function', 'closeSingleDeployModal is not a function');
         });
-        
+
         // Summary
         const summary = document.createElement('div');
         summary.style.marginTop = '20px';
@@ -158,7 +158,7 @@
         summary.textContent = `Tests: ${passCount}/${testCount} passed`;
         summary.className = passCount === testCount ? 'pass test-result' : 'fail test-result';
         results.appendChild(summary);
-        
+
         // Log to console for CI
         console.log(`Test Results: ${passCount}/${testCount} passed`);
         if (passCount !== testCount) {

@@ -137,7 +137,7 @@ GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO ciris;
 
 -- Create views for easy querying
 CREATE OR REPLACE VIEW telemetry_latest AS
-SELECT 
+SELECT
     cr.time as collection_time,
     cr.success,
     cr.containers_collected,

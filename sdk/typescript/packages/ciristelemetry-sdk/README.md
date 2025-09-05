@@ -152,7 +152,7 @@ console.log(`Recommendation: ${prediction.recommendation}`);
 client.connectWebSocket(
   (message) => {
     console.log('Received telemetry:', message);
-    
+
     switch (message.type) {
       case 'snapshot':
         // Handle full snapshot
@@ -240,19 +240,19 @@ import {
   AgentOperationalMetrics,
   ContainerMetrics,
   DeploymentMetrics,
-  
+
   // Enums
   ContainerStatus,
   HealthStatus,
   CognitiveState,
   DeploymentStatus,
   DeploymentPhase,
-  
+
   // Response types
   HealthResponse,
   TriggerResponse,
   PublicStatus,
-  
+
   // Error types
   TelemetryError,
   CollectionError,
@@ -272,7 +272,7 @@ Include the browser bundle:
     baseUrl: 'https://agents.ciris.ai',
     apiKey: 'your-api-key'
   });
-  
+
   client.getStatus().then(status => {
     console.log('System status:', status);
   });

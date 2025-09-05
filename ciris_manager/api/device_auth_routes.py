@@ -292,11 +292,11 @@ def create_device_auth_routes() -> APIRouter:
                 <h1>Device Authorization</h1>
                 <p class="info">Enter the code displayed on your device to authorize access.</p>
                 <form id="deviceForm">
-                    <input 
-                        type="text" 
-                        id="userCode" 
-                        class="code-input" 
-                        placeholder="XXXX-XXXX" 
+                    <input
+                        type="text"
+                        id="userCode"
+                        class="code-input"
+                        placeholder="XXXX-XXXX"
                         maxlength="9"
                         pattern="[A-Z0-9]{{4}}-[A-Z0-9]{{4}}"
                         value="{code or ""}"
@@ -308,13 +308,13 @@ def create_device_auth_routes() -> APIRouter:
                     <div id="error" class="error"></div>
                 </form>
             </div>
-            
+
             <script>
                 const form = document.getElementById('deviceForm');
                 const codeInput = document.getElementById('userCode');
                 const submitBtn = document.getElementById('submitBtn');
                 const errorDiv = document.getElementById('error');
-                
+
                 // Auto-format code input
                 codeInput.addEventListener('input', (e) => {{
                     let value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -323,32 +323,32 @@ def create_device_auth_routes() -> APIRouter:
                     }}
                     e.target.value = value;
                 }});
-                
+
                 form.addEventListener('submit', async (e) => {{
                     e.preventDefault();
                     errorDiv.textContent = '';
                     submitBtn.disabled = true;
                     submitBtn.textContent = 'Verifying...';
-                    
+
                     const userCode = codeInput.value;
-                    
+
                     try {{
                         // Check if we have a token in the URL (just returned from OAuth)
                         const urlParams = new URLSearchParams(window.location.search);
                         const tokenFromUrl = urlParams.get('token');
-                        
+
                         let authHeaders = {{}};
                         if (tokenFromUrl) {{
                             // Use token from URL if available
                             authHeaders['Authorization'] = `Bearer ${{tokenFromUrl}}`;
                         }}
-                        
+
                         // First, check if user is authenticated
                         const authCheck = await fetch('/manager/v1/oauth/user', {{
                             credentials: 'include',
                             headers: authHeaders
                         }});
-                        
+
                         if (!authCheck.ok) {{
                             // Redirect to login with return URL, preserving only the code
                             const currentUrl = new URL(window.location.href);
@@ -356,7 +356,7 @@ def create_device_auth_routes() -> APIRouter:
                             window.location.href = `/manager/v1/oauth/login?redirect_uri=${{encodeURIComponent(cleanUrl)}}`;
                             return;
                         }}
-                        
+
                         // User is authenticated, verify the device code
                         const verifyHeaders = {{
                             'Content-Type': 'application/json',
@@ -364,16 +364,16 @@ def create_device_auth_routes() -> APIRouter:
                         if (tokenFromUrl) {{
                             verifyHeaders['Authorization'] = `Bearer ${{tokenFromUrl}}`;
                         }}
-                        
+
                         const response = await fetch('/manager/v1/device/verify', {{
                             method: 'POST',
                             headers: verifyHeaders,
                             credentials: 'include',
                             body: JSON.stringify({{ user_code: userCode }})
                         }});
-                        
+
                         const result = await response.json();
-                        
+
                         if (response.ok) {{
                             submitBtn.textContent = '✓ Authorized';
                             submitBtn.style.background = '#4CAF50';
@@ -391,10 +391,10 @@ def create_device_auth_routes() -> APIRouter:
                         submitBtn.textContent = 'Verify Code';
                     }}
                 }});
-                
+
                 // Focus on input
                 codeInput.focus();
-                
+
                 // Auto-submit if we have a code and just returned from OAuth
                 const urlParams = new URLSearchParams(window.location.search);
                 if (urlParams.has('token') && codeInput.value) {{

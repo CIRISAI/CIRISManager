@@ -32,7 +32,7 @@ print_warning() {
 }
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then 
+if [ "$EUID" -ne 0 ]; then
     print_error "This script must be run as root (use sudo)"
     exit 1
 fi
@@ -212,11 +212,11 @@ print_status "Configuration installed with proper paths"
 # Copy environment template
 if [ ! -f "$CONFIG_DIR/environment" ]; then
     cp "$INSTALL_DIR/deployment/environment.production" "$CONFIG_DIR/environment"
-    
+
     # Generate JWT secret
     JWT_SECRET=$(openssl rand -base64 32)
     sed -i "s/CHANGE_THIS_TO_RANDOM_SECRET/$JWT_SECRET/g" "$CONFIG_DIR/environment"
-    
+
     print_warning "Please edit $CONFIG_DIR/environment with your OAuth credentials"
 fi
 
@@ -239,7 +239,7 @@ systemctl daemon-reload
 # Step 8: Setup SSL (unless skipped)
 if [ "$SKIP_SSL" = false ]; then
     print_status "Setting up SSL certificates..."
-    
+
     # Check if certificates already exist
     if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
         print_warning "SSL certificates already exist for $DOMAIN"

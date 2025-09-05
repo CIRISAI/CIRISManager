@@ -267,6 +267,7 @@ class TestDeploymentOrchestrator:
 
         # Create deployment in orchestrator for the test
         from ciris_manager.models import DeploymentStatus
+
         deployment = DeploymentStatus(
             deployment_id="deployment-123",
             agents_total=1,
@@ -274,7 +275,7 @@ class TestDeploymentOrchestrator:
             status="in_progress",
             message="Test deployment",
             agents_pending_restart=[],
-            agents_in_progress={}
+            agents_in_progress={},
         )
         orchestrator.deployments["deployment-123"] = deployment
 
@@ -324,9 +325,10 @@ class TestDeploymentOrchestrator:
         # Mock agent_auth to bypass encryption
         mock_auth = Mock()
         mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
-        
+
         # Create deployment in orchestrator for the test
         from ciris_manager.models import DeploymentStatus
+
         deployment = DeploymentStatus(
             deployment_id="deployment-123",
             agents_total=1,
@@ -334,10 +336,10 @@ class TestDeploymentOrchestrator:
             status="in_progress",
             message="Test deployment",
             agents_pending_restart=[],
-            agents_in_progress={}
+            agents_in_progress={},
         )
         orchestrator.deployments["deployment-123"] = deployment
-        
+
         with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
             with patch("httpx.AsyncClient") as mock_client_class:
                 mock_client = AsyncMock()
@@ -387,9 +389,10 @@ class TestDeploymentOrchestrator:
         # Mock agent_auth to bypass encryption
         mock_auth = Mock()
         mock_auth.get_auth_headers.return_value = {"Authorization": "Bearer service:test-token"}
-        
+
         # Create deployment in orchestrator for the test
         from ciris_manager.models import DeploymentStatus
+
         deployment = DeploymentStatus(
             deployment_id="deployment-123",
             agents_total=1,
@@ -397,10 +400,10 @@ class TestDeploymentOrchestrator:
             status="in_progress",
             message="Test deployment",
             agents_pending_restart=[],
-            agents_in_progress={}
+            agents_in_progress={},
         )
         orchestrator.deployments["deployment-123"] = deployment
-        
+
         with patch("ciris_manager.agent_auth.get_agent_auth", return_value=mock_auth):
             with patch("httpx.AsyncClient") as mock_client_class:
                 mock_client = AsyncMock()
@@ -628,6 +631,7 @@ class TestDeploymentOrchestrator:
 
         # Create deployment in orchestrator for the test
         from ciris_manager.models import DeploymentStatus
+
         deployment = DeploymentStatus(
             deployment_id="deployment-123",
             agents_total=1,
@@ -635,7 +639,7 @@ class TestDeploymentOrchestrator:
             status="in_progress",
             message="Test deployment",
             agents_pending_restart=[],
-            agents_in_progress={}
+            agents_in_progress={},
         )
         orchestrator.deployments["deployment-123"] = deployment
 
@@ -697,6 +701,7 @@ class TestDeploymentOrchestrator:
 
         # Create deployment in orchestrator for the test
         from ciris_manager.models import DeploymentStatus
+
         deployment = DeploymentStatus(
             deployment_id="deployment-123",
             agents_total=1,
@@ -704,7 +709,7 @@ class TestDeploymentOrchestrator:
             status="in_progress",
             message="Test deployment",
             agents_pending_restart=[],
-            agents_in_progress={}
+            agents_in_progress={},
         )
         orchestrator.deployments["deployment-123"] = deployment
 
@@ -874,17 +879,18 @@ class TestDeploymentOrchestrator:
             # Should only be called once (no retries)
             mock_subprocess.assert_called_once()
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_pull_single_image_with_retry_auth_failure_with_retries(self, orchestrator):
         """Test 401 authentication error with retry logic."""
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess, \
-             patch("asyncio.sleep") as mock_sleep:
-            
+        with (
+            patch("asyncio.create_subprocess_exec") as mock_subprocess,
+            patch("asyncio.sleep") as mock_sleep,
+        ):
             mock_process = AsyncMock()
             mock_process.returncode = 1
             mock_process.communicate.return_value = (
-                b"", 
-                b"Error response from daemon: unauthorized: authentication required (401)"
+                b"",
+                b"Error response from daemon: unauthorized: authentication required (401)",
             )
             mock_subprocess.return_value = mock_process
 
@@ -903,21 +909,19 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_pull_single_image_with_retry_auth_success_on_second_attempt(self, orchestrator):
         """Test 401 error that succeeds on retry."""
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess, \
-             patch("asyncio.sleep") as mock_sleep:
-            
+        with (
+            patch("asyncio.create_subprocess_exec") as mock_subprocess,
+            patch("asyncio.sleep") as mock_sleep,
+        ):
             # First call fails with auth error, second succeeds
             mock_process_fail = AsyncMock()
             mock_process_fail.returncode = 1
-            mock_process_fail.communicate.return_value = (
-                b"", 
-                b"Error: authentication required"
-            )
-            
+            mock_process_fail.communicate.return_value = (b"", b"Error: authentication required")
+
             mock_process_success = AsyncMock()
             mock_process_success.returncode = 0
             mock_process_success.communicate.return_value = (b"Successfully pulled", b"")
-            
+
             mock_subprocess.side_effect = [mock_process_fail, mock_process_success]
 
             result = await orchestrator._pull_single_image_with_retry(
@@ -931,14 +935,15 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_pull_single_image_with_retry_non_auth_error_no_retry(self, orchestrator):
         """Test non-authentication error does not trigger retries."""
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess, \
-             patch("asyncio.sleep") as mock_sleep:
-            
+        with (
+            patch("asyncio.create_subprocess_exec") as mock_subprocess,
+            patch("asyncio.sleep") as mock_sleep,
+        ):
             mock_process = AsyncMock()
             mock_process.returncode = 1
             mock_process.communicate.return_value = (
-                b"", 
-                b"Error: manifest unknown: repository does not exist"
+                b"",
+                b"Error: manifest unknown: repository does not exist",
             )
             mock_subprocess.return_value = mock_process
 
@@ -955,18 +960,19 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_pull_single_image_with_retry_exception_handling(self, orchestrator):
         """Test exception handling in retry logic."""
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess, \
-             patch("asyncio.sleep") as mock_sleep:
-            
+        with (
+            patch("asyncio.create_subprocess_exec") as mock_subprocess,
+            patch("asyncio.sleep") as mock_sleep,
+        ):
             # First two calls raise exception, third succeeds
             mock_process_success = AsyncMock()
             mock_process_success.returncode = 0
             mock_process_success.communicate.return_value = (b"Successfully pulled", b"")
-            
+
             mock_subprocess.side_effect = [
                 Exception("Connection failed"),
-                Exception("Connection failed"), 
-                mock_process_success
+                Exception("Connection failed"),
+                mock_process_success,
             ]
 
             result = await orchestrator._pull_single_image_with_retry(
@@ -980,23 +986,24 @@ class TestDeploymentOrchestrator:
     @pytest.mark.asyncio
     async def test_pull_images_with_retry_integration(self, orchestrator, update_notification):
         """Test full _pull_images method with retry integration."""
-        with patch("asyncio.create_subprocess_exec") as mock_subprocess, \
-             patch("asyncio.sleep") as mock_sleep:
-            
+        with (
+            patch("asyncio.create_subprocess_exec") as mock_subprocess,
+            patch("asyncio.sleep") as mock_sleep,
+        ):
             # Agent image fails with auth error then succeeds
             # GUI image succeeds immediately
             mock_agent_fail = AsyncMock()
-            mock_agent_fail.returncode = 1 
+            mock_agent_fail.returncode = 1
             mock_agent_fail.communicate.return_value = (b"", b"401 unauthorized")
-            
+
             mock_agent_success = AsyncMock()
             mock_agent_success.returncode = 0
             mock_agent_success.communicate.return_value = (b"Agent pulled", b"")
-            
+
             mock_gui_success = AsyncMock()
             mock_gui_success.returncode = 0
             mock_gui_success.communicate.return_value = (b"GUI pulled", b"")
-            
+
             mock_subprocess.side_effect = [mock_agent_fail, mock_agent_success, mock_gui_success]
 
             result = await orchestrator._pull_images(update_notification)
@@ -1013,9 +1020,9 @@ class TestDeploymentOrchestrator:
         notification = UpdateNotification(
             agent_image="ghcr.io/cirisai/nonexistent:latest",
             message="Test deployment",
-            strategy="immediate"
+            strategy="immediate",
         )
-        
+
         agents = [
             AgentInfo(
                 agent_id="test-agent",
@@ -1029,7 +1036,7 @@ class TestDeploymentOrchestrator:
         with patch.object(orchestrator, "_pull_images") as mock_pull:
             mock_pull.return_value = {
                 "success": False,
-                "error": "agent image pull failed: authentication required"
+                "error": "agent image pull failed: authentication required",
             }
 
             result = await orchestrator.start_deployment(notification, agents)
@@ -1045,13 +1052,13 @@ class TestDeploymentOrchestrator:
         notification = UpdateNotification(
             agent_image="ghcr.io/cirisai/ciris-agent:latest",
             message="Test deployment",
-            strategy="immediate"
+            strategy="immediate",
         )
-        
+
         agents = [
             AgentInfo(
                 agent_id="test-agent",
-                agent_name="Test", 
+                agent_name="Test",
                 container_name="ciris-test",
                 api_port=8080,
                 status="running",
@@ -1078,7 +1085,7 @@ class TestDeploymentOrchestrator:
         async def mock_update_group(deployment_id, notification, agents, peer_results=None):
             status = orchestrator.deployments[deployment_id]
             status.agents_failed = 1  # Simulate 1 agent failed
-        
+
         with patch.object(orchestrator, "_update_agent_group", side_effect=mock_update_group):
             await orchestrator._run_immediate_deployment(deployment_id, notification, agents)
 

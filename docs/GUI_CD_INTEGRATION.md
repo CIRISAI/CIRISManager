@@ -12,13 +12,13 @@ Add this job to your `.github/workflows/deploy.yml` (or equivalent) in the CIRIS
     needs: [build-and-push]  # Adjust based on your job names
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
+
     steps:
       - name: Notify CIRISManager
         run: |
           # Get the image tag that was just pushed
           GUI_IMAGE="ghcr.io/cirisai/ciris-gui:latest"
-          
+
           # Notify CIRISManager about the new GUI image
           response=$(curl -X POST https://agents.ciris.ai/manager/v1/updates/notify \
             -H "Content-Type: application/json" \
@@ -29,9 +29,9 @@ Add this job to your `.github/workflows/deploy.yml` (or equivalent) in the CIRIS
               "message": "GUI update from CIRISGUI repository",
               "strategy": "immediate"
             }')
-          
+
           echo "Manager response: $response"
-          
+
           # Check if notification was successful
           if echo "$response" | grep -q "deployment_id"; then
             echo "✅ Successfully notified CIRISManager"

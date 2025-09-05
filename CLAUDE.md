@@ -128,7 +128,7 @@ CIRISManager handles all deployment orchestration through a clean API:
    POST /manager/v1/updates/notify
    {
        "agent_image": "ghcr.io/cirisai/ciris-agent:latest",
-       "gui_image": "ghcr.io/cirisai/ciris-gui:latest", 
+       "gui_image": "ghcr.io/cirisai/ciris-gui:latest",
        "message": "Security update available",
        "strategy": "canary"
    }
@@ -215,7 +215,7 @@ All I/O operations use async/await for non-blocking execution:
    - Lives in CIRISManager/static/
 
 2. **Agent GUI**: React app in container from CIRISAgent
-   - Multi-tenant: `/agent/{agent_id}` 
+   - Multi-tenant: `/agent/{agent_id}`
    - Chat interface for interacting with agents
    - Detects mode (standalone vs managed) from URL
 
@@ -301,7 +301,7 @@ else:
 python3 -c "..." # (replace 'agent-name' with 'echo-speculative')
 # Output: Service Token: fqE_hW_PeaowhIVd4Rxy4P-n_0gO0YCEv1aEnuv38pA
 
-# Get token for echo-nemesis  
+# Get token for echo-nemesis
 python3 -c "..." # (replace 'agent-name' with 'echo-nemesis')
 # Output: Service Token: HRlKm01-GUP9tBmwO2yW3VK-SUl-HDkQ2n8qJraf7BY
 ```
@@ -407,7 +407,7 @@ CIRISManager generates **complete nginx.conf files** for all routing:
    ```
    Host: /home/ciris/nginx/nginx.conf → Container: /etc/nginx/nginx.conf:ro
    ```
-   **CRITICAL**: Config must be written in-place to preserve inode. Using `os.rename()` 
+   **CRITICAL**: Config must be written in-place to preserve inode. Using `os.rename()`
    or atomic replacement breaks Docker bind mounts - the container will not see updates.
 
 3. **Update Flow**

@@ -3,7 +3,7 @@ Test environment variable loading functionality.
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, patch
 import yaml
 from fastapi.testclient import TestClient
 
@@ -321,8 +321,8 @@ MIXED_QUOTES="it's a mixed value"
                     mock_subprocess.return_value = mock_proc
 
                     response = client.patch(
-                            "/manager/v1/agents/test-agent/config", json=config_update
-                        )
+                        "/manager/v1/agents/test-agent/config", json=config_update
+                    )
 
         assert response.status_code == 200
         assert response.json()["status"] == "updated"
@@ -375,8 +375,8 @@ MIXED_QUOTES="it's a mixed value"
                     mock_subprocess.return_value = mock_proc
 
                     response = client.patch(
-                            "/manager/v1/agents/test-agent/config", json=config_update
-                        )
+                        "/manager/v1/agents/test-agent/config", json=config_update
+                    )
 
         assert response.status_code == 200
 

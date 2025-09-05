@@ -1,6 +1,6 @@
 /**
  * Monitoring API for real-time telemetry data
- * 
+ *
  * Provides specialized methods for monitoring agents, containers,
  * and system health in real-time.
  */
@@ -17,7 +17,7 @@ import {
 
 export class MonitoringAPI {
   constructor(private axios: AxiosInstance) {}
-  
+
   /**
    * Get real-time agent status for all agents
    */
@@ -28,7 +28,7 @@ export class MonitoringAPI {
     );
     return response.data.agents;
   }
-  
+
   /**
    * Get real-time container status for all containers
    */
@@ -39,7 +39,7 @@ export class MonitoringAPI {
     );
     return response.data.containers;
   }
-  
+
   /**
    * Get agents by cognitive state
    */
@@ -50,7 +50,7 @@ export class MonitoringAPI {
     const allAgents = await this.getAllAgentsStatus(options);
     return allAgents.filter(agent => agent.cognitive_state === state);
   }
-  
+
   /**
    * Get unhealthy agents
    */
@@ -58,7 +58,7 @@ export class MonitoringAPI {
     const allAgents = await this.getAllAgentsStatus(options);
     return allAgents.filter(agent => !agent.api_healthy);
   }
-  
+
   /**
    * Get containers by health status
    */
@@ -69,7 +69,7 @@ export class MonitoringAPI {
     const allContainers = await this.getAllContainersStatus(options);
     return allContainers.filter(container => container.health === health);
   }
-  
+
   /**
    * Get high resource usage containers
    */
@@ -79,12 +79,12 @@ export class MonitoringAPI {
     options?: RequestOptions
   ): Promise<ContainerMetrics[]> {
     const allContainers = await this.getAllContainersStatus(options);
-    return allContainers.filter(container => 
+    return allContainers.filter(container =>
       container.resources.cpu_percent > cpuThreshold ||
       container.resources.memory_percent > memoryThreshold
     );
   }
-  
+
   /**
    * Get agents with recent incidents
    */
@@ -96,7 +96,7 @@ export class MonitoringAPI {
     const allAgents = await this.getAllAgentsStatus(options);
     return allAgents.filter(agent => agent.incident_count_24h > 0);
   }
-  
+
   /**
    * Get system resource summary
    */
@@ -110,7 +110,7 @@ export class MonitoringAPI {
     containerCount: number;
   }> {
     const containers = await this.getAllContainersStatus(options);
-    
+
     return containers.reduce((acc, container) => ({
       totalCpu: acc.totalCpu + container.resources.cpu_percent,
       totalMemoryMb: acc.totalMemoryMb + container.resources.memory_mb,
@@ -129,13 +129,13 @@ export class MonitoringAPI {
       containerCount: 0
     });
   }
-  
+
   /**
    * Get cognitive state distribution
    */
   async getCognitiveStateDistribution(options?: RequestOptions): Promise<Record<CognitiveState, number>> {
     const summary = await this.getSystemSummary(options);
-    
+
     return {
       [CognitiveState.WORK]: summary.agents_in_work,
       [CognitiveState.DREAM]: summary.agents_in_dream,
@@ -146,7 +146,7 @@ export class MonitoringAPI {
       [CognitiveState.UNKNOWN]: 0
     };
   }
-  
+
   /**
    * Get cost breakdown by agent
    */
@@ -158,18 +158,18 @@ export class MonitoringAPI {
     costPerMessage: number;
   }>> {
     const agents = await this.getAllAgentsStatus(options);
-    
+
     return agents.map(agent => ({
       agentId: agent.agent_id,
       agentName: agent.agent_name,
       costCents24h: agent.cost_cents_24h,
       messageCount24h: agent.message_count_24h,
-      costPerMessage: agent.message_count_24h > 0 
-        ? agent.cost_cents_24h / agent.message_count_24h 
+      costPerMessage: agent.message_count_24h > 0
+        ? agent.cost_cents_24h / agent.message_count_24h
         : 0
     })).sort((a, b) => b.costCents24h - a.costCents24h);
   }
-  
+
   private async getSystemSummary(options?: RequestOptions): Promise<SystemSummary> {
     const response = await this.axios.get<SystemSummary>(
       '/telemetry/status',

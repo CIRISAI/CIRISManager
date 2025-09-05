@@ -126,7 +126,7 @@ describe('CIRISManagerClient', () => {
     it('should handle 401 errors', async () => {
       const mockOnAuthFailure = jest.fn();
       mockedAxios.create.mockClear();
-      
+
       client = new CIRISManagerClient({
         onAuthFailure: mockOnAuthFailure
       });

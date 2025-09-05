@@ -124,11 +124,11 @@ const unsubscribe = client.telemetry.streamMetrics(
 The SDK provides typed error classes:
 
 ```typescript
-import { 
+import {
   CIRISError,
   AuthenticationError,
   NotFoundError,
-  ConflictError 
+  ConflictError
 } from '@ciris/cirismanager-sdk';
 
 try {
@@ -185,11 +185,11 @@ async function loadAgents() {
         'Authorization': `Bearer ${token}`
       }
     });
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    
+
     const data = await response.json();
     renderAgents(data.agents);
   } catch (error) {

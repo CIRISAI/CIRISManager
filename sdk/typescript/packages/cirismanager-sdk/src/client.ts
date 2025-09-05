@@ -23,7 +23,7 @@ export class CIRISManagerClient {
 
   constructor(config: ClientConfig = {}) {
     const baseURL = config.baseURL || '/manager/v1';
-    
+
     this.axios = axios.create({
       baseURL,
       timeout: config.timeout || 30000,
@@ -41,7 +41,7 @@ export class CIRISManagerClient {
           config.onAuthFailure?.();
           throw new AuthenticationError('Authentication failed');
         }
-        
+
         if (error.code === 'ECONNABORTED' || !error.response) {
           throw new NetworkError('Network request failed');
         }
@@ -67,21 +67,21 @@ export class CIRISManagerClient {
   private setupRetry(maxRetries: number) {
     this.axios.interceptors.response.use(undefined, async (error) => {
       const config = error.config;
-      
+
       if (!config || !config.retry) {
         config.retry = { count: 0 };
       }
-      
+
       config.retry.count++;
-      
+
       if (config.retry.count > maxRetries) {
         return Promise.reject(error);
       }
-      
+
       // Exponential backoff
       const delayMs = Math.min(1000 * Math.pow(2, config.retry.count), 10000);
       await new Promise(resolve => setTimeout(resolve, delayMs));
-      
+
       return this.axios(config);
     });
   }

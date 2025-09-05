@@ -34,7 +34,7 @@ mkdir -p "$TEMP_DIR"
 backup_directory() {
     local src=$1
     local name=$(basename "$src")
-    
+
     if [ -d "$src" ]; then
         echo "Backing up $src..."
         tar -czf "$TEMP_DIR/${name}.tar.gz" -C "$(dirname "$src")" "$name" 2>/dev/null || {

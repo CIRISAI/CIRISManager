@@ -21,20 +21,20 @@ manager:
   templates_directory: /opt/ciris-manager/agent_templates
   manifest_path: /opt/ciris-manager/pre-approved-templates.json
   metadata_file: /opt/ciris/agents/metadata.json
-  
+
 # Authentication configuration
 auth:
   mode: production
   jwt_algorithm: HS256
   jwt_expiry_hours: 24
-  
+
 # Docker configuration
 docker:
   compose_file: /opt/ciris/agents/docker-compose.yml
   registry: ghcr.io/cirisai
   image: ciris-agent:latest
   network_name: ciris-network
-  
+
 # Watchdog configuration
 watchdog:
   enabled: true
@@ -42,32 +42,32 @@ watchdog:
   restart_delay: 30
   crash_threshold: 3
   crash_window: 300
-  
+
 # Container management
 container_management:
   enabled: true
   update_check_interval: 300
   auto_pull_images: false
   restart_on_update: false
-  
+
 # Port allocation
 ports:
   start: 8000
   end: 8999
   reserved: [8080, 8888, 80, 443, 3000]
-  
+
 # API configuration
 api:
   host: 0.0.0.0
   port: 8888
   reload: false
-  
+
 # Nginx configuration (if using nginx management)
 nginx:
   enabled: false  # Disabled since using host nginx
   config_dir: /etc/nginx/sites-enabled
   container_name: nginx
-  
+
 # Logging configuration
 logging:
   level: INFO

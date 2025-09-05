@@ -75,7 +75,7 @@ class TestComposeGenerator:
         assert any("/audit_keys:/app/audit_keys" in v for v in volumes)
         assert any("/init_permissions.sh:/init_permissions.sh:ro" in v for v in volumes)
         assert "/home/ciris/shared/oauth:/home/ciris/shared/oauth:ro" in volumes
-        
+
         # Check entrypoint
         assert service.get("entrypoint") == ["/init_permissions.sh"]
 

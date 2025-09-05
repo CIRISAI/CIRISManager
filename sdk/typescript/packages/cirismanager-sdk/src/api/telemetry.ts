@@ -1,9 +1,9 @@
 import { AxiosInstance } from 'axios';
-import { 
+import {
   SystemSummary,
   TelemetryHealth,
   TelemetryHistory,
-  PublicStatus 
+  PublicStatus
 } from '../types';
 
 export interface HistoryOptions {
@@ -97,7 +97,7 @@ export class TelemetryAPI {
    */
   streamMetrics(onUpdate: (metrics: SystemSummary) => void, intervalMs = 5000): () => void {
     let intervalId: NodeJS.Timeout | null = null;
-    
+
     const startStreaming = async () => {
       // Initial fetch
       try {

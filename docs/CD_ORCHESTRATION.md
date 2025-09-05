@@ -122,7 +122,7 @@ async def shutdown(request: ShutdownRequest, auth: ServiceAuth = Depends(verify_
             status_code=503,
             content="Agent is processing critical task, cannot shutdown now"
         )
-    
+
     # Initiate graceful shutdown
     asyncio.create_task(graceful_shutdown(request.reason))
     return {"status": "shutdown initiated"}
