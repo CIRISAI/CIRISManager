@@ -2246,10 +2246,72 @@ def create_routes(manager: Any) -> APIRouter:
 
             # Initialize jailbreaker service
             logger.info("Creating jailbreaker service...")
+
+            # Create a simple container manager interface for the jailbreaker
+            class SimpleContainerManager:
+                """Simple container manager for jailbreaker service."""
+
+                async def start_container(self, container_name: str):
+                    """Start a Docker container using docker-compose."""
+                    import asyncio
+
+                    logger.info(f"Starting container: {container_name}")
+                    try:
+                        # Use docker-compose to start the specific service
+                        agent_id = container_name.replace("ciris-agent-", "")
+                        compose_dir = agents_dir / agent_id
+                        if compose_dir.exists():
+                            process = await asyncio.create_subprocess_exec(
+                                "docker-compose",
+                                "up",
+                                "-d",
+                                agent_id,
+                                cwd=compose_dir,
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE,
+                            )
+                            await process.communicate()
+                        else:
+                            # Fallback to direct docker start
+                            process = await asyncio.create_subprocess_exec(
+                                "docker",
+                                "start",
+                                container_name,
+                                stdout=asyncio.subprocess.PIPE,
+                                stderr=asyncio.subprocess.PIPE,
+                            )
+                            await process.communicate()
+                        logger.info(f"Container {container_name} start initiated")
+                    except Exception as e:
+                        logger.error(f"Failed to start container {container_name}: {e}")
+                        raise
+
+                async def stop_container(self, container_name: str):
+                    """Stop a Docker container."""
+                    import asyncio
+
+                    logger.info(f"Stopping container: {container_name}")
+                    try:
+                        process = await asyncio.create_subprocess_exec(
+                            "docker",
+                            "stop",
+                            container_name,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        await process.communicate()
+                        logger.info(f"Container {container_name} stop initiated")
+                    except Exception as e:
+                        logger.error(f"Failed to stop container {container_name}: {e}")
+                        raise
+
+            container_manager = SimpleContainerManager()
+            print("CRITICAL DEBUG: Created simple container manager", flush=True)
+
             jailbreaker_service = JailbreakerService(
                 config=jailbreaker_config,
                 agent_dir=agents_dir,
-                container_manager=manager.container_manager,
+                container_manager=container_manager,
             )
             logger.info("Jailbreaker service created")
 
