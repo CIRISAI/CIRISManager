@@ -89,6 +89,15 @@ def create_routes(manager: Any) -> APIRouter:
     """
     logger.info("=== Starting create_routes function ===")
     router = APIRouter()
+    logger.info("=== APIRouter created ===")
+    
+    # Test if we can reach the jailbreaker section
+    try:
+        logger.info("=== About to test jailbreaker import ===")
+        import os
+        logger.info("=== os imported successfully ===")
+    except Exception as e:
+        logger.error(f"=== Failed basic import test: {e} ===", exc_info=True)
 
     # Initialize deployment orchestrator
     deployment_orchestrator = DeploymentOrchestrator(manager)
