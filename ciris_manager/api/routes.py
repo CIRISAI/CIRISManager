@@ -87,6 +87,7 @@ def create_routes(manager: Any) -> APIRouter:
     Returns:
         Configured APIRouter
     """
+    logger.info("🚀 DEBUG: create_routes function starting - jailbreaker debugging")
     router = APIRouter()
 
     # Initialize deployment orchestrator
@@ -2175,6 +2176,7 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Telemetry has been moved to external CIRISLens service
 
+    logger.info("🚀 DEBUG: About to start jailbreaker initialization block")
     # Initialize jailbreaker service if configured
     try:
         logger.info("Starting jailbreaker initialization...")
