@@ -572,9 +572,9 @@ http {
         listen 443 ssl http2;
         server_name eee.ciris.ai;
 
-        # SSL configuration (using same cert as agents.ciris.ai for now)
-        ssl_certificate /etc/letsencrypt/live/agents.ciris.ai/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/agents.ciris.ai/privkey.pem;
+        # SSL configuration (using eee.ciris.ai certificate)
+        ssl_certificate /etc/letsencrypt/live/eee.ciris.ai/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/eee.ciris.ai/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_ciphers HIGH:!aNULL:!MD5;
 
