@@ -334,6 +334,16 @@ http {
             add_header X-Content-Type-Options "nosniff";
         }
         
+        # Jailbreaker static files (HTML, JS, CSS)
+        location /jailbreaker/ {
+            root /home/ciris/static;
+            try_files $uri $uri/ /jailbreaker/index.html;
+            
+            # Add appropriate headers
+            add_header X-Frame-Options "SAMEORIGIN";
+            add_header X-Content-Type-Options "nosniff";
+        }
+        
         
         # Agent GUI (multi-tenant container)
         location ~ ^/agent/([^/]+) {

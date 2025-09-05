@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIRIS Jailbreaker - Authentication Result</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-2xl mx-auto text-center">
+            <h1 class="text-4xl font-bold mb-8">Authentication Result</h1>
+            
+            <div id="processing" class="mb-8">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p class="text-gray-300">Processing your Discord authentication...</p>
+            </div>
+
+            <div id="result" class="hidden">
+                <div id="success" class="hidden p-6 bg-green-900/50 border border-green-500 rounded-lg mb-6">
+                    <h2 class="text-2xl font-semibold text-green-200 mb-4">Authentication Successful!</h2>
+                    <p class="text-green-300 mb-4">You have been successfully authenticated with Discord.</p>
+                    <button onclick="returnToJailbreaker()" class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors">
+                        Continue to Jailbreaker
+                    </button>
+                </div>
+
+                <div id="error" class="hidden p-6 bg-red-900/50 border border-red-500 rounded-lg mb-6">
+                    <h2 class="text-2xl font-semibold text-red-200 mb-4">Authentication Failed</h2>
+                    <p id="error-message" class="text-red-300 mb-4">There was an error during authentication.</p>
+                    <button onclick="returnToJailbreaker()" class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors">
+                        Return to Jailbreaker
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Process authentication result
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const state = urlParams.get('state');
+            const error = urlParams.get('error');
+
+            setTimeout(() => {
+                document.getElementById('processing').classList.add('hidden');
+                document.getElementById('result').classList.remove('hidden');
+
+                if (error) {
+                    // Show error
+                    document.getElementById('error-message').textContent = `Discord error: ${error}`;
+                    document.getElementById('error').classList.remove('hidden');
+                } else if (code && state) {
+                    // Success - redirect back to main page with parameters
+                    const mainPageUrl = '/jailbreaker/?' + new URLSearchParams({
+                        code: code,
+                        state: state
+                    }).toString();
+                    
+                    window.location.href = mainPageUrl;
+                } else {
+                    // No parameters - might be a direct access
+                    document.getElementById('error-message').textContent = 'Invalid authentication response';
+                    document.getElementById('error').classList.remove('hidden');
+                }
+            }, 1500); // Small delay for better UX
+        });
+
+        function returnToJailbreaker() {
+            window.location.href = '/jailbreaker/';
+        }
+    </script>
+</body>
+</html>

@@ -48,7 +48,7 @@ class JailbreakerConfig(BaseModel):
     user_rate_limit: str = "1/hour"  # Per-user limit
 
     # OAuth callback URL
-    callback_url: str = "https://agents.ciris.ai/manager/v1/jailbreaker/callback"
+    callback_url: str = "https://agents.ciris.ai/jailbreaker/result"
     redirect_url: str = "https://agents.ciris.ai/jailbreaker/result"
 
     @classmethod

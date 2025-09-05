@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIRIS Jailbreaker - Agent Reset</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .discord-gradient {
+            background: linear-gradient(135deg, #5865f2 0%, #4f5acb 100%);
+        }
+        .glow {
+            box-shadow: 0 0 20px rgba(88, 101, 242, 0.3);
+        }
+        .error-fade {
+            animation: fadeOut 5s forwards;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-4">CIRIS Jailbreaker</h1>
+            <p class="text-gray-300 text-lg">Reset the Datum agent with Discord authorization</p>
+        </div>
+
+        <!-- Main Content -->
+        <div class="max-w-2xl mx-auto">
+            <!-- Status Card -->
+            <div class="bg-gray-800 rounded-lg p-6 mb-8">
+                <h2 class="text-xl font-semibold mb-4">System Status</h2>
+                <div id="status-content" class="space-y-2">
+                    <div class="flex justify-between">
+                        <span>Service Status:</span>
+                        <span id="service-status" class="text-yellow-400">Loading...</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Target Agent:</span>
+                        <span class="text-blue-400">datum</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Rate Limit:</span>
+                        <span id="rate-limit" class="text-gray-400">5 min global, 1 hour per user</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Login Section -->
+            <div class="bg-gray-800 rounded-lg p-8 text-center">
+                <h2 class="text-2xl font-semibold mb-6">Authorization Required</h2>
+                <p class="text-gray-300 mb-8">
+                    You must be a member of the CIRIS Discord guild with the <code class="bg-gray-700 px-2 py-1 rounded">jailbreak</code> role to reset the datum agent.
+                </p>
+                
+                <!-- Discord Login Button -->
+                <button 
+                    id="discord-login-btn" 
+                    class="discord-gradient hover:shadow-lg transition-all duration-300 px-8 py-4 rounded-lg font-semibold text-white text-lg glow hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onclick="initiateDiscordLogin()"
+                >
+                    <svg class="inline-block w-6 h-6 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419-.0188 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1568 2.4189Z"/>
+                    </svg>
+                    Login with Discord
+                </button>
+
+                <!-- Status Messages -->
+                <div id="error-message" class="hidden mt-4 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200"></div>
+                <div id="success-message" class="hidden mt-4 p-4 bg-green-900/50 border border-green-500 rounded-lg text-green-200"></div>
+                <div id="loading-message" class="hidden mt-4 p-4 bg-blue-900/50 border border-blue-500 rounded-lg text-blue-200"></div>
+            </div>
+
+            <!-- Reset Section (Hidden initially) -->
+            <div id="reset-section" class="hidden bg-gray-800 rounded-lg p-8 mt-8">
+                <h2 class="text-2xl font-semibold mb-6 text-center">Agent Reset</h2>
+                <div class="text-center mb-6">
+                    <p class="text-gray-300 mb-4">You are authorized to reset the datum agent.</p>
+                    <p class="text-yellow-300 text-sm">⚠️ This will wipe all agent data and restart the container.</p>
+                </div>
+                
+                <div class="flex justify-center space-x-4">
+                    <button 
+                        id="reset-btn" 
+                        class="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+                        onclick="resetAgent()"
+                    >
+                        Reset Datum Agent
+                    </button>
+                    <button 
+                        id="logout-btn" 
+                        class="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+                        onclick="logout()"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </div>
+
+            <!-- Info Section -->
+            <div class="mt-12 text-center text-gray-400 text-sm">
+                <p>Rate limits: Global reset once every 5 minutes, per-user once every hour</p>
+                <p class="mt-2">Only Discord guild members with the "jailbreak" role can use this service</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let accessToken = localStorage.getItem('discord_access_token');
+        let userInfo = null;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadServiceStatus();
+            
+            // Check if user is already logged in
+            if (accessToken) {
+                await verifyToken();
+            }
+        });
+
+        // Load service status
+        async function loadServiceStatus() {
+            try {
+                const response = await fetch('/manager/v1/jailbreaker/status');
+                const status = await response.json();
+                
+                document.getElementById('service-status').textContent = 'Online';
+                document.getElementById('service-status').className = 'text-green-400';
+                
+                // Update rate limit display if available
+                if (status.seconds_until_next_global > 0) {
+                    document.getElementById('rate-limit').textContent = 
+                        `Next global reset in ${Math.ceil(status.seconds_until_next_global / 60)} minutes`;
+                }
+            } catch (error) {
+                document.getElementById('service-status').textContent = 'Offline';
+                document.getElementById('service-status').className = 'text-red-400';
+            }
+        }
+
+        // Initiate Discord OAuth login
+        async function initiateDiscordLogin() {
+            showLoading('Redirecting to Discord...');
+            
+            try {
+                const response = await fetch('/manager/v1/jailbreaker/oauth/init');
+                const data = await response.json();
+                
+                if (data.auth_url) {
+                    // Store state for verification
+                    localStorage.setItem('oauth_state', data.state);
+                    window.location.href = data.auth_url;
+                } else {
+                    showError('Failed to initialize Discord login');
+                }
+            } catch (error) {
+                showError('Error connecting to authentication service');
+            }
+        }
+
+        // Handle OAuth callback (called from URL parameters)
+        async function handleOAuthCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const state = urlParams.get('state');
+            const error = urlParams.get('error');
+
+            if (error) {
+                showError('Discord authentication failed: ' + error);
+                return;
+            }
+
+            if (!code || !state) {
+                return; // Not an OAuth callback
+            }
+
+            // Verify state
+            const storedState = localStorage.getItem('oauth_state');
+            if (state !== storedState) {
+                showError('Invalid authentication state');
+                return;
+            }
+
+            showLoading('Verifying Discord authentication...');
+
+            try {
+                const response = await fetch('/manager/v1/jailbreaker/oauth/callback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ code, state })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    accessToken = data.access_token;
+                    localStorage.setItem('discord_access_token', accessToken);
+                    localStorage.removeItem('oauth_state');
+                    
+                    // Clear URL parameters
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    showSuccess('Authentication successful!');
+                    showResetSection();
+                } else {
+                    showError(data.detail || 'Authentication failed');
+                }
+            } catch (error) {
+                showError('Error during authentication');
+            }
+        }
+
+        // Verify existing token
+        async function verifyToken() {
+            if (!accessToken) return;
+
+            showLoading('Verifying authentication...');
+
+            try {
+                // Test the token by trying to get status
+                const response = await fetch('/manager/v1/jailbreaker/reset', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ access_token: accessToken })
+                });
+
+                if (response.status === 403) {
+                    // Token invalid or no permissions
+                    localStorage.removeItem('discord_access_token');
+                    accessToken = null;
+                    showError('Authentication expired or insufficient permissions');
+                } else if (response.status === 429) {
+                    // Rate limited but authorized
+                    hideMessages();
+                    showResetSection();
+                } else {
+                    // Other responses - assume authorized for now
+                    hideMessages();
+                    showResetSection();
+                }
+            } catch (error) {
+                hideMessages();
+            }
+        }
+
+        // Reset the agent
+        async function resetAgent() {
+            if (!accessToken) {
+                showError('Please log in first');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to reset the datum agent? This will wipe all data and restart the container.')) {
+                return;
+            }
+
+            showLoading('Resetting datum agent...');
+            document.getElementById('reset-btn').disabled = true;
+
+            try {
+                const response = await fetch('/manager/v1/jailbreaker/reset', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ access_token: accessToken })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(`Success! ${data.message}`);
+                    await loadServiceStatus(); // Refresh status
+                } else if (response.status === 429) {
+                    const retryAfter = response.headers.get('Retry-After');
+                    const minutes = Math.ceil(retryAfter / 60);
+                    showError(`Rate limit exceeded. Try again in ${minutes} minutes.`);
+                } else if (response.status === 403) {
+                    showError('Authentication expired or insufficient permissions');
+                    logout();
+                } else {
+                    showError(data.detail || 'Reset failed');
+                }
+            } catch (error) {
+                showError('Error during reset operation');
+            } finally {
+                document.getElementById('reset-btn').disabled = false;
+            }
+        }
+
+        // Logout
+        function logout() {
+            localStorage.removeItem('discord_access_token');
+            accessToken = null;
+            hideResetSection();
+            hideMessages();
+            showSuccess('Logged out successfully');
+        }
+
+        // UI Helper functions
+        function showResetSection() {
+            document.getElementById('reset-section').classList.remove('hidden');
+        }
+
+        function hideResetSection() {
+            document.getElementById('reset-section').classList.add('hidden');
+        }
+
+        function showError(message) {
+            hideMessages();
+            const errorEl = document.getElementById('error-message');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+            setTimeout(() => errorEl.classList.add('error-fade'), 5000);
+        }
+
+        function showSuccess(message) {
+            hideMessages();
+            const successEl = document.getElementById('success-message');
+            successEl.textContent = message;
+            successEl.classList.remove('hidden');
+            setTimeout(() => successEl.classList.add('error-fade'), 5000);
+        }
+
+        function showLoading(message) {
+            hideMessages();
+            const loadingEl = document.getElementById('loading-message');
+            loadingEl.textContent = message;
+            loadingEl.classList.remove('hidden');
+        }
+
+        function hideMessages() {
+            document.getElementById('error-message').classList.add('hidden');
+            document.getElementById('success-message').classList.add('hidden');
+            document.getElementById('loading-message').classList.add('hidden');
+        }
+
+        // Check for OAuth callback on page load
+        handleOAuthCallback();
+    </script>
+</body>
+</html>
