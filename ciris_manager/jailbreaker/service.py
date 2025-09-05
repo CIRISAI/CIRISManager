@@ -162,8 +162,24 @@ class JailbreakerService:
             data_path = agent_path / "data"
             if data_path.exists():
                 logger.info(f"Wiping data directory: {data_path}")
-                shutil.rmtree(data_path)
-                logger.info("Data directory wiped successfully")
+                try:
+                    shutil.rmtree(data_path)
+                    logger.info("Data directory wiped successfully")
+                except PermissionError:
+                    # Try with sudo if permission denied
+                    logger.info("Permission denied, trying with sudo...")
+                    import subprocess
+
+                    result = subprocess.run(
+                        ["sudo", "rm", "-rf", str(data_path)], capture_output=True, text=True
+                    )
+                    if result.returncode == 0:
+                        logger.info("Data directory wiped successfully with sudo")
+                    else:
+                        logger.error(
+                            f"Failed to wipe data directory even with sudo: {result.stderr}"
+                        )
+                        raise Exception(f"Could not delete data directory: {result.stderr}")
             else:
                 logger.info(f"Data directory {data_path} does not exist, skipping")
 
