@@ -1127,10 +1127,10 @@ async def main() -> None:
 
     # Set up logging before anything else
     # Use /var/log if available, otherwise fallback to local directory
-    log_dir = "/var/log/ciris-manager"
+    log_dir = "/var/log/cirismanager"
     if not os.access("/var/log", os.W_OK):
         # Can't write to /var/log, use local directory
-        local_log_path = Path.home() / ".local" / "log" / "ciris-manager"
+        local_log_path = Path.home() / ".local" / "log" / "cirismanager"
         log_dir = str(local_log_path)
 
     try:

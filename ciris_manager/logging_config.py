@@ -73,7 +73,7 @@ class HumanReadableFormatter(logging.Formatter):
 
 
 def setup_logging(
-    log_dir: str = "/var/log/ciris-manager",
+    log_dir: str = "/var/log/cirismanager",
     console_level: str = "INFO",
     file_level: str = "DEBUG",
     use_json: bool = False,
