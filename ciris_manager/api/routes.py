@@ -87,7 +87,7 @@ def create_routes(manager: Any) -> APIRouter:
     Returns:
         Configured APIRouter
     """
-    logger.info("🚀 DEBUG: create_routes function starting - jailbreaker debugging")
+    logger.info("DEBUG: create_routes function starting - jailbreaker debugging")
     router = APIRouter()
 
     # Initialize deployment orchestrator
@@ -2176,7 +2176,7 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Telemetry has been moved to external CIRISLens service
 
-    logger.info("🚀 DEBUG: About to start jailbreaker initialization block")
+    logger.info("DEBUG: About to start jailbreaker initialization block")
     # Initialize jailbreaker service if configured
     try:
         logger.info("Starting jailbreaker initialization...")
@@ -2229,7 +2229,7 @@ def create_routes(manager: Any) -> APIRouter:
             logger.info("Jailbreaker service not initialized - Discord credentials not configured")
 
     except Exception as e:
-        logger.error(f"🚨 DEBUG: Exception in jailbreaker initialization: {e}", exc_info=True)
+        logger.error(f"DEBUG: Exception in jailbreaker initialization: {e}", exc_info=True)
         logger.error(f"Failed to initialize jailbreaker service: {e}", exc_info=True)
 
     return router
