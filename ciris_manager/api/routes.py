@@ -12,7 +12,6 @@ import asyncio
 import httpx
 import logging
 import os
-from pathlib import Path
 import aiofiles  # type: ignore
 from .auth import get_current_user_dependency as get_current_user
 from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
