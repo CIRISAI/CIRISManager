@@ -1363,8 +1363,6 @@ class DeploymentOrchestrator:
         Returns:
             Dictionary with success status and any error messages
         """
-        import asyncio
-
         results: Dict[str, Any] = {"success": True, "agent_image": None, "gui_image": None}
 
         try:
