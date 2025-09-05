@@ -2177,6 +2177,15 @@ def create_routes(manager: Any) -> APIRouter:
     # Telemetry has been moved to external CIRISLens service
 
     logger.info("DEBUG: About to start jailbreaker initialization block")
+
+    # DEBUG: Log actual environment variables
+    discord_client_id = os.getenv("DISCORD_CLIENT_ID")
+    discord_client_secret = os.getenv("DISCORD_CLIENT_SECRET")
+    logger.info(f"DEBUG: Environment check - DISCORD_CLIENT_ID exists: {bool(discord_client_id)}")
+    logger.info(
+        f"DEBUG: Environment check - DISCORD_CLIENT_SECRET exists: {bool(discord_client_secret)}"
+    )
+
     # Initialize jailbreaker service if configured
     try:
         logger.info("Starting jailbreaker initialization...")
