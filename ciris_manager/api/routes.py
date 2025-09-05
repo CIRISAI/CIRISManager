@@ -2229,6 +2229,7 @@ def create_routes(manager: Any) -> APIRouter:
             logger.info("Jailbreaker service not initialized - Discord credentials not configured")
 
     except Exception as e:
+        logger.error(f"🚨 DEBUG: Exception in jailbreaker initialization: {e}", exc_info=True)
         logger.error(f"Failed to initialize jailbreaker service: {e}", exc_info=True)
 
     return router
