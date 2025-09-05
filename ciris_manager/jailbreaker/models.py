@@ -61,6 +61,9 @@ class JailbreakerConfig(BaseModel):
             jailbreak_role_name=os.getenv("JAILBREAK_ROLE_NAME", "jailbreak"),
             target_agent_id=os.getenv("JAILBREAK_TARGET_AGENT", "echo-nemesis-v2tyey"),
             agent_service_token=os.getenv("JAILBREAK_AGENT_SERVICE_TOKEN"),
+            callback_url=os.getenv(
+                "JAILBREAKER_CALLBACK_URL", "https://agents.ciris.ai/jailbreaker/result"
+            ),
         )
 
 
