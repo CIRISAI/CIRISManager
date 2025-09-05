@@ -10,7 +10,7 @@ from .routes import create_jailbreaker_routes
 
 __all__ = [
     "JailbreakerService",
-    "JailbreakerConfig", 
+    "JailbreakerConfig",
     "ResetResult",
     "ResetStatus",
     "create_jailbreaker_routes",

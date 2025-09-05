@@ -10,6 +10,7 @@ import os
 
 class ResetStatus(str, Enum):
     """Status of agent reset operation."""
+
     SUCCESS = "success"
     RATE_LIMITED = "rate_limited"
     UNAUTHORIZED = "unauthorized"
@@ -19,6 +20,7 @@ class ResetStatus(str, Enum):
 
 class ResetResult(BaseModel):
     """Result of jailbreaker reset operation."""
+
     status: ResetStatus
     message: str
     user_id: Optional[str] = None
@@ -28,27 +30,27 @@ class ResetResult(BaseModel):
 
 class JailbreakerConfig(BaseModel):
     """Configuration for jailbreaker service."""
-    
+
     # Discord OAuth settings
     discord_client_id: str
     discord_client_secret: str
     discord_guild_id: str = "1364300186003968060"  # CIRIS Discord guild
     jailbreak_role_name: str = "jailbreak"
-    
+
     # Target agent to reset
     target_agent_id: str = "datum"
-    
+
     # Agent service token for API calls
     agent_service_token: Optional[str] = None
-    
+
     # Rate limiting
     global_rate_limit: str = "1/5minutes"  # Global endpoint limit
-    user_rate_limit: str = "1/hour"        # Per-user limit
-    
+    user_rate_limit: str = "1/hour"  # Per-user limit
+
     # OAuth callback URL
     callback_url: str = "https://agents.ciris.ai/manager/v1/jailbreaker/callback"
     redirect_url: str = "https://agents.ciris.ai/jailbreaker/result"
-    
+
     @classmethod
     def from_env(cls) -> "JailbreakerConfig":
         """Create config from environment variables."""
@@ -64,6 +66,7 @@ class JailbreakerConfig(BaseModel):
 
 class DiscordUser(BaseModel):
     """Discord user information from OAuth."""
+
     id: str
     username: str
     discriminator: str
@@ -72,6 +75,7 @@ class DiscordUser(BaseModel):
 
 class DiscordGuildMember(BaseModel):
     """Discord guild member with roles."""
+
     user: DiscordUser
     roles: list[str]  # Role IDs
     nick: Optional[str] = None
