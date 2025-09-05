@@ -732,6 +732,7 @@ echo "Permissions fixed. Agent should now be able to start."
 
     async def _start_api_server(self) -> None:
         """Start the FastAPI server for CIRISManager API."""
+        logger.info("DEBUG: _start_api_server method called")
         try:
             from fastapi import FastAPI
             from fastapi.responses import JSONResponse
@@ -742,6 +743,7 @@ echo "Permissions fixed. Agent should now be able to start."
             from .api.device_auth_routes import create_device_auth_routes
 
             app = FastAPI(title="CIRISManager API", version="1.0.0")
+            logger.info("DEBUG: FastAPI app created in manager.py")
 
             # Try to add rate limiting if available
             try:
@@ -777,8 +779,11 @@ echo "Permissions fixed. Agent should now be able to start."
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
             # Create routes with manager instance
+            logger.info("DEBUG: About to call create_routes in manager.py")
             router = create_routes(self)
+            logger.info("DEBUG: create_routes returned successfully in manager.py")
             app.include_router(router, prefix="/manager/v1")
+            logger.info("DEBUG: Included router in FastAPI app in manager.py")
 
             # Include auth routes if in production mode
             if self.config.auth.mode == "production":
