@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any, List, Union
 import asyncio
 import httpx
 import logging
-import os
+import os  # noqa: F401 - used in jailbreaker section
 import aiofiles  # type: ignore
 from .auth import get_current_user_dependency as get_current_user
 from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
@@ -87,17 +87,7 @@ def create_routes(manager: Any) -> APIRouter:
     Returns:
         Configured APIRouter
     """
-    logger.info("=== Starting create_routes function ===")
     router = APIRouter()
-    logger.info("=== APIRouter created ===")
-    
-    # Test if we can reach the jailbreaker section
-    try:
-        logger.info("=== About to test jailbreaker import ===")
-        import os
-        logger.info("=== os imported successfully ===")
-    except Exception as e:
-        logger.error(f"=== Failed basic import test: {e} ===", exc_info=True)
 
     # Initialize deployment orchestrator
     deployment_orchestrator = DeploymentOrchestrator(manager)
@@ -2194,13 +2184,18 @@ def create_routes(manager: Any) -> APIRouter:
             create_jailbreaker_routes,
         )
         from pathlib import Path
+
         logger.info("Jailbreaker imports successful")
 
         # Check if Discord credentials are available
         discord_client_id = os.getenv("DISCORD_CLIENT_ID")
         discord_client_secret = os.getenv("DISCORD_CLIENT_SECRET")
-        logger.info(f"Discord credentials check: client_id={repr(discord_client_id)}, client_secret={'***' if discord_client_secret else None}")
-        logger.info(f"All environment variables containing DISCORD: {[(k, '***' if 'SECRET' in k else v) for k, v in os.environ.items() if 'DISCORD' in k]}")
+        logger.info(
+            f"Discord credentials check: client_id={bool(discord_client_id)}, client_secret={bool(discord_client_secret)}"
+        )
+        logger.debug(
+            f"All environment variables containing DISCORD: {[(k, '***' if 'SECRET' in k else v) for k, v in os.environ.items() if 'DISCORD' in k]}"
+        )
 
         if discord_client_id and discord_client_secret:
             logger.info("Discord credentials found, creating config...")
@@ -2229,10 +2224,9 @@ def create_routes(manager: Any) -> APIRouter:
 
             logger.info("Jailbreaker service initialized successfully")
         else:
-            logger.info(f"Jailbreaker service not initialized - Discord credentials not configured (client_id={repr(discord_client_id)}, client_secret={repr(discord_client_secret)})")
+            logger.info("Jailbreaker service not initialized - Discord credentials not configured")
 
     except Exception as e:
         logger.error(f"Failed to initialize jailbreaker service: {e}", exc_info=True)
 
-    logger.info("=== Finishing create_routes function ===")
     return router
