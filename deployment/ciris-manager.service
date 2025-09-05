@@ -21,19 +21,19 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=ciris-manager
 
-# Security
-NoNewPrivileges=true
+# Security - Relaxed for jailbreaker functionality
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/opt/ciris/agents /var/log/ciris-manager /etc/ciris-manager /home/ciris/nginx /var/lib/ciris-manager
+ReadWritePaths=/opt/ciris/agents /var/log/ciris-manager /etc/ciris-manager /home/ciris/nginx /var/lib/ciris-manager /var/log/cirismanager
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictNamespaces=true
 RestrictRealtime=true
-RestrictSUIDSGID=true
+RestrictSUIDSGID=false
 MemoryDenyWriteExecute=true
 LockPersonality=true
 
