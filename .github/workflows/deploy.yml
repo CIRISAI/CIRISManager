@@ -138,11 +138,13 @@ jobs:
               chmod +x /usr/local/bin/ciris-manager-update
             fi
 
-            # Create systemd service if it doesn't exist
-            if [ ! -f "/etc/systemd/system/ciris-manager.service" ]; then
-              # Copy the proper service file
-              cp /opt/ciris-manager/deployment/ciris-manager.service /etc/systemd/system/
-              systemctl daemon-reload
+            # Update systemd service file (always copy to ensure latest version)
+            echo "Updating systemd service file..."
+            cp /opt/ciris-manager/deployment/ciris-manager.service /etc/systemd/system/
+            systemctl daemon-reload
+
+            # Enable service if not already enabled
+            if ! systemctl is-enabled ciris-manager >/dev/null; then
               systemctl enable ciris-manager
             fi
 
