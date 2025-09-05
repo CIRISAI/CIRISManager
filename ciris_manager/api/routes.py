@@ -87,6 +87,7 @@ def create_routes(manager: Any) -> APIRouter:
     Returns:
         Configured APIRouter
     """
+    logger.info("=== Starting create_routes function ===")
     router = APIRouter()
 
     # Initialize deployment orchestrator
@@ -2223,4 +2224,5 @@ def create_routes(manager: Any) -> APIRouter:
     except Exception as e:
         logger.error(f"Failed to initialize jailbreaker service: {e}", exc_info=True)
 
+    logger.info("=== Finishing create_routes function ===")
     return router
