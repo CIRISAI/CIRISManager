@@ -2188,6 +2188,14 @@ def create_routes(manager: Any) -> APIRouter:
     # DEBUG: Log actual environment variables
     discord_client_id = os.getenv("DISCORD_CLIENT_ID")
     discord_client_secret = os.getenv("DISCORD_CLIENT_SECRET")
+    print(
+        f"CRITICAL DEBUG: Environment check - DISCORD_CLIENT_ID exists: {bool(discord_client_id)}",
+        flush=True,
+    )
+    print(
+        f"CRITICAL DEBUG: Environment check - DISCORD_CLIENT_SECRET exists: {bool(discord_client_secret)}",
+        flush=True,
+    )
     logger.info(f"DEBUG: Environment check - DISCORD_CLIENT_ID exists: {bool(discord_client_id)}")
     logger.info(
         f"DEBUG: Environment check - DISCORD_CLIENT_SECRET exists: {bool(discord_client_secret)}"
