@@ -25,7 +25,7 @@ class TestJailbreakerIntegration:
         temp_dir = Path(tempfile.mkdtemp())
         
         # Create test agent directory structure
-        agent_dir = temp_dir / "datum"
+        agent_dir = temp_dir / "echo-nemesis-v2tyey"
         agent_dir.mkdir()
         data_dir = agent_dir / "data"
         data_dir.mkdir()
@@ -43,7 +43,7 @@ class TestJailbreakerIntegration:
             discord_client_secret="test_secret",
             discord_guild_id="test_guild",
             jailbreak_role_name="jailbreak",
-            target_agent_id="datum",
+            target_agent_id="echo-nemesis-v2tyey",
             global_rate_limit="1/30seconds",  # Short for testing
             user_rate_limit="1/60seconds"
         )
@@ -119,7 +119,7 @@ class TestJailbreakerIntegration:
                 reset_data = reset_response.json()
                 assert reset_data["status"] == "success"
                 assert reset_data["user_id"] == "123456789"
-                assert reset_data["agent_id"] == "datum"
+                assert reset_data["agent_id"] == "echo-nemesis-v2tyey"
                 assert "reset successfully" in reset_data["message"]
     
     @pytest.mark.asyncio
@@ -214,7 +214,7 @@ class TestJailbreakerIntegration:
             mock_verify.return_value = (True, mock_user)
             
             # Verify test files exist before reset
-            agent_dir = temp_dir / "datum"
+            agent_dir = temp_dir / "echo-nemesis-v2tyey"
             data_dir = agent_dir / "data"
             
             assert data_dir.exists()
@@ -232,8 +232,8 @@ class TestJailbreakerIntegration:
             assert not data_dir.exists()
             
             # Verify container operations were called
-            jailbreaker_service.container_manager.stop_container.assert_called_once_with("ciris-agent-datum")
-            jailbreaker_service.container_manager.start_container.assert_called_once_with("ciris-agent-datum")
+            jailbreaker_service.container_manager.stop_container.assert_called_once_with("ciris-agent-echo-nemesis-v2tyey")
+            jailbreaker_service.container_manager.start_container.assert_called_once_with("ciris-agent-echo-nemesis-v2tyey")
     
     @pytest.mark.asyncio
     async def test_cleanup_endpoint(self, client):

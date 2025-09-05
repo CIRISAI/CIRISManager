@@ -26,7 +26,7 @@
         <!-- Header -->
         <div class="text-center mb-12">
             <h1 class="text-4xl font-bold mb-4">CIRIS Jailbreaker</h1>
-            <p class="text-gray-300 text-lg">Reset the Datum agent with Discord authorization</p>
+            <p class="text-gray-300 text-lg">Reset the Echo Nemesis agent with Discord authorization</p>
         </div>
 
         <!-- Main Content -->
@@ -41,7 +41,7 @@
                     </div>
                     <div class="flex justify-between">
                         <span>Target Agent:</span>
-                        <span class="text-blue-400">datum</span>
+                        <span class="text-blue-400">echo-nemesis-v2tyey</span>
                     </div>
                     <div class="flex justify-between">
                         <span>Rate Limit:</span>
@@ -54,7 +54,7 @@
             <div class="bg-gray-800 rounded-lg p-8 text-center">
                 <h2 class="text-2xl font-semibold mb-6">Authorization Required</h2>
                 <p class="text-gray-300 mb-8">
-                    You must be a member of the CIRIS Discord guild with the <code class="bg-gray-700 px-2 py-1 rounded">jailbreak</code> role to reset the datum agent.
+                    You must be a member of the CIRIS Discord guild with the <code class="bg-gray-700 px-2 py-1 rounded">jailbreak</code> role to reset the echo-nemesis-v2tyey agent.
                 </p>
                 
                 <!-- Discord Login Button -->
@@ -79,7 +79,7 @@
             <div id="reset-section" class="hidden bg-gray-800 rounded-lg p-8 mt-8">
                 <h2 class="text-2xl font-semibold mb-6 text-center">Agent Reset</h2>
                 <div class="text-center mb-6">
-                    <p class="text-gray-300 mb-4">You are authorized to reset the datum agent.</p>
+                    <p class="text-gray-300 mb-4">You are authorized to reset the echo-nemesis-v2tyey agent.</p>
                     <p class="text-yellow-300 text-sm">⚠️ This will wipe all agent data and restart the container.</p>
                 </div>
                 
@@ -89,7 +89,7 @@
                         class="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition-colors"
                         onclick="resetAgent()"
                     >
-                        Reset Datum Agent
+                        Reset Echo Nemesis Agent
                     </button>
                     <button 
                         id="logout-btn" 
@@ -260,11 +260,11 @@
                 return;
             }
 
-            if (!confirm('Are you sure you want to reset the datum agent? This will wipe all data and restart the container.')) {
+            if (!confirm('Are you sure you want to reset the echo-nemesis-v2tyey agent? This will wipe all data and restart the container.')) {
                 return;
             }
 
-            showLoading('Resetting datum agent...');
+            showLoading('Resetting echo nemesis agent...');
             document.getElementById('reset-btn').disabled = true;
 
             try {

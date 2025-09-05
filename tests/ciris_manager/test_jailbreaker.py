@@ -110,7 +110,7 @@ class TestJailbreakerConfig:
         assert config.discord_client_secret == "test_secret"
         assert config.discord_guild_id == "1364300186003968060"
         assert config.jailbreak_role_name == "jailbreak"
-        assert config.target_agent_id == "datum"
+        assert config.target_agent_id == "echo-nemesis-v2tyey"
         assert config.global_rate_limit == "1/5minutes"
         assert config.user_rate_limit == "1/hour"
     

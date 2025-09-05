@@ -38,7 +38,7 @@ class JailbreakerConfig(BaseModel):
     jailbreak_role_name: str = "jailbreak"
 
     # Target agent to reset
-    target_agent_id: str = "datum"
+    target_agent_id: str = "echo-nemesis-v2tyey"
 
     # Agent service token for API calls
     agent_service_token: Optional[str] = None
@@ -59,7 +59,7 @@ class JailbreakerConfig(BaseModel):
             discord_client_secret=os.getenv("DISCORD_CLIENT_SECRET", ""),
             discord_guild_id=os.getenv("DISCORD_GUILD_ID", "1364300186003968060"),
             jailbreak_role_name=os.getenv("JAILBREAK_ROLE_NAME", "jailbreak"),
-            target_agent_id=os.getenv("JAILBREAK_TARGET_AGENT", "datum"),
+            target_agent_id=os.getenv("JAILBREAK_TARGET_AGENT", "echo-nemesis-v2tyey"),
             agent_service_token=os.getenv("JAILBREAK_AGENT_SERVICE_TOKEN"),
         )
 

@@ -13,7 +13,7 @@ DISCORD_CLIENT_SECRET="your_discord_app_client_secret"
 # Optional: Override defaults
 DISCORD_GUILD_ID="1364300186003968060"  # CIRIS Discord guild ID
 JAILBREAK_ROLE_NAME="jailbreak"          # Required Discord role name
-JAILBREAK_TARGET_AGENT="datum"           # Agent to reset (default: datum)
+JAILBREAK_TARGET_AGENT="echo-nemesis-v2tyey"  # Agent to reset (default: echo-nemesis-v2tyey)
 ```
 
 ### Agent Service Token (Optional)
@@ -23,7 +23,7 @@ For enhanced functionality including health checks:
 JAILBREAK_AGENT_SERVICE_TOKEN="your_agent_service_token"
 ```
 
-To extract datum's service token from production:
+To extract datum's service token from production (used for Discord authentication only):
 ```python
 import json
 from cryptography.fernet import Fernet
@@ -90,9 +90,9 @@ When a reset is triggered:
 
 1. **Authentication**: Verify Discord OAuth and jailbreak role
 2. **Rate Limiting**: Check global and per-user limits
-3. **Container Stop**: Gracefully stop the datum container
+3. **Container Stop**: Gracefully stop the echo-nemesis-v2tyey container
 4. **Data Wipe**: Remove all data from `/data/` directory
-5. **Container Start**: Restart the datum container
+5. **Container Start**: Restart the echo-nemesis-v2tyey container
 6. **Health Check**: Optional verification that agent restarted correctly
 7. **Audit Log**: Record the reset with user attribution
 
