@@ -1379,9 +1379,7 @@ class DeploymentOrchestrator:
 
             # Pull GUI image if specified
             if notification.gui_image:
-                gui_result = await self._pull_single_image_with_retry(
-                    notification.gui_image, "GUI"
-                )
+                gui_result = await self._pull_single_image_with_retry(notification.gui_image, "GUI")
                 if not gui_result["success"]:
                     results["success"] = False
                     results["error"] = gui_result["error"]
@@ -1395,9 +1393,7 @@ class DeploymentOrchestrator:
 
         return results
 
-    async def _pull_single_image_with_retry(
-        self, image: str, image_type: str
-    ) -> Dict[str, Any]:
+    async def _pull_single_image_with_retry(self, image: str, image_type: str) -> Dict[str, Any]:
         """
         Pull a single Docker image with retry logic for authentication failures.
 
@@ -1422,7 +1418,7 @@ class DeploymentOrchestrator:
                 )
 
             logger.info(f"Pulling {image_type} image: {normalized_image}")
-            
+
             try:
                 process = await asyncio.create_subprocess_exec(
                     "docker",
@@ -1439,12 +1435,12 @@ class DeploymentOrchestrator:
 
                 # Parse error message
                 error_msg = stderr.decode() if stderr else f"Failed to pull {image_type} image"
-                
+
                 # Check if this is an authentication error (401)
                 is_auth_error = (
-                    "401" in error_msg or
-                    "unauthorized" in error_msg.lower() or
-                    "authentication" in error_msg.lower()
+                    "401" in error_msg
+                    or "unauthorized" in error_msg.lower()
+                    or "authentication" in error_msg.lower()
                 )
 
                 if is_auth_error and attempt < max_retries:
@@ -1462,10 +1458,10 @@ class DeploymentOrchestrator:
                         )
                     else:
                         logger.error(f"Failed to pull {image_type} image: {error_msg}")
-                    
+
                     return {
                         "success": False,
-                        "error": f"{image_type} image pull failed: {error_msg}"
+                        "error": f"{image_type} image pull failed: {error_msg}",
                     }
 
             except Exception as e:
@@ -1477,10 +1473,7 @@ class DeploymentOrchestrator:
                     continue
                 else:
                     logger.error(f"Exception pulling {image_type} image after retries: {e}")
-                    return {
-                        "success": False,
-                        "error": f"{image_type} image pull failed: {str(e)}"
-                    }
+                    return {"success": False, "error": f"{image_type} image pull failed: {str(e)}"}
 
     async def _get_local_image_digest(self, image_tag: str) -> Optional[str]:
         """
@@ -1904,11 +1897,11 @@ class DeploymentOrchestrator:
         """Check if there is an active deployment running."""
         if not self.current_deployment:
             return False
-        
+
         deployment = self.deployments.get(self.current_deployment)
         if not deployment:
             return False
-            
+
         return deployment.status == "in_progress"
 
     async def _run_deployment(
@@ -1998,9 +1991,13 @@ class DeploymentOrchestrator:
                         if hasattr(notification, "nginx_image") and notification.nginx_image:
                             await tracker.promote_staged_version("nginx", deployment_id)
 
-                    logger.info(f"Promoted staged versions to current for deployment {deployment_id}")
+                    logger.info(
+                        f"Promoted staged versions to current for deployment {deployment_id}"
+                    )
                 else:
-                    logger.warning(f"Skipping version promotion for failed deployment {deployment_id}: {deployment_status.status}")
+                    logger.warning(
+                        f"Skipping version promotion for failed deployment {deployment_id}: {deployment_status.status}"
+                    )
 
                 # Log deployment completion with summary
                 logger.info(
@@ -2505,7 +2502,7 @@ class DeploymentOrchestrator:
         else:
             status.status = "completed"
             status.message = f"Deployment completed: {status.agents_updated} updated, {status.agents_deferred} deferred"
-        
+
         status.completed_at = datetime.now(timezone.utc).isoformat()
         self._save_state()
 
@@ -2519,7 +2516,9 @@ class DeploymentOrchestrator:
             if hasattr(notification, "nginx_image") and notification.nginx_image:
                 await tracker.promote_staged_version("nginx", deployment_id)
         else:
-            logger.warning(f"Skipping version promotion due to deployment failure: {status.message}")
+            logger.warning(
+                f"Skipping version promotion due to deployment failure: {status.message}"
+            )
 
         logger.info(f"Immediate deployment {deployment_id} completed, versions promoted")
 

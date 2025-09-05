@@ -1052,7 +1052,7 @@ echo "✓ Emergency permission fix completed"
     async def _run_initial_cleanup_safe(self) -> None:
         """Run initial Docker image cleanup on startup, but only if no deployment is active."""
         max_wait_time = 300  # Wait up to 5 minutes for deployments to complete
-        check_interval = 30   # Check every 30 seconds
+        check_interval = 30  # Check every 30 seconds
         elapsed = 0
 
         while elapsed < max_wait_time:
@@ -1060,13 +1060,15 @@ echo "✓ Emergency permission fix completed"
                 logger.info("No active deployments detected, proceeding with initial cleanup")
                 await self._run_initial_cleanup()
                 return
-            
+
             logger.info(f"Active deployment detected, delaying initial cleanup (waited {elapsed}s)")
             await asyncio.sleep(check_interval)
             elapsed += check_interval
 
         # If we've waited too long, skip cleanup to avoid interfering
-        logger.warning(f"Skipping initial cleanup after waiting {max_wait_time}s - deployments still active")
+        logger.warning(
+            f"Skipping initial cleanup after waiting {max_wait_time}s - deployments still active"
+        )
 
     def get_status(self) -> dict:
         """Get current manager status."""
