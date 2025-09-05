@@ -777,7 +777,9 @@ echo "Permissions fixed. Agent should now be able to start."
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
             # Create routes with manager instance
+            logger.info("=== About to call create_routes ===")
             router = create_routes(self)
+            logger.info("=== create_routes completed successfully ===")
             app.include_router(router, prefix="/manager/v1")
 
             # Include auth routes if in production mode
