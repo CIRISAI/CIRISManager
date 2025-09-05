@@ -2257,31 +2257,40 @@ def create_routes(manager: Any) -> APIRouter:
 
                     logger.info(f"Starting container: {container_name}")
                     try:
-                        # Use docker-compose to start the specific service
-                        agent_id = container_name.replace("ciris-agent-", "")
-                        compose_dir = agents_dir / agent_id
-                        if compose_dir.exists():
-                            process = await asyncio.create_subprocess_exec(
-                                "docker-compose",
-                                "up",
-                                "-d",
-                                agent_id,
-                                cwd=compose_dir,
-                                stdout=asyncio.subprocess.PIPE,
-                                stderr=asyncio.subprocess.PIPE,
-                            )
-                            await process.communicate()
+                        # Use direct docker start (more reliable for existing containers)
+                        process = await asyncio.create_subprocess_exec(
+                            "docker",
+                            "start",
+                            container_name,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        stdout, stderr = await process.communicate()
+
+                        if process.returncode == 0:
+                            logger.info(f"Container {container_name} started successfully")
                         else:
-                            # Fallback to direct docker start
-                            process = await asyncio.create_subprocess_exec(
-                                "docker",
-                                "start",
-                                container_name,
-                                stdout=asyncio.subprocess.PIPE,
-                                stderr=asyncio.subprocess.PIPE,
+                            logger.error(f"Failed to start {container_name}: {stderr.decode()}")
+                            raise Exception(f"Docker start failed: {stderr.decode()}")
+
+                        # Verify container is running
+                        verify_process = await asyncio.create_subprocess_exec(
+                            "docker",
+                            "ps",
+                            "--filter",
+                            f"name={container_name}",
+                            "--format",
+                            "{{.Status}}",
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        status_out, _ = await verify_process.communicate()
+                        if b"Up" in status_out:
+                            logger.info(f"Container {container_name} verified running")
+                        else:
+                            logger.warning(
+                                f"Container {container_name} may not be running properly"
                             )
-                            await process.communicate()
-                        logger.info(f"Container {container_name} start initiated")
                     except Exception as e:
                         logger.error(f"Failed to start container {container_name}: {e}")
                         raise
@@ -2299,8 +2308,18 @@ def create_routes(manager: Any) -> APIRouter:
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.PIPE,
                         )
-                        await process.communicate()
-                        logger.info(f"Container {container_name} stop initiated")
+                        stdout, stderr = await process.communicate()
+
+                        if process.returncode == 0:
+                            logger.info(f"Container {container_name} stopped successfully")
+                        else:
+                            # Container might already be stopped, which is fine for our use case
+                            logger.warning(
+                                f"Container {container_name} stop returned: {stderr.decode()}"
+                            )
+
+                        # Brief wait for cleanup
+                        await asyncio.sleep(1)
                     except Exception as e:
                         logger.error(f"Failed to stop container {container_name}: {e}")
                         raise

@@ -155,7 +155,7 @@ class JailbreakerService:
             logger.info(f"Starting reset of agent {self.config.target_agent_id} for user {user_id}")
 
             # Stop the container if running
-            container_name = f"ciris-agent-{self.config.target_agent_id}"
+            container_name = f"ciris-{self.config.target_agent_id}"
             await self._stop_container(container_name)
 
             # Wipe the data directory
@@ -182,6 +182,19 @@ class JailbreakerService:
                         raise Exception(f"Could not delete data directory: {result.stderr}")
             else:
                 logger.info(f"Data directory {data_path} does not exist, skipping")
+
+            # Recreate data directory with proper ownership for container user
+            logger.info(f"Recreating data directory: {data_path}")
+            try:
+                data_path.mkdir(parents=True, exist_ok=True)
+                # Set ownership to container user (typically 1000:1000 for CIRIS agents)
+                import subprocess
+
+                subprocess.run(["sudo", "chown", "-R", "1000:1000", str(data_path)], check=True)
+                logger.info("Data directory recreated with proper ownership")
+            except Exception as e:
+                logger.error(f"Failed to recreate data directory: {e}")
+                raise Exception(f"Could not recreate data directory: {e}")
 
             # Restart the container
             await self._start_container(container_name)
