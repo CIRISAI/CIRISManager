@@ -2190,9 +2190,10 @@ def create_routes(manager: Any) -> APIRouter:
         # Check if Discord credentials are available
         discord_client_id = os.getenv("DISCORD_CLIENT_ID")
         discord_client_secret = os.getenv("DISCORD_CLIENT_SECRET")
-        logger.info(f"Discord credentials check: client_id={bool(discord_client_id)}, client_secret={bool(discord_client_secret)}")
+        logger.info(f"Discord credentials check: client_id={repr(discord_client_id)}, client_secret={bool(discord_client_secret)}")
 
-        if discord_client_id and discord_client_secret:
+        # Force initialization for testing
+        if True:  # discord_client_id and discord_client_secret:
             logger.info("Discord credentials found, creating config...")
             # Create jailbreaker config
             jailbreaker_config = JailbreakerConfig.from_env()
