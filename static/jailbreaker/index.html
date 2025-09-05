@@ -128,6 +128,15 @@
         async function loadServiceStatus() {
             try {
                 const response = await fetch('/manager/v1/jailbreaker/status');
+                if (response.status === 404) {
+                    // Service not configured
+                    document.getElementById('service-status').textContent = 'Not Configured';
+                    document.getElementById('service-status').className = 'text-orange-400';
+                    showError('Jailbreaker service is not configured. Discord credentials may be missing.');
+                    document.getElementById('discord-login-btn').disabled = true;
+                    return;
+                }
+                
                 const status = await response.json();
                 
                 document.getElementById('service-status').textContent = 'Online';
@@ -141,15 +150,27 @@
             } catch (error) {
                 document.getElementById('service-status').textContent = 'Offline';
                 document.getElementById('service-status').className = 'text-red-400';
+                showError('Unable to connect to jailbreaker service.');
+                document.getElementById('discord-login-btn').disabled = true;
             }
         }
 
         // Initiate Discord OAuth login
         async function initiateDiscordLogin() {
+            if (document.getElementById('discord-login-btn').disabled) {
+                return; // Don't attempt if service is not available
+            }
+            
             showLoading('Redirecting to Discord...');
             
             try {
                 const response = await fetch('/manager/v1/jailbreaker/oauth/init');
+                
+                if (response.status === 404) {
+                    showError('Jailbreaker service not configured. Please contact administrator.');
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 if (data.auth_url) {
