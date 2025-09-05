@@ -97,8 +97,9 @@ class DeploymentTokenManager:
                         line.strip()
                         for line in f
                         if line.strip()
-                        and not line.startswith("CIRIS")
-                        or "DEPLOY_TOKEN" not in line
+                        and not line.startswith("CIRIS_DEPLOY_TOKEN=")
+                        and not line.startswith("CIRIS_AGENT_DEPLOY_TOKEN=")
+                        and not line.startswith("CIRIS_GUI_DEPLOY_TOKEN=")
                     ]
 
             # Add deployment tokens
