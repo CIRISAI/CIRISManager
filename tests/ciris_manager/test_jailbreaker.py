@@ -307,8 +307,12 @@ class TestJailbreakerService:
     @pytest.mark.asyncio
     async def test_reset_agent_success(self, jailbreaker_service, temp_dir):
         """Test successful agent reset."""
-        with patch.object(jailbreaker_service, "verify_access_token") as mock_verify:
+        with (
+            patch.object(jailbreaker_service, "verify_access_token") as mock_verify,
+            patch("subprocess.run") as mock_subprocess,
+        ):
             mock_verify.return_value = (True, "user123")
+            mock_subprocess.return_value.returncode = 0
 
             # Create agent directory and data folder
             agent_dir = temp_dir / "test-agent"
@@ -322,7 +326,9 @@ class TestJailbreakerService:
             assert result.status == ResetStatus.SUCCESS
             assert result.user_id == "user123"
             assert result.agent_id == "test-agent"
-            assert not data_dir.exists()  # Data directory should be wiped
+            # Data directory should be recreated empty (not completely gone)
+            assert data_dir.exists()
+            assert list(data_dir.iterdir()) == []  # But should be empty
 
 
 class TestJailbreakerRoutes:

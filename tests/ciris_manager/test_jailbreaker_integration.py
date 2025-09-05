@@ -117,9 +117,11 @@ class TestJailbreakerIntegration:
                 assert callback_data["message"] == "Authentication successful"
 
                 # Step 3: Use access token to reset agent
-                reset_response = client.post(
-                    "/jailbreaker/reset", json={"access_token": "mock_access_token"}
-                )
+                with patch("subprocess.run") as mock_subprocess:
+                    mock_subprocess.return_value.returncode = 0
+                    reset_response = client.post(
+                        "/jailbreaker/reset", json={"access_token": "mock_access_token"}
+                    )
 
                 assert reset_response.status_code == 200
                 reset_data = reset_response.json()
@@ -163,7 +165,11 @@ class TestJailbreakerIntegration:
             mock_verify.return_value = (True, mock_user)
 
             # First reset should succeed
-            reset_response1 = client.post("/jailbreaker/reset", json={"access_token": "test_token"})
+            with patch("subprocess.run") as mock_subprocess:
+                mock_subprocess.return_value.returncode = 0
+                reset_response1 = client.post(
+                    "/jailbreaker/reset", json={"access_token": "test_token"}
+                )
 
             assert reset_response1.status_code == 200
             assert reset_response1.json()["status"] == "success"
@@ -204,7 +210,9 @@ class TestJailbreakerIntegration:
             mock_verify.return_value = (True, mock_user)
 
             # Perform a reset to create user data
-            client.post("/jailbreaker/reset", json={"access_token": "test_token"})
+            with patch("subprocess.run") as mock_subprocess:
+                mock_subprocess.return_value.returncode = 0
+                client.post("/jailbreaker/reset", json={"access_token": "test_token"})
 
             # Check status with user ID
             response = client.get("/jailbreaker/status?user_id=status_test_user")
@@ -236,19 +244,22 @@ class TestJailbreakerIntegration:
             assert (data_dir / "test_memory.db").exists()
 
             # Perform reset
-            response = client.post("/jailbreaker/reset", json={"access_token": "test_token"})
+            with patch("subprocess.run") as mock_subprocess:
+                mock_subprocess.return_value.returncode = 0
+                response = client.post("/jailbreaker/reset", json={"access_token": "test_token"})
 
             assert response.status_code == 200
 
-            # Verify data directory was wiped
-            assert not data_dir.exists()
+            # Verify data directory was recreated empty (new behavior)
+            assert data_dir.exists()
+            assert list(data_dir.iterdir()) == []  # Should be empty
 
             # Verify container operations were called
             jailbreaker_service.container_manager.stop_container.assert_called_once_with(
-                "ciris-agent-echo-nemesis-v2tyey"
+                "ciris-echo-nemesis-v2tyey"
             )
             jailbreaker_service.container_manager.start_container.assert_called_once_with(
-                "ciris-agent-echo-nemesis-v2tyey"
+                "ciris-echo-nemesis-v2tyey"
             )
 
     @pytest.mark.asyncio
