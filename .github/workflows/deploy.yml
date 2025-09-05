@@ -167,10 +167,12 @@ jobs:
             # Ensure ciris home directory has proper permissions for group access
             chmod 755 /home/ciris
             
-            # Copy static files for manager UI
+            # Copy static files for manager UI and jailbreaker
             echo "Deploying static files..."
             mkdir -p /home/ciris/static/manager
+            mkdir -p /home/ciris/static/jailbreaker
             cp -r /opt/ciris-manager/static/manager/* /home/ciris/static/manager/
+            cp -r /opt/ciris-manager/static/jailbreaker/* /home/ciris/static/jailbreaker/
             
             chown -R ciris-manager:ciris /home/ciris/static
             chmod -R 755 /home/ciris/static
