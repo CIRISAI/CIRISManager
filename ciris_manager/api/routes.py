@@ -2176,4 +2176,38 @@ def create_routes(manager: Any) -> APIRouter:
 
     # Telemetry has been moved to external CIRISLens service
 
+    # Initialize jailbreaker service if configured
+    try:
+        from ciris_manager.jailbreaker import JailbreakerConfig, JailbreakerService, create_jailbreaker_routes
+        from pathlib import Path
+        
+        # Check if Discord credentials are available
+        discord_client_id = os.getenv("DISCORD_CLIENT_ID")
+        discord_client_secret = os.getenv("DISCORD_CLIENT_SECRET")
+        
+        if discord_client_id and discord_client_secret:
+            # Create jailbreaker config
+            jailbreaker_config = JailbreakerConfig.from_env()
+            
+            # Get agent directory from manager config
+            agents_dir = Path(manager.config.manager.agents_directory)
+            
+            # Initialize jailbreaker service
+            jailbreaker_service = JailbreakerService(
+                config=jailbreaker_config,
+                agent_dir=agents_dir,
+                container_manager=manager.container_manager
+            )
+            
+            # Create and include jailbreaker routes
+            jailbreaker_router = create_jailbreaker_routes(jailbreaker_service)
+            router.include_router(jailbreaker_router, prefix="", tags=["jailbreaker"])
+            
+            logger.info("Jailbreaker service initialized successfully")
+        else:
+            logger.info("Jailbreaker service not initialized - Discord credentials not configured")
+            
+    except Exception as e:
+        logger.warning(f"Failed to initialize jailbreaker service: {e}")
+
     return router
