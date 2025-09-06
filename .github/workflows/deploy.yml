@@ -185,11 +185,15 @@ jobs:
             fi
 
             # Update or add CIRIS_DEPLOY_TOKEN without overwriting other variables
-            # Use grep -v to remove existing line, then append new one (safer than sed with special chars)
+            # Use proper temp file handling to preserve all existing variables
             if grep -q "^CIRIS_DEPLOY_TOKEN=" /etc/ciris-manager/environment; then
-              grep -v "^CIRIS_DEPLOY_TOKEN=" /etc/ciris-manager/environment > /tmp/env_temp
+              # Remove existing CIRIS_DEPLOY_TOKEN line and add new one
+              cp /etc/ciris-manager/environment /tmp/env_backup
+              grep -v "^CIRIS_DEPLOY_TOKEN=" /tmp/env_backup > /tmp/env_temp
               echo "CIRIS_DEPLOY_TOKEN=${{ secrets.CIRIS_DEPLOY_TOKEN }}" >> /tmp/env_temp
+              # Atomic replacement
               mv /tmp/env_temp /etc/ciris-manager/environment
+              rm -f /tmp/env_backup
             else
               echo "CIRIS_DEPLOY_TOKEN=${{ secrets.CIRIS_DEPLOY_TOKEN }}" >> /etc/ciris-manager/environment
             fi
