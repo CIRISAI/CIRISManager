@@ -20,9 +20,9 @@ def test_registered_agent_default_deployment():
     assert agent.metadata["deployment"] == "CIRIS_DISCORD_PILOT"
 
 
-def test_agent_info_custom_deployment():
+def test_registered_agent_custom_deployment():
     """Test setting custom deployment field."""
-    agent = AgentInfo(
+    agent = RegisteredAgent(
         agent_id="test-agent",
         name="Test Agent",
         port=8080,

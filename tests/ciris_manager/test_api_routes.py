@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from unittest.mock import Mock, AsyncMock, patch
 from ciris_manager.api.routes import create_routes
 from ciris_manager.models import AgentInfo
+from ciris_manager.agent_registry import RegisteredAgent
 
 
 class TestAPIRoutes:
@@ -119,7 +120,6 @@ class TestAPIRoutes:
     def test_list_agents_with_data(self, mock_discovery_class, client, mock_manager):
         """Test listing agents with data."""
         # Mock the discovery instance with AgentInfo objects
-        from ciris_manager.models import AgentInfo
 
         mock_discovery = Mock()
         mock_agents = [
@@ -155,7 +155,7 @@ class TestAPIRoutes:
 
     def test_get_agent_exists(self, client, mock_manager):
         """Test getting specific agent that exists."""
-        agent = AgentInfo(
+        agent = RegisteredAgent(
             agent_id="agent-scout",
             name="Scout",
             port=8081,
@@ -275,7 +275,7 @@ class TestAPIRoutes:
 
     def test_delete_agent_exists(self, client, mock_manager):
         """Test deleting existing agent."""
-        agent = AgentInfo(
+        agent = RegisteredAgent(
             agent_id="agent-scout",
             name="Scout",
             port=8081,
@@ -296,7 +296,7 @@ class TestAPIRoutes:
 
     def test_delete_agent_operation_failed(self, client, mock_manager):
         """Test deleting agent when operation fails."""
-        agent = AgentInfo(
+        agent = RegisteredAgent(
             agent_id="agent-scout",
             name="Scout",
             port=8081,
@@ -328,7 +328,6 @@ class TestAPIRoutes:
         mock_manager.agent_registry.get_agent.return_value = None
 
         # But agent exists in Docker discovery
-        from ciris_manager.models import AgentInfo
 
         mock_discovery = Mock()
         mock_discovery.discover_agents.return_value = [
