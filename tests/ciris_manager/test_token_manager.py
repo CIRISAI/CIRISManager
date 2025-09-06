@@ -6,7 +6,7 @@ import json
 from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
-from ciris_manager.agent_registry import AgentRegistry, AgentInfo
+from ciris_manager.agent_registry import AgentRegistry, RegisteredAgent
 from ciris_manager.token_manager import TokenManager, TokenStatus, TokenRotationResult
 
 
@@ -16,7 +16,7 @@ def mock_registry():
     registry = Mock(spec=AgentRegistry)
 
     # Create test agents
-    agent1 = AgentInfo(
+    agent1 = RegisteredAgent(
         agent_id="test-agent-1",
         name="Test Agent 1",
         port=8001,
@@ -25,7 +25,7 @@ def mock_registry():
         service_token="gAAAAABhZFNT..." * 10,  # Simulate encrypted token
     )
 
-    agent2 = AgentInfo(
+    agent2 = RegisteredAgent(
         agent_id="test-agent-2",
         name="Test Agent 2",
         port=8002,
@@ -34,7 +34,7 @@ def mock_registry():
         service_token=None,  # No token
     )
 
-    agent3 = AgentInfo(
+    agent3 = RegisteredAgent(
         agent_id="test-agent-3",
         name="Test Agent 3",
         port=8003,

@@ -3,13 +3,13 @@ Test deployment field functionality in CIRISManager.
 """
 
 from pathlib import Path
-from ciris_manager.agent_registry import AgentInfo, AgentRegistry
-from ciris_manager.models import AgentInfo as ModelsAgentInfo
+from ciris_manager.agent_registry import RegisteredAgent, AgentRegistry
+from ciris_manager.models import AgentInfo
 
 
-def test_agent_info_default_deployment():
-    """Test that AgentInfo gets default deployment field."""
-    agent = AgentInfo(
+def test_registered_agent_default_deployment():
+    """Test that RegisteredAgent gets default deployment field."""
+    agent = RegisteredAgent(
         agent_id="test-agent",
         name="Test Agent",
         port=8080,
@@ -36,7 +36,7 @@ def test_agent_info_custom_deployment():
 
 def test_models_agent_info_deployment_field():
     """Test that models.AgentInfo has deployment field."""
-    agent = ModelsAgentInfo(
+    agent = AgentInfo(
         agent_id="test-agent", agent_name="Test Agent", container_name="test-container"
     )
 

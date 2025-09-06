@@ -6,15 +6,15 @@ import pytest
 import tempfile
 import json
 from pathlib import Path
-from ciris_manager.agent_registry import AgentRegistry, AgentInfo
+from ciris_manager.agent_registry import AgentRegistry, RegisteredAgent
 
 
-class TestAgentInfo:
-    """Test cases for AgentInfo class."""
+class TestRegisteredAgent:
+    """Test cases for RegisteredAgent class."""
 
     def test_initialization(self):
         """Test AgentInfo initialization."""
-        agent = AgentInfo(
+        agent = RegisteredAgent(
             agent_id="agent-test",
             name="Test",
             port=8080,
@@ -34,7 +34,7 @@ class TestAgentInfo:
     def test_initialization_with_created_at(self):
         """Test AgentInfo initialization with created_at."""
         created_at = "2025-01-21T10:00:00Z"
-        agent = AgentInfo(
+        agent = RegisteredAgent(
             agent_id="agent-test",
             name="Test",
             port=8080,
@@ -47,7 +47,7 @@ class TestAgentInfo:
 
     def test_to_dict(self):
         """Test converting AgentInfo to dict."""
-        agent = AgentInfo(
+        agent = RegisteredAgent(
             agent_id="agent-test",
             name="Test",
             port=8080,
@@ -73,7 +73,7 @@ class TestAgentInfo:
             "created_at": "2025-01-21T10:00:00Z",
         }
 
-        agent = AgentInfo.from_dict("agent-test", data)
+        agent = RegisteredAgent.from_dict("agent-test", data)
         assert agent.agent_id == "agent-test"
         assert agent.name == "Test"
         assert agent.port == 8080

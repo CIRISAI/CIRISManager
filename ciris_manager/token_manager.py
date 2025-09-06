@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import httpx
 from httpx import AsyncClient
 
-from ciris_manager.agent_registry import AgentRegistry, AgentInfo
+from ciris_manager.agent_registry import AgentRegistry, RegisteredAgent
 from ciris_manager.crypto import TokenEncryption
 from ciris_manager.agent_auth import get_agent_auth
 
@@ -95,7 +95,7 @@ class TokenManager:
 
         return token_health
 
-    async def _check_token_health(self, agent: AgentInfo) -> TokenHealth:
+    async def _check_token_health(self, agent: RegisteredAgent) -> TokenHealth:
         """Check health of a single agent's token."""
         health = TokenHealth(agent_id=agent.agent_id, status=TokenStatus.MISSING)
 

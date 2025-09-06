@@ -156,6 +156,12 @@ class DockerAgentDiscovery:
                         f"Agent {agent_id} version: {agent_info.version} ({agent_info.codename}) state: {agent_info.cognitive_state}"
                     )
 
+                    # Update the registry with fresh version info
+                    if self.agent_registry and agent_info.version and agent_info.cognitive_state:
+                        self.agent_registry.update_agent_state(
+                            agent_id, agent_info.version, agent_info.cognitive_state
+                        )
+
             return agent_info
 
         except Exception as e:

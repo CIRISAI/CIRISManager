@@ -14,8 +14,8 @@ from threading import Lock
 logger = logging.getLogger(__name__)
 
 
-class AgentInfo:
-    """Information about a managed agent."""
+class RegisteredAgent:
+    """Information about a registered agent stored in the registry."""
 
     def __init__(
         self,
@@ -65,7 +65,7 @@ class AgentInfo:
         }
 
     @classmethod
-    def from_dict(cls, agent_id: str, data: Dict[str, Any]) -> "AgentInfo":
+    def from_dict(cls, agent_id: str, data: Dict[str, Any]) -> "RegisteredAgent":
         """Create from dictionary."""
         return cls(
             agent_id=agent_id,
@@ -94,7 +94,7 @@ class AgentRegistry:
             metadata_path: Path to metadata.json file
         """
         self.metadata_path = metadata_path
-        self.agents: Dict[str, AgentInfo] = {}
+        self.agents: Dict[str, RegisteredAgent] = {}
         self._lock = Lock()
 
         # Ensure directory exists
@@ -115,7 +115,7 @@ class AgentRegistry:
 
             agents_data = data.get("agents", {})
             for agent_id, agent_data in agents_data.items():
-                self.agents[agent_id] = AgentInfo.from_dict(agent_id, agent_data)
+                self.agents[agent_id] = RegisteredAgent.from_dict(agent_id, agent_data)
                 logger.info(f"Loaded agent: {agent_id}")
 
         except Exception as e:
@@ -149,7 +149,7 @@ class AgentRegistry:
         template: str,
         compose_file: str,
         service_token: Optional[str] = None,
-    ) -> AgentInfo:
+    ) -> RegisteredAgent:
         """
         Register a new agent.
 
@@ -161,10 +161,10 @@ class AgentRegistry:
             compose_file: Path to docker-compose.yml
 
         Returns:
-            Created AgentInfo object
+            Created RegisteredAgent object
         """
         with self._lock:
-            agent = AgentInfo(
+            agent = RegisteredAgent(
                 agent_id=agent_id,
                 name=name,
                 port=port,
@@ -181,7 +181,7 @@ class AgentRegistry:
             logger.info(f"Registered agent: {agent_id} on port {port}")
             return agent
 
-    def unregister_agent(self, agent_id: str) -> Optional[AgentInfo]:
+    def unregister_agent(self, agent_id: str) -> Optional[RegisteredAgent]:
         """
         Unregister an agent.
 
@@ -189,7 +189,7 @@ class AgentRegistry:
             agent_id: Agent identifier
 
         Returns:
-            Removed AgentInfo or None if not found
+            Removed RegisteredAgent or None if not found
         """
         with self._lock:
             agent = self.agents.pop(agent_id, None)
@@ -198,18 +198,18 @@ class AgentRegistry:
                 logger.info(f"Unregistered agent: {agent_id}")
             return agent
 
-    def get_agent(self, agent_id: str) -> Optional[AgentInfo]:
+    def get_agent(self, agent_id: str) -> Optional[RegisteredAgent]:
         """Get agent by ID."""
         return self.agents.get(agent_id)
 
-    def get_agent_by_name(self, name: str) -> Optional[AgentInfo]:
+    def get_agent_by_name(self, name: str) -> Optional[RegisteredAgent]:
         """Get agent by name."""
         for agent in self.agents.values():
             if agent.name.lower() == name.lower():
                 return agent
         return None
 
-    def list_agents(self) -> List[AgentInfo]:
+    def list_agents(self) -> List[RegisteredAgent]:
         """List all registered agents."""
         return list(self.agents.values())
 
@@ -283,7 +283,7 @@ class AgentRegistry:
         logger.info(f"Set deployment for {agent_id} to {deployment}")
         return True
 
-    def get_agents_by_deployment(self, deployment: str) -> List[AgentInfo]:
+    def get_agents_by_deployment(self, deployment: str) -> List[RegisteredAgent]:
         """Get all agents with a specific deployment identifier.
 
         Args:
@@ -299,13 +299,13 @@ class AgentRegistry:
                 result.append(agent)
         return result
 
-    def get_agents_by_canary_group(self) -> Dict[str, List[AgentInfo]]:
+    def get_agents_by_canary_group(self) -> Dict[str, List[RegisteredAgent]]:
         """Get agents organized by canary group.
 
         Returns:
             Dict with keys 'explorer', 'early_adopter', 'general', 'unassigned'
         """
-        groups: Dict[str, List[AgentInfo]] = {
+        groups: Dict[str, List[RegisteredAgent]] = {
             "explorer": [],
             "early_adopter": [],
             "general": [],
