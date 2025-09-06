@@ -177,6 +177,14 @@ class DockerAgentDiscovery:
 
             # Get authentication headers
             auth = get_agent_auth(self.agent_registry)
+
+            # Check if we should skip auth attempts due to backoff
+            if hasattr(auth, "_should_skip_auth_attempt") and auth._should_skip_auth_attempt(
+                agent_id
+            ):
+                logger.debug(f"Skipping version query for {agent_id} due to auth backoff")
+                return None
+
             try:
                 headers = auth.get_auth_headers(agent_id)
             except ValueError as e:
@@ -187,6 +195,10 @@ class DockerAgentDiscovery:
             with httpx.Client(timeout=2.0) as client:
                 response = client.get(url, headers=headers)
                 if response.status_code == 200:
+                    # Record successful authentication
+                    if hasattr(auth, "_record_auth_success"):
+                        auth._record_auth_success(agent_id)
+
                     result = response.json()
                     # Handle wrapped response format
                     data = result.get("data", result)
@@ -196,6 +208,40 @@ class DockerAgentDiscovery:
                         "code_hash": data.get("code_hash"),
                         "cognitive_state": data.get("cognitive_state"),
                     }
+                elif response.status_code == 401:
+                    # Authentication failed - try to detect correct auth format
+                    logger.info(f"Auth failed for {agent_id}, attempting format detection...")
+                    detected_format = auth.detect_auth_format(agent_id)
+                    if detected_format:
+                        # Try again with detected format
+                        headers = auth.get_auth_headers(agent_id)
+                        response = client.get(url, headers=headers)
+                        if response.status_code == 200:
+                            # Record successful authentication
+                            if hasattr(auth, "_record_auth_success"):
+                                auth._record_auth_success(agent_id)
+
+                            result = response.json()
+                            data = result.get("data", result)
+                            logger.info(
+                                f"Version discovery successful for {agent_id} after format detection"
+                            )
+                            return {
+                                "version": data.get("version"),
+                                "codename": data.get("codename"),
+                                "code_hash": data.get("code_hash"),
+                                "cognitive_state": data.get("cognitive_state"),
+                            }
+                        else:
+                            # Record auth failure if still failing after detection
+                            if hasattr(auth, "_record_auth_failure"):
+                                auth._record_auth_failure(agent_id)
+                            logger.warning(
+                                f"Agent {agent_id} still returns {response.status_code} after format detection"
+                            )
+                    else:
+                        # Format detection already recorded failure
+                        logger.warning(f"Could not detect working auth format for {agent_id}")
                 else:
                     logger.debug(
                         f"Agent {agent_id} status endpoint returned {response.status_code}"

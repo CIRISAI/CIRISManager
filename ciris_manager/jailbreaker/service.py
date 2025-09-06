@@ -186,11 +186,38 @@ class JailbreakerService:
             # Recreate data directory with proper ownership for container user
             logger.info(f"Recreating data directory: {data_path}")
             try:
-                data_path.mkdir(parents=True, exist_ok=True)
-                # Set ownership to container user (typically 1000:1000 for CIRIS agents)
+                # Create directory with sudo to avoid permission issues
                 import subprocess
+                import os
 
-                subprocess.run(["sudo", "chown", "-R", "1000:1000", str(data_path)], check=True)
+                # Ensure clean environment for subprocess
+                env = os.environ.copy()
+                env["SUDO_ASKPASS"] = ""  # Prevent password prompts
+
+                logger.debug(f"Creating directory with sudo: {data_path}")
+                result = subprocess.run(
+                    ["sudo", "-n", "mkdir", "-p", str(data_path)],
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+                if result.returncode != 0:
+                    logger.error(f"mkdir failed - stdout: {result.stdout}, stderr: {result.stderr}")
+                    raise Exception(f"Failed to create directory: {result.stderr}")
+
+                # Set ownership to container user (typically 1000:1000 for CIRIS agents)
+                logger.debug(f"Setting ownership to 1000:1000: {data_path}")
+                chown_result = subprocess.run(
+                    ["sudo", "-n", "chown", "-R", "1000:1000", str(data_path)],
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+                if chown_result.returncode != 0:
+                    logger.error(
+                        f"chown failed - stdout: {chown_result.stdout}, stderr: {chown_result.stderr}"
+                    )
+                    raise Exception(f"Failed to set ownership: {chown_result.stderr}")
                 logger.info("Data directory recreated with proper ownership")
             except Exception as e:
                 logger.error(f"Failed to recreate data directory: {e}")
