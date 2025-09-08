@@ -307,12 +307,28 @@ class TestJailbreakerService:
     @pytest.mark.asyncio
     async def test_reset_agent_success(self, jailbreaker_service, temp_dir):
         """Test successful agent reset."""
+
+        def mock_subprocess_run(cmd, *args, **kwargs):
+            """Mock subprocess.run that actually creates directories when mocking mkdir."""
+            mock_result = Mock()
+            mock_result.returncode = 0
+            mock_result.stdout = ""
+            mock_result.stderr = ""
+
+            # If this is a mkdir command, actually create the directory
+            if cmd[0] == "sudo" and len(cmd) >= 4 and cmd[2] == "mkdir":
+                from pathlib import Path
+
+                path = Path(cmd[4])  # The directory path is at index 4
+                path.mkdir(parents=True, exist_ok=True)
+
+            return mock_result
+
         with (
             patch.object(jailbreaker_service, "verify_access_token") as mock_verify,
-            patch("subprocess.run") as mock_subprocess,
+            patch("subprocess.run", side_effect=mock_subprocess_run),
         ):
             mock_verify.return_value = (True, "user123")
-            mock_subprocess.return_value.returncode = 0
 
             # Create agent directory and data folder
             agent_dir = temp_dir / "test-agent"

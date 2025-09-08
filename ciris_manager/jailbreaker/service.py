@@ -186,7 +186,7 @@ class JailbreakerService:
             # Recreate data directory with proper ownership for container user
             logger.info(f"Recreating data directory: {data_path}")
             try:
-                # Create directory with sudo to avoid permission issues
+                # Try to create directory with sudo first (production environment)
                 import subprocess
                 import os
 
@@ -201,24 +201,40 @@ class JailbreakerService:
                     text=True,
                     env=env,
                 )
-                if result.returncode != 0:
-                    logger.error(f"mkdir failed - stdout: {result.stdout}, stderr: {result.stderr}")
-                    raise Exception(f"Failed to create directory: {result.stderr}")
 
-                # Set ownership to container user (typically 1000:1000 for CIRIS agents)
-                logger.debug(f"Setting ownership to 1000:1000: {data_path}")
-                chown_result = subprocess.run(
-                    ["sudo", "-n", "chown", "-R", "1000:1000", str(data_path)],
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                )
-                if chown_result.returncode != 0:
-                    logger.error(
-                        f"chown failed - stdout: {chown_result.stdout}, stderr: {chown_result.stderr}"
+                if result.returncode == 0:
+                    # Success with sudo - set ownership to container user (typically 1000:1000 for CIRIS agents)
+                    logger.debug(f"Setting ownership to 1000:1000: {data_path}")
+                    chown_result = subprocess.run(
+                        ["sudo", "-n", "chown", "-R", "1000:1000", str(data_path)],
+                        capture_output=True,
+                        text=True,
+                        env=env,
                     )
-                    raise Exception(f"Failed to set ownership: {chown_result.stderr}")
-                logger.info("Data directory recreated with proper ownership")
+                    if chown_result.returncode != 0:
+                        logger.error(
+                            f"chown failed - stdout: {chown_result.stdout}, stderr: {chown_result.stderr}"
+                        )
+                        raise Exception(f"Failed to set ownership: {chown_result.stderr}")
+                    logger.info("Data directory recreated with proper ownership via sudo")
+                else:
+                    # Sudo failed (likely test environment) - fall back to regular Python operations
+                    logger.warning(
+                        f"sudo mkdir failed, falling back to regular mkdir: {result.stderr}"
+                    )
+                    try:
+                        data_path.mkdir(parents=True, exist_ok=True)
+                        logger.info(
+                            "Data directory recreated using regular Python mkdir (test environment)"
+                        )
+                    except PermissionError as perm_error:
+                        logger.error(
+                            f"Regular mkdir also failed with permission error: {perm_error}"
+                        )
+                        raise Exception(
+                            f"Could not create directory with sudo or regular mkdir: {perm_error}"
+                        )
+
             except Exception as e:
                 logger.error(f"Failed to recreate data directory: {e}")
                 raise Exception(f"Could not recreate data directory: {e}")
