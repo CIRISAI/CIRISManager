@@ -6,7 +6,7 @@ Handles authentication with CIRIS agents using service tokens or fallback creden
 
 import logging
 import time
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -328,7 +328,7 @@ class AgentAuth:
             return True
         return False
 
-    def get_backoff_status(self, agent_id: str) -> Dict[str, any]:
+    def get_backoff_status(self, agent_id: str) -> Dict[str, Any]:
         """
         Get current backoff/circuit breaker status for an agent.
 
