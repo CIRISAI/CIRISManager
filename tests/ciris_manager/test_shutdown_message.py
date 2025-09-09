@@ -189,8 +189,8 @@ class TestShutdownMessage:
             call_args = mock_post.call_args
             shutdown_payload = call_args.kwargs["json"]
 
-            # Should recognize numeric version as semantic version
-            expected_reason = "System shutdown requested: Runtime: CD update to version 2.1.0 (deployment test-dep) (API shutdown by wa-system-admin)"
+            # Should recognize numeric version as semantic version and add v prefix
+            expected_reason = "System shutdown requested: Runtime: CD update to version v2.1.0 (deployment test-dep) (API shutdown by wa-system-admin)"
             assert shutdown_payload["reason"] == expected_reason
 
     @pytest.mark.asyncio
