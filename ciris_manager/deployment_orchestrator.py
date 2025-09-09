@@ -3829,7 +3829,7 @@ class DeploymentOrchestrator:
         lines = changelog.strip().split("\n")
 
         # Categories in priority order
-        categories = {
+        categories: Dict[str, Dict[str, Any]] = {
             "Security": {"prefix": "🔒", "items": [], "priority": 1},
             "Deprecated": {"prefix": "⚠️", "items": [], "priority": 2},
             "Removed": {"prefix": "💔", "items": [], "priority": 2},
@@ -3873,7 +3873,7 @@ class DeploymentOrchestrator:
         # Sort categories by priority and include only those with items
         sorted_categories = sorted(
             [(cat, data) for cat, data in categories.items() if data["items"]],
-            key=lambda x: x[1]["priority"],
+            key=lambda x: int(x[1]["priority"]),
         )
 
         if not sorted_categories:
@@ -3888,8 +3888,10 @@ class DeploymentOrchestrator:
             if total_items >= max_total_items:
                 break
 
-            items_to_show = data["items"][:max_items_per_category]
-            remaining_items = len(data["items"]) - len(items_to_show)
+            items_list = data["items"]
+            assert isinstance(items_list, list), "Expected items to be a list"
+            items_to_show = items_list[:max_items_per_category]
+            remaining_items = len(items_list) - len(items_to_show)
 
             category_items = []
             for item in items_to_show:
