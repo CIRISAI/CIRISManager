@@ -87,8 +87,12 @@ class DeploymentTokenManager:
             logger.error(f"Failed to save deployment tokens: {e}")
 
     def _update_environment_file(self, tokens: Dict[str, str]) -> None:
-        """Update the environment file with deployment tokens."""
+        """Update the environment file with deployment tokens using sudo for privileged access."""
         try:
+            import subprocess
+            import tempfile
+            import os
+
             # Read existing environment
             env_lines = []
             if self.env_file.exists():
@@ -100,6 +104,7 @@ class DeploymentTokenManager:
                         and not line.startswith("CIRIS_DEPLOY_TOKEN=")
                         and not line.startswith("CIRIS_AGENT_DEPLOY_TOKEN=")
                         and not line.startswith("CIRIS_GUI_DEPLOY_TOKEN=")
+                        and not line.startswith("CIRIS_ENCRYPTION_KEY=")
                     ]
 
             # Add deployment tokens
@@ -107,16 +112,103 @@ class DeploymentTokenManager:
             env_lines.append(f"CIRIS_AGENT_DEPLOY_TOKEN={tokens.get('agent', '')}")
             env_lines.append(f"CIRIS_GUI_DEPLOY_TOKEN={tokens.get('gui', '')}")
 
-            # Write back
-            with open(self.env_file, "w") as f:
-                f.write("\n".join(env_lines) + "\n")
+            # Ensure CIRIS_ENCRYPTION_KEY is set - derive from MANAGER_JWT_SECRET if not present
+            has_encryption_key = any(line.startswith("CIRIS_ENCRYPTION_KEY=") for line in env_lines)
+            if not has_encryption_key:
+                # Check if MANAGER_JWT_SECRET exists to derive the key
+                manager_jwt_secret = None
+                for line in env_lines:
+                    if line.startswith("MANAGER_JWT_SECRET="):
+                        manager_jwt_secret = line.split("=", 1)[1]
+                        break
 
-            # Set secure permissions
-            self.env_file.chmod(0o600)
-            logger.info(f"Updated environment file: {self.env_file}")
+                if manager_jwt_secret:
+                    # Derive the same encryption key that would be generated at runtime
+                    import base64
+                    from cryptography.hazmat.primitives import hashes
+                    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+                    salt = "ciris_production_salt_2024"  # Same salt from environment
+                    kdf = PBKDF2HMAC(
+                        algorithm=hashes.SHA256(),
+                        length=32,
+                        salt=salt.encode(),
+                        iterations=100000,
+                    )
+                    derived_key = base64.urlsafe_b64encode(kdf.derive(manager_jwt_secret.encode()))
+                    env_lines.append(f"CIRIS_ENCRYPTION_KEY={derived_key.decode()}")
+                    logger.info("Added derived CIRIS_ENCRYPTION_KEY to environment file")
+
+            # Write to temporary file first
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".env") as temp_f:
+                temp_f.write("\n".join(env_lines) + "\n")
+                temp_path = temp_f.name
+
+            # Ensure clean environment for subprocess
+            env = os.environ.copy()
+            env["SUDO_ASKPASS"] = ""  # Prevent password prompts
+
+            try:
+                # Use sudo to copy temp file to the final location
+                logger.debug(f"Updating environment file with sudo: {self.env_file}")
+                result = subprocess.run(
+                    ["sudo", "-n", "cp", temp_path, str(self.env_file)],
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+
+                if result.returncode == 0:
+                    # Set secure permissions with sudo
+                    chmod_result = subprocess.run(
+                        ["sudo", "-n", "chmod", "640", str(self.env_file)],
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
+                    if chmod_result.returncode != 0:
+                        logger.warning(
+                            f"chmod failed - stdout: {chmod_result.stdout}, stderr: {chmod_result.stderr}"
+                        )
+
+                    # Set ownership with sudo
+                    chown_result = subprocess.run(
+                        ["sudo", "-n", "chown", "ciris-manager:ciris", str(self.env_file)],
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
+                    if chown_result.returncode != 0:
+                        logger.warning(
+                            f"chown failed - stdout: {chown_result.stdout}, stderr: {chown_result.stderr}"
+                        )
+
+                    logger.info(f"Updated environment file with sudo: {self.env_file}")
+
+                else:
+                    # Sudo failed, fall back to direct write (test environment)
+                    logger.warning(f"sudo cp failed, falling back to direct write: {result.stderr}")
+                    try:
+                        with open(self.env_file, "w") as f:
+                            f.write("\n".join(env_lines) + "\n")
+                        self.env_file.chmod(0o600)
+                        logger.info(
+                            f"Updated environment file directly (test environment): {self.env_file}"
+                        )
+                    except PermissionError as perm_error:
+                        logger.error(f"Direct write also failed: {perm_error}")
+                        raise Exception(f"Could not update environment file: {perm_error}")
+
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
 
         except Exception as e:
             logger.error(f"Failed to update environment file: {e}")
+            raise
 
     def get_token(self, repo: str) -> Optional[str]:
         """Get deployment token for a specific repository."""
