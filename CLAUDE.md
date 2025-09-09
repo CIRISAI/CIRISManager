@@ -215,9 +215,10 @@ All I/O operations use async/await for non-blocking execution:
    - Lives in CIRISManager/static/
 
 2. **Agent GUI**: React app in container from CIRISAgent
-   - Multi-tenant: `/agent/{agent_id}`
+   - Multi-tenant: accessed through main interface at `/`
    - Chat interface for interacting with agents
-   - Detects mode (standalone vs managed) from URL
+   - Agent selection available from main GUI interface
+   - API access: `/api/{agent_id}/v1/` endpoints
 
 **Container Count:**
 - N agent containers (one per agent)
@@ -258,52 +259,63 @@ The auth system automatically:
 - Uses service tokens when available (encrypted in agent registry)
 - Falls back to default admin credentials for legacy agents
 - Handles token decryption securely
+- Implements exponential backoff for failed authentication attempts
+- Auto-detects authentication format preferences (service: prefix vs raw token)
+- Circuit breaker pattern prevents auth spam after repeated failures
 
 #### Extracting Agent Service Tokens
 
-To get the decrypted service token for a specific agent (useful for external tools like Lens):
+To get the decrypted service token for a specific agent (useful for external tools):
 
 ```bash
 # Connect to production server
 ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
 
-# Extract token for a specific agent (replace 'agent-name' with actual agent ID)
-python3 -c "
+# Use CIRISManager's crypto system to decrypt tokens properly
+cd /opt/ciris-manager && env MANAGER_JWT_SECRET="_AFlp77JRC55GooNp4BxfS7jIuDWlbhzJcRxPzjE00E=" CIRIS_ENCRYPTION_SALT="ciris_production_salt_2024" ./venv/bin/python3 -c "
+import sys
 import json
-from cryptography.fernet import Fernet
+sys.path.insert(0, '/opt/ciris-manager')
+from ciris_manager.crypto import get_token_encryption
 
-# Get encryption key from systemd service file
-key = '_AFlp77JRC55GooNp4BxfS7jIuDWlbhzJcRxPzjE00E='
-
-# Read agent metadata
+# Get the encrypted token for the agent
 with open('/opt/ciris/agents/metadata.json') as f:
     metadata = json.load(f)
 
-# Find and decrypt token for specific agent
-agent_name = 'agent-name'  # Replace with actual agent ID
-for agent_id, agent_data in metadata.get('agents', {}).items():
-    if agent_name.lower() in agent_id.lower():
-        if 'service_token' in agent_data:
-            cipher = Fernet(key.encode())
-            decrypted = cipher.decrypt(agent_data['service_token'].encode()).decode()
-            print(f'Agent: {agent_id}')
-            print(f'Service Token: {decrypted}')
-            break
+agent_id = 'echo-nemesis-v2tyey'  # Replace with actual agent ID
+if agent_id in metadata.get('agents', {}):
+    encrypted_token = metadata['agents'][agent_id].get('service_token')
+    if encrypted_token:
+        try:
+            encryption = get_token_encryption()
+            decrypted_token = encryption.decrypt_token(encrypted_token)
+            port = metadata['agents'][agent_id].get('port', 'unknown')
+            print(f'Agent ID: {agent_id}')
+            print(f'Port: {port}')
+            print(f'Service Token: {decrypted_token}')
+            print(f'API Endpoint: https://agents.ciris.ai/api/{agent_id}/v1/')
+        except Exception as e:
+            print(f'Error decrypting token: {e}')
+    else:
+        print(f'No service token found for {agent_id}')
 else:
-    print(f'Agent {agent_name} not found')
-    print('Available agents:', list(metadata.get('agents', {}).keys()))
+    print(f'Agent {agent_id} not found')
 "
 ```
 
-**Example usage:**
+**Example for common agents:**
 ```bash
-# Get token for echo-speculative
-python3 -c "..." # (replace 'agent-name' with 'echo-speculative')
-# Output: Service Token: fqE_hW_PeaowhIVd4Rxy4P-n_0gO0YCEv1aEnuv38pA
-
 # Get token for echo-nemesis
-python3 -c "..." # (replace 'agent-name' with 'echo-nemesis')
-# Output: Service Token: HRlKm01-GUP9tBmwO2yW3VK-SUl-HDkQ2n8qJraf7BY
+Agent ID: echo-nemesis-v2tyey
+Port: 8009
+Service Token: ciris_system_admin_28JOuDXr-FObu3zV00R9faGFw0HdnOx9R9FatwGdKxg
+API Endpoint: https://agents.ciris.ai/api/echo-nemesis-v2tyey/v1/
+
+# Get token for datum
+Agent ID: datum
+Port: 8001
+Service Token: [use script above with agent_id = 'datum']
+API Endpoint: https://agents.ciris.ai/api/datum/v1/
 ```
 
 **Security Notes:**
