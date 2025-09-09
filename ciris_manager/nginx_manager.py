@@ -620,6 +620,11 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
 
+            # WebSocket support for Streamlit
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_cache_bypass $http_upgrade;
+
             # OAuth2 proxy specific headers
             proxy_set_header X-Forwarded-User $remote_user;
             proxy_set_header X-Auth-Request-User $remote_user;
