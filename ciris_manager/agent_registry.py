@@ -31,6 +31,7 @@ class RegisteredAgent:
         current_version: Optional[str] = None,
         last_work_state_at: Optional[str] = None,
         version_transitions: Optional[List[Dict[str, Any]]] = None,
+        do_not_autostart: Optional[bool] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -47,6 +48,7 @@ class RegisteredAgent:
         self.current_version = current_version
         self.last_work_state_at = last_work_state_at
         self.version_transitions = version_transitions or []
+        self.do_not_autostart = do_not_autostart or False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -62,6 +64,7 @@ class RegisteredAgent:
             "current_version": self.current_version,
             "last_work_state_at": self.last_work_state_at,
             "version_transitions": self.version_transitions,
+            "do_not_autostart": self.do_not_autostart,
         }
 
     @classmethod
@@ -80,6 +83,7 @@ class RegisteredAgent:
             current_version=data.get("current_version"),
             last_work_state_at=data.get("last_work_state_at"),
             version_transitions=data.get("version_transitions", []),
+            do_not_autostart=data.get("do_not_autostart", False),
         )
 
 
@@ -281,6 +285,28 @@ class AgentRegistry:
         agent.metadata["deployment"] = deployment
         self._save_metadata()
         logger.info(f"Set deployment for {agent_id} to {deployment}")
+        return True
+
+    def set_do_not_autostart(self, agent_id: str, do_not_autostart: bool) -> bool:
+        """Set the do_not_autostart flag for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            do_not_autostart: Whether to prevent automatic restart of this agent
+
+        Returns:
+            True if successful, False if agent not found
+        """
+        agent = self.agents.get(agent_id)
+        if not agent:
+            logger.warning(f"Agent {agent_id} not found when setting do_not_autostart flag")
+            return False
+
+        agent.do_not_autostart = do_not_autostart
+        self._save_metadata()
+
+        status = "enabled" if do_not_autostart else "disabled"
+        logger.info(f"Autostart prevention {status} for agent {agent_id}")
         return True
 
     def get_agents_by_deployment(self, deployment: str) -> List[RegisteredAgent]:

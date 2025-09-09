@@ -910,6 +910,71 @@ def create_routes(manager: Any) -> APIRouter:
             logger.error(f"Failed to restart agent {agent_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to restart agent: {str(e)}")
 
+    @router.post("/agents/{agent_id}/maintenance")
+    async def set_agent_maintenance(
+        agent_id: str, request: Dict[str, bool], user: dict = auth_dependency
+    ) -> Dict[str, Any]:
+        """
+        Set maintenance mode for an agent to prevent automatic restart.
+
+        When maintenance mode is enabled, the container manager will not
+        automatically restart the agent if it crashes or stops.
+
+        Body should contain: {"do_not_autostart": true/false}
+        """
+        try:
+            do_not_autostart = request.get("do_not_autostart", False)
+
+            # Validate boolean
+            if not isinstance(do_not_autostart, bool):
+                raise HTTPException(
+                    status_code=400, detail="do_not_autostart must be a boolean value"
+                )
+
+            # Update the agent registry
+            success = manager.agent_registry.set_do_not_autostart(agent_id, do_not_autostart)
+
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            action = "enabled" if do_not_autostart else "disabled"
+            logger.info(f"Maintenance mode {action} for {agent_id} by {user['email']}")
+
+            return {
+                "status": "success",
+                "agent_id": agent_id,
+                "do_not_autostart": do_not_autostart,
+                "message": f"Maintenance mode {action} for agent {agent_id}",
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to set maintenance mode for {agent_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to set maintenance mode: {str(e)}")
+
+    @router.get("/agents/{agent_id}/maintenance")
+    async def get_agent_maintenance(agent_id: str, user: dict = auth_dependency) -> Dict[str, Any]:
+        """Get maintenance mode status for an agent."""
+        try:
+            agent = manager.agent_registry.get_agent(agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            do_not_autostart = hasattr(agent, "do_not_autostart") and agent.do_not_autostart
+
+            return {
+                "agent_id": agent_id,
+                "do_not_autostart": do_not_autostart,
+                "maintenance_mode": "enabled" if do_not_autostart else "disabled",
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to get maintenance mode for {agent_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to get maintenance mode: {str(e)}")
+
     @router.get("/agents/{agent_id}/config")
     async def get_agent_config(agent_id: str, user: dict = auth_dependency) -> Dict[str, Any]:
         """Get agent configuration from docker-compose.yml."""

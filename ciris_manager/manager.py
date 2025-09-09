@@ -599,11 +599,19 @@ echo "Permissions fixed. Agent should now be able to start."
                         )
                         continue
 
-                    # This is a crashed container not part of deployment - restart it
+                    # This is a crashed container not part of deployment - check if restart is allowed
                     logger.warning(
-                        f"Container {container_name} crashed (exit code {exit_code}), attempting recovery"
+                        f"Container {container_name} crashed (exit code {exit_code}), checking restart policy"
                     )
 
+                    # Check if agent has do_not_autostart flag set
+                    if hasattr(agent_info, "do_not_autostart") and agent_info.do_not_autostart:
+                        logger.info(
+                            f"Agent {agent_id} has do_not_autostart flag set - skipping automatic restart"
+                        )
+                        continue
+
+                    logger.info(f"Attempting recovery for {agent_id}")
                     # Use docker-compose to restart (maintains configuration)
                     compose_path = Path(agent_info.compose_file)
                     if compose_path.exists():
