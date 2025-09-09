@@ -225,6 +225,12 @@ function renderAgents() {
                             </span>
                         ` : ''}
                         ${cognitiveStateBadge}
+                        ${agent.do_not_autostart ? `
+                            <span class="px-2 py-1 bg-orange-100 text-orange-700 text-sm rounded" title="Maintenance Mode - Auto-restart disabled">
+                                <i class="fas fa-wrench text-xs"></i>
+                                Maintenance
+                            </span>
+                        ` : ''}
                     </div>
                     <div class="text-sm text-gray-600 space-y-1">
                         <div>ID: ${escapeHtml(agent.agent_id)}</div>
@@ -2549,6 +2555,7 @@ async function showAgentSettings(agentId) {
     const agentIdSpan = document.getElementById('settings-agent-id');
     const mockLlmCheckbox = document.getElementById('settings-mock-llm');
     const discordCheckbox = document.getElementById('settings-discord');
+    const maintenanceModeCheckbox = document.getElementById('settings-maintenance-mode');
     const discordSection = document.getElementById('discord-config-section');
     
     // Set agent ID in modal
@@ -2560,6 +2567,12 @@ async function showAgentSettings(agentId) {
     envVarsContainer.innerHTML = '';
     
     try {
+        // Get current agent from registry to check maintenance mode
+        const agent = agents.find(a => a.agent_id === agentId);
+        if (agent) {
+            maintenanceModeCheckbox.checked = agent.do_not_autostart || false;
+        }
+        
         // Get current agent configuration from docker-compose
         const response = await fetch(`/manager/v1/agents/${agentId}/config`, {
             headers: { 'Authorization': `Bearer ${localStorage.getItem('managerToken')}` }
@@ -2797,6 +2810,7 @@ async function saveAgentSettings(event, silent = false) {
     const agentId = document.getElementById('settings-agent-id').dataset.agentId;
     const mockLlm = document.getElementById('settings-mock-llm').checked;
     const discordAdapter = document.getElementById('settings-discord').checked;
+    const maintenanceMode = document.getElementById('settings-maintenance-mode').checked;
     
     try {
         // Prepare configuration update
@@ -2847,6 +2861,21 @@ async function saveAgentSettings(event, silent = false) {
             }
         });
         
+        // Update maintenance mode setting first (separate API call)
+        const maintenanceResponse = await fetch(`/manager/v1/agents/${agentId}/maintenance`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
+            },
+            body: JSON.stringify({ do_not_autostart: maintenanceMode })
+        });
+        
+        if (!maintenanceResponse.ok) {
+            const error = await maintenanceResponse.json();
+            throw new Error(`Failed to update maintenance mode: ${error.detail || 'Unknown error'}`);
+        }
+        
         // Send PATCH request to update agent configuration
         const response = await fetch(`/manager/v1/agents/${agentId}/config`, {
             method: 'PATCH',
@@ -2891,6 +2920,7 @@ async function saveAgentSettingsWithoutRestart(event) {
     const agentId = document.getElementById('settings-agent-id').dataset.agentId;
     const mockLlm = document.getElementById('settings-mock-llm').checked;
     const discordAdapter = document.getElementById('settings-discord').checked;
+    const maintenanceMode = document.getElementById('settings-maintenance-mode').checked;
     
     try {
         // Prepare configuration update
@@ -2941,6 +2971,21 @@ async function saveAgentSettingsWithoutRestart(event) {
                 configUpdate.environment[key.value] = envValues[index].value;
             }
         });
+        
+        // Update maintenance mode setting first (separate API call)
+        const maintenanceResponse = await fetch(`/manager/v1/agents/${agentId}/maintenance`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
+            },
+            body: JSON.stringify({ do_not_autostart: maintenanceMode })
+        });
+        
+        if (!maintenanceResponse.ok) {
+            const error = await maintenanceResponse.json();
+            throw new Error(`Failed to update maintenance mode: ${error.detail || 'Unknown error'}`);
+        }
         
         // Send PATCH request to update agent configuration without restart
         const response = await fetch(`/manager/v1/agents/${agentId}/config`, {
