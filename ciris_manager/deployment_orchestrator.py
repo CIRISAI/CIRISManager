@@ -3106,6 +3106,15 @@ class DeploymentOrchestrator:
                 logger.error(f"Docker compose file not found: {compose_file}")
                 return False
 
+            # Check if agent has maintenance mode enabled
+            if hasattr(self, "agent_registry") and self.agent_registry:
+                agent = self.agent_registry.get_agent(agent_id)
+                if agent and hasattr(agent, "do_not_autostart") and agent.do_not_autostart:
+                    logger.info(
+                        f"Agent {agent_id} has maintenance mode enabled - skipping container recreation"
+                    )
+                    return True  # Return True to avoid deployment failure, but skip the operation
+
             logger.info(f"Recreating container for agent {agent_id} using docker-compose...")
 
             # Run docker-compose up -d with --pull always to use the newly pulled image
