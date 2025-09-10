@@ -280,9 +280,9 @@ class JailbreakerService:
 
             logger.info(f"Successfully restarted container for {self.config.target_agent_id}")
 
-            # Update agent registry with correct service token after reset
-            if self.config.agent_service_token and self.container_manager:
-                await self._update_agent_service_token()
+            # Discover and update agent registry with correct service token after reset
+            if self.container_manager:
+                await self._discover_and_update_service_token()
 
             # Reset authentication cache and detect new auth format
             await self._reset_auth_and_detect_format()
@@ -343,12 +343,13 @@ class JailbreakerService:
 
         return stats
 
-    async def _update_agent_service_token(self) -> None:
+    async def _discover_and_update_service_token(self) -> None:
         """
-        Update the agent registry with the correct service token after reset.
+        Discover the actual service token from the container environment and update the agent registry.
 
-        This ensures that CIRISManager uses the same service token that jailbreaker
-        is configured with, preventing authentication failures after agent resets.
+        After a reset, the container's CIRIS_SERVICE_TOKEN environment variable contains
+        the permanent service token that survives resets. We need to discover this token
+        and update the agent registry so CIRISManager can authenticate properly.
         """
         try:
             from ciris_manager.crypto import get_token_encryption
@@ -373,12 +374,44 @@ class JailbreakerService:
                 logger.warning("Agent registry not available, skipping token update")
                 return
 
-            # Encrypt the jailbreaker service token using the same encryption as the registry
-            encryption = get_token_encryption()
-            if not self.config.agent_service_token:
-                logger.error("No agent service token configured for jailbreaker")
+            # Discover the actual service token from container environment
+            container_name = f"ciris-{self.config.target_agent_id}"
+            logger.info(f"Discovering service token from container {container_name}")
+
+            # Get the service token from container environment
+            env_result = await asyncio.create_subprocess_exec(
+                "docker",
+                "exec",
+                container_name,
+                "env",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await env_result.communicate()
+
+            if env_result.returncode != 0:
+                logger.error(f"Failed to get container environment: {stderr.decode()}")
                 return
-            encrypted_token = encryption.encrypt_token(self.config.agent_service_token)
+
+            # Parse environment variables to find CIRIS_SERVICE_TOKEN
+            env_output = stdout.decode()
+            service_token = None
+            for line in env_output.strip().split("\n"):
+                if line.startswith("CIRIS_SERVICE_TOKEN="):
+                    service_token = line.split("=", 1)[1]
+                    break
+
+            if not service_token:
+                logger.error(
+                    f"CIRIS_SERVICE_TOKEN not found in container {container_name} environment"
+                )
+                return
+
+            logger.info(f"Discovered service token for {self.config.target_agent_id}")
+
+            # Encrypt the discovered service token using the same encryption as the registry
+            encryption = get_token_encryption()
+            encrypted_token = encryption.encrypt_token(service_token)
 
             # Update the agent registry
             success = agent_registry.update_agent_token(
@@ -387,8 +420,7 @@ class JailbreakerService:
 
             if success:
                 logger.info(
-                    f"Updated agent registry service token for {self.config.target_agent_id} "
-                    f"to match jailbreaker token"
+                    f"Updated agent registry with discovered service token for {self.config.target_agent_id}"
                 )
             else:
                 logger.error(
@@ -396,7 +428,7 @@ class JailbreakerService:
                 )
 
         except Exception as e:
-            logger.error(f"Error updating agent service token in registry: {e}")
+            logger.error(f"Error discovering and updating agent service token in registry: {e}")
             # Don't fail the reset operation due to token update issues
 
     async def _reset_admin_password(self) -> None:
@@ -414,10 +446,8 @@ class JailbreakerService:
             chars = string.ascii_letters + string.digits + "@#$%&*"
             new_password = "".join(secrets.choice(chars) for _ in range(20))
 
-            # Login with the jailbreaker service token to get admin access
-            if not self.config.agent_service_token:
-                logger.warning("No service token configured, skipping password reset")
-                return
+            # Login with default admin credentials to get session token for password reset
+            # Note: We can't use service tokens for password operations, need session tokens
 
             # Find the agent's port from registry or use common ports
             # For echo-nemesis, use 8009 first since that's its known port
@@ -430,43 +460,43 @@ class JailbreakerService:
                 try:
                     import httpx
 
-                    # Get admin user list to find the correct user ID
-                    headers = {
-                        "Authorization": f"Bearer {self.config.agent_service_token}",
-                        "Content-Type": "application/json",
-                    }
-
                     async with httpx.AsyncClient(timeout=10.0) as client:
-                        # List users to find admin user
-                        users_url = f"http://localhost:{port}/v1/users"
-                        users_response = await client.get(users_url, headers=headers)
+                        # Step 1: Login with default admin credentials to get session token
+                        login_url = f"http://localhost:{port}/v1/auth/login"
+                        login_data = {
+                            "username": "admin",
+                            "password": "ciris_admin_password",  # Default password after reset
+                        }
 
-                        if users_response.status_code != 200:
+                        login_response = await client.post(login_url, json=login_data)
+                        if login_response.status_code != 200:
+                            logger.debug(
+                                f"Login failed on port {port}: {login_response.status_code}"
+                            )
                             continue  # Try next port
 
-                        users_data = users_response.json()
+                        login_result = login_response.json()
+                        session_token = login_result.get("access_token")
+                        admin_user_id = login_result.get("user_id")
 
-                        # Find the admin user with SYSTEM_ADMIN role
-                        admin_user = None
-                        for user in users_data.get("items", []):
-                            if (
-                                user.get("api_role") == "SYSTEM_ADMIN"
-                                and user.get("username") == "admin"
-                            ):
-                                admin_user = user
-                                break
-
-                        if not admin_user:
-                            logger.warning(f"No admin user found on port {port}")
+                        if not session_token or not admin_user_id:
+                            logger.warning(f"Invalid login response on port {port}")
                             continue
 
-                        admin_user_id = admin_user["user_id"]
+                        logger.info(
+                            f"Successfully logged in to {self.config.target_agent_id} on port {port}"
+                        )
 
-                        # Reset the admin password
+                        # Step 2: Reset the admin password using session token
                         password_url = f"http://localhost:{port}/v1/users/{admin_user_id}/password"
                         password_data = {
                             "current_password": "ciris_admin_password",  # Default password after reset
                             "new_password": new_password,
+                        }
+
+                        headers = {
+                            "Authorization": f"Bearer {session_token}",
+                            "Content-Type": "application/json",
                         }
 
                         password_response = await client.put(
