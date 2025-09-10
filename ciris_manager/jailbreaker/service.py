@@ -375,6 +375,9 @@ class JailbreakerService:
 
             # Encrypt the jailbreaker service token using the same encryption as the registry
             encryption = get_token_encryption()
+            if not self.config.agent_service_token:
+                logger.error("No agent service token configured for jailbreaker")
+                return
             encrypted_token = encryption.encrypt_token(self.config.agent_service_token)
 
             # Update the agent registry
