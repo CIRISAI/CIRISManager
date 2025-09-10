@@ -154,9 +154,7 @@ class JailbreakerService:
             # Perform the reset
             logger.info(f"Starting reset of agent {self.config.target_agent_id} for user {user_id}")
 
-            # Stop the container if running
-            container_name = f"ciris-{self.config.target_agent_id}"
-            await self._stop_container(container_name)
+            # Stop the container if running (will be handled by recreation)
 
             # Wipe the data directory
             data_path = agent_path / "data"
@@ -239,8 +237,16 @@ class JailbreakerService:
                 logger.error(f"Failed to recreate data directory: {e}")
                 raise Exception(f"Could not recreate data directory: {e}")
 
-            # Restart the container
-            await self._start_container(container_name)
+            # Restart the container using proper deployment orchestrator method
+            if hasattr(self.container_manager, "_recreate_agent_container"):
+                recreated = await self.container_manager._recreate_agent_container(
+                    self.config.target_agent_id
+                )
+                if not recreated:
+                    raise RuntimeError("Failed to recreate agent container")
+                logger.info(f"Successfully recreated container for {self.config.target_agent_id}")
+            else:
+                raise RuntimeError("Container manager does not support container recreation")
 
             # Update agent registry with correct service token after reset
             if self.config.agent_service_token and self.container_manager:
@@ -281,34 +287,6 @@ class JailbreakerService:
                 user_id=user_id if "user_id" in locals() else None,
                 agent_id=self.config.target_agent_id,
             )
-
-    async def _stop_container(self, container_name: str) -> None:
-        """Stop a Docker container."""
-        try:
-            logger.debug(f"Stopping container: {container_name}")
-            await self.container_manager.stop_container(container_name)
-
-            # Wait a bit for graceful shutdown
-            await asyncio.sleep(2)
-            logger.debug(f"Container {container_name} stopped")
-
-        except Exception as e:
-            logger.warning(f"Failed to stop container {container_name}: {e}")
-            # Continue with reset even if stop fails
-
-    async def _start_container(self, container_name: str) -> None:
-        """Start a Docker container."""
-        try:
-            logger.debug(f"Starting container: {container_name}")
-            await self.container_manager.start_container(container_name)
-
-            # Wait a bit for startup
-            await asyncio.sleep(3)
-            logger.debug(f"Container {container_name} started")
-
-        except Exception as e:
-            logger.error(f"Failed to start container {container_name}: {e}")
-            raise
 
     def get_rate_limit_status(self, user_id: Optional[str] = None) -> dict:
         """

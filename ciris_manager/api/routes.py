@@ -2396,7 +2396,7 @@ def create_routes(manager: Any) -> APIRouter:
             jailbreaker_service = JailbreakerService(
                 config=jailbreaker_config,
                 agent_dir=agents_dir,
-                container_manager=manager,
+                container_manager=deployment_orchestrator,
             )
             logger.info("Jailbreaker service created")
 
