@@ -237,16 +237,48 @@ class JailbreakerService:
                 logger.error(f"Failed to recreate data directory: {e}")
                 raise Exception(f"Could not recreate data directory: {e}")
 
-            # Restart the container using proper deployment orchestrator method
-            if hasattr(self.container_manager, "_recreate_agent_container"):
-                recreated = await self.container_manager._recreate_agent_container(
-                    self.config.target_agent_id
-                )
-                if not recreated:
-                    raise RuntimeError("Failed to recreate agent container")
-                logger.info(f"Successfully recreated container for {self.config.target_agent_id}")
-            else:
-                raise RuntimeError("Container manager does not support container recreation")
+            # Stop and restart the container using docker-compose
+            container_name = f"ciris-{self.config.target_agent_id}"
+            agent_dir = self.agent_dir / self.config.target_agent_id
+            compose_file = agent_dir / "docker-compose.yml"
+
+            if not compose_file.exists():
+                raise RuntimeError(f"Docker compose file not found: {compose_file}")
+
+            logger.info(f"Stopping container {container_name}")
+
+            # Stop the container first
+            stop_result = await asyncio.create_subprocess_exec(
+                "docker-compose",
+                "-f",
+                str(compose_file),
+                "stop",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(agent_dir),
+            )
+            await stop_result.communicate()
+
+            logger.info(f"Starting container {container_name}")
+
+            # Start it back up
+            start_result = await asyncio.create_subprocess_exec(
+                "docker-compose",
+                "-f",
+                str(compose_file),
+                "up",
+                "-d",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(agent_dir),
+            )
+            stdout, stderr = await start_result.communicate()
+
+            if start_result.returncode != 0:
+                logger.error(f"Failed to start container: {stderr.decode()}")
+                raise RuntimeError(f"Failed to start container: {stderr.decode()}")
+
+            logger.info(f"Successfully restarted container for {self.config.target_agent_id}")
 
             # Update agent registry with correct service token after reset
             if self.config.agent_service_token and self.container_manager:
@@ -263,6 +295,9 @@ class JailbreakerService:
                     )
                 else:
                     logger.info(f"Agent {self.config.target_agent_id} is healthy after reset")
+
+            # Wait additional time for agent to fully initialize after recreation
+            await asyncio.sleep(10)
 
             # Reset admin password to a new secure random password
             await self._reset_admin_password()
@@ -315,12 +350,18 @@ class JailbreakerService:
         try:
             from ciris_manager.crypto import get_token_encryption
 
-            # Get the agent registry from container manager
-            if not hasattr(self.container_manager, "agent_registry"):
-                logger.warning("Container manager has no agent_registry, skipping token update")
-                return
+            # Get the agent registry from deployment orchestrator's manager
+            agent_registry = None
+            if hasattr(self.container_manager, "manager") and hasattr(
+                self.container_manager.manager, "agent_registry"
+            ):
+                agent_registry = self.container_manager.manager.agent_registry
+            elif hasattr(self.container_manager, "agent_registry"):
+                agent_registry = self.container_manager.agent_registry
 
-            agent_registry = self.container_manager.agent_registry
+            if not agent_registry:
+                logger.warning("Agent registry not available, skipping token update")
+                return
 
             # Encrypt the jailbreaker service token using the same encryption as the registry
             encryption = get_token_encryption()
@@ -366,7 +407,11 @@ class JailbreakerService:
                 return
 
             # Find the agent's port from registry or use common ports
-            agent_ports = [8080, 8081, 8082, 8083, 8009]  # Common agent ports
+            # For echo-nemesis, use 8009 first since that's its known port
+            if self.config.target_agent_id == "echo-nemesis-v2tyey":
+                agent_ports = [8009, 8080, 8081, 8082, 8083]  # Try 8009 first for nemesis
+            else:
+                agent_ports = [8080, 8081, 8082, 8083, 8009]  # Common agent ports
 
             for port in agent_ports:
                 try:
