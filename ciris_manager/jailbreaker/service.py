@@ -258,6 +258,9 @@ class JailbreakerService:
                 else:
                     logger.info(f"Agent {self.config.target_agent_id} is healthy after reset")
 
+            # Reset admin password to a new secure random password
+            await self._reset_admin_password()
+
             # Record the reset in rate limiter
             await self.rate_limiter.record_reset(user_id)
 
@@ -363,6 +366,101 @@ class JailbreakerService:
         except Exception as e:
             logger.error(f"Error updating agent service token in registry: {e}")
             # Don't fail the reset operation due to token update issues
+
+    async def _reset_admin_password(self) -> None:
+        """
+        Reset the agent's admin password to a new secure random password.
+
+        This ensures that every jailbreaker reset generates a fresh, secure password
+        instead of leaving the default password, improving security.
+        """
+        try:
+            import secrets
+            import string
+
+            # Generate a secure random password (20 characters, letters + digits + symbols)
+            chars = string.ascii_letters + string.digits + "@#$%&*"
+            new_password = "".join(secrets.choice(chars) for _ in range(20))
+
+            # Login with the jailbreaker service token to get admin access
+            if not self.config.agent_service_token:
+                logger.warning("No service token configured, skipping password reset")
+                return
+
+            # Find the agent's port from registry or use common ports
+            agent_ports = [8080, 8081, 8082, 8083, 8009]  # Common agent ports
+
+            for port in agent_ports:
+                try:
+                    import httpx
+
+                    # Get admin user list to find the correct user ID
+                    headers = {
+                        "Authorization": f"Bearer {self.config.agent_service_token}",
+                        "Content-Type": "application/json",
+                    }
+
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        # List users to find admin user
+                        users_url = f"http://localhost:{port}/v1/users"
+                        users_response = await client.get(users_url, headers=headers)
+
+                        if users_response.status_code != 200:
+                            continue  # Try next port
+
+                        users_data = users_response.json()
+
+                        # Find the admin user with SYSTEM_ADMIN role
+                        admin_user = None
+                        for user in users_data.get("items", []):
+                            if (
+                                user.get("api_role") == "SYSTEM_ADMIN"
+                                and user.get("username") == "admin"
+                            ):
+                                admin_user = user
+                                break
+
+                        if not admin_user:
+                            logger.warning(f"No admin user found on port {port}")
+                            continue
+
+                        admin_user_id = admin_user["user_id"]
+
+                        # Reset the admin password
+                        password_url = f"http://localhost:{port}/v1/users/{admin_user_id}/password"
+                        password_data = {
+                            "current_password": "ciris_admin_password",  # Default password after reset
+                            "new_password": new_password,
+                        }
+
+                        password_response = await client.put(
+                            password_url, headers=headers, json=password_data
+                        )
+
+                        if password_response.status_code == 200:
+                            logger.info(
+                                f"Successfully reset admin password for {self.config.target_agent_id} "
+                                f"on port {port}"
+                            )
+                            return  # Success, exit the loop
+                        else:
+                            logger.warning(
+                                f"Failed to reset password on port {port}: "
+                                f"{password_response.status_code} - {password_response.text}"
+                            )
+
+                except (httpx.ConnectError, httpx.TimeoutException, Exception) as e:
+                    logger.debug(f"Port {port} failed for password reset: {e}")
+                    continue
+
+            logger.warning(
+                f"Could not reset admin password for {self.config.target_agent_id} "
+                f"on any port - agent may not be accessible yet"
+            )
+
+        except Exception as e:
+            logger.error(f"Error resetting admin password: {e}")
+            # Don't fail the reset operation due to password reset issues
 
     async def cleanup_rate_limiter(self) -> None:
         """Clean up old rate limiter entries."""
