@@ -432,6 +432,11 @@ class JailbreakerService:
                 else:
                     logger.info(f"Discovered service token for {self.config.target_agent_id}")
 
+            # Ensure service_token is not None before encryption
+            if not service_token:
+                logger.warning("No valid service token available for encryption")
+                return
+
             # Encrypt the service token using the same encryption as the registry
             encryption = get_token_encryption()
             encrypted_token = encryption.encrypt_token(service_token)
