@@ -242,6 +242,10 @@ class JailbreakerService:
             # Restart the container
             await self._start_container(container_name)
 
+            # Update agent registry with correct service token after reset
+            if self.config.agent_service_token and self.container_manager:
+                await self._update_agent_service_token()
+
             # Optional: Check agent health after restart
             if self.config.agent_service_token:
                 # Wait a moment for the agent to start
@@ -319,6 +323,46 @@ class JailbreakerService:
             stats["user_next_reset"] = self.rate_limiter.get_next_user_reset(user_id)
 
         return stats
+
+    async def _update_agent_service_token(self) -> None:
+        """
+        Update the agent registry with the correct service token after reset.
+
+        This ensures that CIRISManager uses the same service token that jailbreaker
+        is configured with, preventing authentication failures after agent resets.
+        """
+        try:
+            from ciris_manager.crypto import get_token_encryption
+
+            # Get the agent registry from container manager
+            if not hasattr(self.container_manager, "agent_registry"):
+                logger.warning("Container manager has no agent_registry, skipping token update")
+                return
+
+            agent_registry = self.container_manager.agent_registry
+
+            # Encrypt the jailbreaker service token using the same encryption as the registry
+            encryption = get_token_encryption()
+            encrypted_token = encryption.encrypt_token(self.config.agent_service_token)
+
+            # Update the agent registry
+            success = agent_registry.update_agent_token(
+                self.config.target_agent_id, encrypted_token
+            )
+
+            if success:
+                logger.info(
+                    f"Updated agent registry service token for {self.config.target_agent_id} "
+                    f"to match jailbreaker token"
+                )
+            else:
+                logger.error(
+                    f"Failed to update agent registry service token for {self.config.target_agent_id}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error updating agent service token in registry: {e}")
+            # Don't fail the reset operation due to token update issues
 
     async def cleanup_rate_limiter(self) -> None:
         """Clean up old rate limiter entries."""
