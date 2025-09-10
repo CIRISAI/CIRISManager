@@ -12,20 +12,25 @@ import logging
 import jwt
 import sqlite3
 from contextlib import contextmanager
+from pydantic import BaseModel
 
 from ciris_manager.models import OAuthToken, OAuthUser, OAuthSession
 
 logger = logging.getLogger(__name__)
 
 
-class TokenResponse:
+class TokenResponse(BaseModel):
     """OAuth token response."""
 
-    def __init__(self, access_token: str, user: OAuthUser):
-        self.access_token = access_token
-        self.token_type = "Bearer"  # nosec B105 - Not a password, OAuth standard
-        self.expires_in = 86400  # 24 hours
-        self.user = user.model_dump()
+    access_token: str
+    token_type: str = "Bearer"  # nosec B105 - Not a password, OAuth standard
+    expires_in: int = 86400  # 24 hours
+    user: Dict[str, Any]
+
+    @classmethod
+    def create(cls, access_token: str, user: OAuthUser) -> "TokenResponse":
+        """Create TokenResponse from access token and user."""
+        return cls(access_token=access_token, user=user.model_dump())
 
 
 class OAuthProvider(Protocol):
