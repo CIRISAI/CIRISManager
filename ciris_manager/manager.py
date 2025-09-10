@@ -826,11 +826,11 @@ echo "Permissions fixed. Agent should now be able to start."
             except ImportError as e:
                 logger.warning(f"Could not mount v2 API: {e}")
 
-                # Load OAuth configuration
-                if not load_oauth_config():
-                    logger.warning("OAuth not configured. Authentication will not work.")
-                else:
-                    logger.info("OAuth configured successfully")
+            # Load OAuth configuration
+            if not load_oauth_config():
+                logger.warning("OAuth not configured. Authentication will not work.")
+            else:
+                logger.info("OAuth configured successfully")
 
             # Add OAuth callback redirect for Google Console compatibility
             from fastapi import Request
