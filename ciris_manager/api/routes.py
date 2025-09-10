@@ -2389,13 +2389,14 @@ def create_routes(manager: Any) -> APIRouter:
                         logger.error(f"Failed to stop container {container_name}: {e}")
                         raise
 
-            container_manager = SimpleContainerManager()
-            print("CRITICAL DEBUG: Created simple container manager", flush=True)
+            # Use the real manager instance instead of SimpleContainerManager
+            # so that jailbreaker can update the agent registry service tokens
+            print("CRITICAL DEBUG: Using real manager for jailbreaker", flush=True)
 
             jailbreaker_service = JailbreakerService(
                 config=jailbreaker_config,
                 agent_dir=agents_dir,
-                container_manager=container_manager,
+                container_manager=manager,
             )
             logger.info("Jailbreaker service created")
 
