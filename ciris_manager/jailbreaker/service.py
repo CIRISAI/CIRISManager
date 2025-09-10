@@ -350,14 +350,21 @@ class JailbreakerService:
         try:
             from ciris_manager.crypto import get_token_encryption
 
-            # Get the agent registry from deployment orchestrator's manager
+            # Get the agent registry from deployment orchestrator
             agent_registry = None
             if hasattr(self.container_manager, "manager") and hasattr(
                 self.container_manager.manager, "agent_registry"
             ):
+                # Standard manager path
                 agent_registry = self.container_manager.manager.agent_registry
             elif hasattr(self.container_manager, "agent_registry"):
+                # Direct access for simple container managers
                 agent_registry = self.container_manager.agent_registry
+            else:
+                logger.warning(
+                    f"Container manager type: {type(self.container_manager)}, "
+                    f"has manager: {hasattr(self.container_manager, 'manager')}"
+                )
 
             if not agent_registry:
                 logger.warning("Agent registry not available, skipping token update")
