@@ -284,6 +284,9 @@ class JailbreakerService:
             if self.config.agent_service_token and self.container_manager:
                 await self._update_agent_service_token()
 
+            # Reset authentication cache and detect new auth format
+            await self._reset_auth_and_detect_format()
+
             # Optional: Check agent health after restart
             if self.config.agent_service_token:
                 # Wait a moment for the agent to start
@@ -491,6 +494,55 @@ class JailbreakerService:
         except Exception as e:
             logger.error(f"Error resetting admin password: {e}")
             # Don't fail the reset operation due to password reset issues
+
+    async def _reset_auth_and_detect_format(self) -> None:
+        """
+        Reset authentication cache and detect the correct auth format for the agent.
+
+        This uses the same authentication system as the main manager to properly
+        handle service token format detection after a container reset.
+        """
+        try:
+            from ciris_manager.agent_auth import get_agent_auth
+
+            # Get the agent registry to use the main manager's auth system
+            agent_registry = None
+            if hasattr(self.container_manager, "manager") and hasattr(
+                self.container_manager.manager, "agent_registry"
+            ):
+                agent_registry = self.container_manager.manager.agent_registry
+
+            if not agent_registry:
+                logger.warning("Agent registry not available, skipping auth format detection")
+                return
+
+            # Get the main manager's auth system
+            auth = get_agent_auth(agent_registry)
+
+            # Reset circuit breaker and auth cache for this agent
+            was_circuit_open = auth.reset_circuit_breaker(self.config.target_agent_id)
+            if was_circuit_open:
+                logger.info(f"Reset circuit breaker for {self.config.target_agent_id}")
+
+            # Wait a moment for the agent to be ready
+            await asyncio.sleep(2)
+
+            # Detect the correct authentication format
+            logger.info(f"Detecting auth format for {self.config.target_agent_id}")
+            auth_format = auth.detect_auth_format(self.config.target_agent_id)
+
+            if auth_format:
+                logger.info(
+                    f"Successfully detected {auth_format} auth format for {self.config.target_agent_id}"
+                )
+            else:
+                logger.warning(
+                    f"Could not detect working auth format for {self.config.target_agent_id}"
+                )
+
+        except Exception as e:
+            logger.error(f"Error resetting auth and detecting format: {e}")
+            # Don't fail the reset operation due to auth detection issues
 
     async def cleanup_rate_limiter(self) -> None:
         """Clean up old rate limiter entries."""
