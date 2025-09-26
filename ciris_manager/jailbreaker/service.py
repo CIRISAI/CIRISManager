@@ -237,53 +237,36 @@ class JailbreakerService:
                 logger.error(f"Failed to recreate data directory: {e}")
                 raise Exception(f"Could not recreate data directory: {e}")
 
-            # Stop and restart the container using docker-compose
+            # Stop and restart the container using the container manager
             container_name = f"ciris-{self.config.target_agent_id}"
-            agent_dir = self.agent_dir / self.config.target_agent_id
-            compose_file = agent_dir / "docker-compose.yml"
 
-            # Check if compose file exists, if not skip container restart
-            # (This allows tests to run without actual docker-compose files)
-            if not compose_file.exists():
+            # Check if container manager has the required methods
+            if not hasattr(self.container_manager, "stop_container") or not hasattr(
+                self.container_manager, "start_container"
+            ):
                 logger.warning(
-                    f"Docker compose file not found: {compose_file}, skipping container restart"
+                    "Container manager does not have stop_container/start_container methods, skipping container restart"
                 )
                 logger.info(f"Data directory has been reset for {self.config.target_agent_id}")
             else:
                 logger.info(f"Stopping container {container_name}")
 
-                # Stop the container first
-                stop_result = await asyncio.create_subprocess_exec(
-                    "docker-compose",
-                    "-f",
-                    str(compose_file),
-                    "stop",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=str(agent_dir),
-                )
-                await stop_result.communicate()
+                try:
+                    # Stop the container first
+                    await self.container_manager.stop_container(container_name)
+                    logger.info(f"Container {container_name} stopped successfully")
 
-                logger.info(f"Starting container {container_name}")
+                    logger.info(f"Starting container {container_name}")
 
-                # Start it back up
-                start_result = await asyncio.create_subprocess_exec(
-                    "docker-compose",
-                    "-f",
-                    str(compose_file),
-                    "up",
-                    "-d",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=str(agent_dir),
-                )
-                stdout, stderr = await start_result.communicate()
+                    # Start it back up
+                    await self.container_manager.start_container(container_name)
+                    logger.info(
+                        f"Successfully restarted container for {self.config.target_agent_id}"
+                    )
 
-                if start_result.returncode != 0:
-                    logger.error(f"Failed to start container: {stderr.decode()}")
-                    raise RuntimeError(f"Failed to start container: {stderr.decode()}")
-
-                logger.info(f"Successfully restarted container for {self.config.target_agent_id}")
+                except Exception as e:
+                    logger.error(f"Failed to restart container {container_name}: {e}")
+                    raise RuntimeError(f"Failed to restart container: {str(e)}")
 
             # Discover and update agent registry with correct service token after reset
             if self.container_manager:
