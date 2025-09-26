@@ -3377,6 +3377,7 @@ class DeploymentOrchestrator:
 
                     # Run new container with updated image
                     # Use host network to match nginx configuration
+                    # Added proper health check to prevent zombie process accumulation
                     run_result = await asyncio.create_subprocess_exec(
                         "docker",
                         "run",
@@ -3387,6 +3388,16 @@ class DeploymentOrchestrator:
                         "unless-stopped",
                         "--network",
                         "host",  # Use host network to match nginx
+                        "--health-cmd",
+                        "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1",
+                        "--health-interval",
+                        "30s",
+                        "--health-timeout",
+                        "3s",
+                        "--health-retries",
+                        "3",
+                        "--health-start-period",
+                        "5s",
                         gui_image,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
