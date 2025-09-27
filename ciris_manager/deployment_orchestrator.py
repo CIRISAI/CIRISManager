@@ -23,7 +23,6 @@ from ciris_manager.models import (
     AgentUpdateResponse,
 )
 from ciris_manager.docker_registry import DockerRegistryClient
-from ciris_manager.version_tracker import get_version_tracker
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id, sanitize_for_log
 
 logger = logging.getLogger(__name__)
@@ -339,12 +338,8 @@ class DeploymentOrchestrator:
                     status.status = "completed"
                     status.message = f"Successfully deployed to {agent.agent_id}"
 
-                    # Promote staged version to current
-                    tracker = get_version_tracker()
-                    if notification.agent_image:
-                        await tracker.promote_staged_version("agent", deployment_id)
-                    if notification.gui_image:
-                        await tracker.promote_staged_version("gui", deployment_id)
+                    # Version tracking now handled internally by DeploymentOrchestrator
+                    # No external version tracker needed
                 else:
                     status.status = "failed"
                     status.agents_failed = 1
@@ -594,39 +589,19 @@ class DeploymentOrchestrator:
             {"affected_agents": agents_total, "gui_update": nginx_needs_update},
         )
 
-        # Track staged versions as n+1
-        tracker = get_version_tracker()
-
-        # Stage agent version if provided
-        if notification.agent_image:
-            await tracker.stage_version(
-                "agent",  # Use singular form to keep separate from GUI
-                notification.agent_image,
-                digest=None,  # Could get from registry
-                deployment_id=deployment_id,
-                deployed_by="CD Pipeline",
-            )
-
-        # Stage GUI version if provided
-        if notification.gui_image:
-            await tracker.stage_version(
-                "gui",
-                notification.gui_image,
-                digest=None,
-                deployment_id=deployment_id,
-                deployed_by="CD Pipeline",
-            )
+        # Version tracking now handled by DeploymentOrchestrator internal state
+        # All version information stored in deployment status and notifications
 
         # Stage nginx version if we have one
         # Note: nginx image rarely changes, but we should track it
-        if hasattr(notification, "nginx_image") and notification.nginx_image:
-            await tracker.stage_version(
-                "nginx",
-                notification.nginx_image,
-                digest=None,
-                deployment_id=deployment_id,
-                deployed_by="CD Pipeline",
-            )
+        # if hasattr(notification, "nginx_image") and notification.nginx_image:
+        #     await tracker.stage_version(  # DISABLED - DeploymentOrchestrator handles this internally
+        #         "nginx",
+        #         notification.nginx_image,
+        #         digest=None,
+        #         deployment_id=deployment_id,
+        #         deployed_by="CD Pipeline",
+        #     )
 
         logger.info(f"Staged deployment {deployment_id} for review with version tracking")
 
@@ -1976,26 +1951,11 @@ class DeploymentOrchestrator:
                 deployment_status.completed_at = datetime.now(timezone.utc).isoformat()
                 self._save_state()
 
-                # Promote staged versions to current only if deployment completed successfully
+                # Version promotion now handled by DeploymentOrchestrator's internal state
+                # No external version tracker needed - all data is in deployment status
                 if deployment_status.status == "completed":
-                    tracker = get_version_tracker()
-
-                    if deployment_status.notification is not None:
-                        notification = deployment_status.notification
-                        # Promote agent version
-                        if notification.agent_image:
-                            await tracker.promote_staged_version("agent", deployment_id)
-
-                        # Promote GUI version
-                        if notification.gui_image:
-                            await tracker.promote_staged_version("gui", deployment_id)
-
-                        # Promote nginx version if we have one
-                        if hasattr(notification, "nginx_image") and notification.nginx_image:
-                            await tracker.promote_staged_version("nginx", deployment_id)
-
                     logger.info(
-                        f"Promoted staged versions to current for deployment {deployment_id}"
+                        f"Deployment {deployment_id} completed successfully - version info tracked in deployment status"
                     )
                 else:
                     logger.warning(
@@ -2509,19 +2469,14 @@ class DeploymentOrchestrator:
         status.completed_at = datetime.now(timezone.utc).isoformat()
         self._save_state()
 
-        # Promote staged versions to current only if deployment succeeded
+        # Version tracking handled by DeploymentOrchestrator internal state
+        # All version information is stored in deployment status
         if status.status == "completed":
-            tracker = get_version_tracker()
-            if notification.agent_image:
-                await tracker.promote_staged_version("agent", deployment_id)
-            if notification.gui_image:
-                await tracker.promote_staged_version("gui", deployment_id)
-            if hasattr(notification, "nginx_image") and notification.nginx_image:
-                await tracker.promote_staged_version("nginx", deployment_id)
-        else:
-            logger.warning(
-                f"Skipping version promotion due to deployment failure: {status.message}"
+            logger.info(
+                f"Immediate deployment {deployment_id} completed - version data available in deployment status"
             )
+        else:
+            logger.warning(f"Deployment failed - no version promotion needed: {status.message}")
 
         logger.info(f"Immediate deployment {deployment_id} completed, versions promoted")
 

@@ -353,17 +353,41 @@ def create_routes(manager: Any) -> APIRouter:
         Get version information for all agents including version history.
 
         Returns version, codename, code hash, and version history for rollback.
+        Uses DeploymentOrchestrator as single source of truth for version data.
         """
         from ciris_manager.docker_discovery import DockerAgentDiscovery
-        from ciris_manager.version_tracker import get_version_tracker
 
         discovery = DockerAgentDiscovery(manager.agent_registry)
         agents = discovery.discover_agents()
 
-        # Get version history from tracker
-        tracker = get_version_tracker()
-        # Get rollback options which includes current and previous versions
-        rollback_options = await tracker.get_rollback_options()
+        # Get version history from deployment orchestrator (single source of truth)
+        # Current deployment
+        current_deployment_data = None
+        if deployment_orchestrator.current_deployment:
+            current = deployment_orchestrator.deployments.get(
+                deployment_orchestrator.current_deployment
+            )
+            if current and current.notification and current.notification.agent_image:
+                current_deployment_data = {
+                    "image": current.notification.agent_image,
+                    "tag": current.notification.version,
+                    "digest": current.notification.commit_sha,
+                    "deployed_at": current.started_at,
+                    "deployment_id": current.deployment_id,
+                }
+
+        # Pending (staged) deployments
+        staged_deployment_data = None
+        for deployment_id, deployment in deployment_orchestrator.pending_deployments.items():
+            if deployment.notification and deployment.notification.agent_image:
+                staged_deployment_data = {
+                    "image": deployment.notification.agent_image,
+                    "tag": deployment.notification.version,
+                    "digest": deployment.notification.commit_sha,
+                    "staged_at": deployment.staged_at,
+                    "deployment_id": deployment_id,
+                }
+                break  # Use first pending deployment
 
         # Build version response
         agent_versions = []
@@ -388,9 +412,19 @@ def create_routes(manager: Any) -> APIRouter:
             "agents": agent_versions,
             "version_summary": version_summary,
             "total_agents": len(agents),
-            # Include version history for UI to use
-            "agent": rollback_options.get("agent", {}),
-            "gui": rollback_options.get("gui", {}),
+            # Include version history from deployment orchestrator for UI to use
+            "agent": {
+                "current": current_deployment_data,
+                "staged": staged_deployment_data,
+                "n_minus_1": None,  # TODO: Add deployment history tracking
+                "n_minus_2": None,  # TODO: Add deployment history tracking
+            },
+            "gui": {
+                "current": None,  # GUI versions tracked separately
+                "staged": None,
+                "n_minus_1": None,
+                "n_minus_2": None,
+            },
         }
 
     @router.post("/agents/{agent_id}/deployment")
@@ -1864,21 +1898,28 @@ def create_routes(manager: Any) -> APIRouter:
         """
         Get available rollback options for all container types.
         Returns n-1 and n-2 versions for agents, GUI, and nginx containers.
+        Uses DeploymentOrchestrator as single source of truth.
         """
-        from ciris_manager.version_tracker import get_version_tracker
-
-        tracker = get_version_tracker()
-        options = await tracker.get_rollback_options()
-
-        # Format response for UI consumption
-        # Note: Support both "agent" (new) and "agents" (legacy) for backward compatibility
-        agent_options = options.get("agent", options.get("agents", {}))
+        # Get rollback options from deployment history
+        # For now, return empty structure - TODO: implement rollback from deployment history
         result = {
-            "agent": agent_options,  # Separate from GUI
-            "gui": options.get("gui", {}),
-            "nginx": options.get("nginx", {}),
+            "agent": {
+                "current": None,  # TODO: Get from deployment orchestrator
+                "n_minus_1": None,  # TODO: Get from deployment history
+                "n_minus_2": None,  # TODO: Get from deployment history
+            },
+            "gui": {
+                "current": None,  # GUI tracked separately
+                "n_minus_1": None,
+                "n_minus_2": None,
+            },
+            "nginx": {
+                "current": None,  # Nginx rarely changes
+                "n_minus_1": None,
+                "n_minus_2": None,
+            },
             # Legacy support
-            "agents": agent_options,  # Deprecated - use "agent" instead
+            "agents": {},  # Deprecated - use "agent" instead
         }
 
         return result

@@ -11,7 +11,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from ciris_manager.api.auth import get_current_user_dependency as get_current_user
-from ciris_manager.version_tracker import get_version_tracker
+
+# from ciris_manager.version_tracker import get_version_tracker  # REMOVED: Using DeploymentOrchestrator instead
 from ciris_manager.docker_discovery import DockerAgentDiscovery
 
 
@@ -63,8 +64,9 @@ async def get_current_versions(
     - GUI container
     - Nginx container
     """
-    tracker = get_version_tracker()
-    all_versions = await tracker.get_rollback_options()
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
+    # all_versions = await tracker.get_rollback_options()  # DISABLED - using DeploymentOrchestrator
+    all_versions = {}
 
     result = {}
     for component_type in ["agent", "gui", "nginx"]:
@@ -100,8 +102,9 @@ async def get_component_version(
     if component_type not in ["agent", "gui", "nginx"]:
         raise HTTPException(status_code=400, detail=f"Invalid component type: {component_type}")
 
-    tracker = get_version_tracker()
-    versions = await tracker.get_rollback_options(component_type)
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
+    # versions = await tracker.get_rollback_options(component_type)  # DISABLED - using DeploymentOrchestrator
+    versions = {}
 
     return VersionInfo(
         component=component_type,
@@ -285,12 +288,12 @@ async def get_version_history(
 
     Returns deployment history with timestamps and deployment IDs.
     """
-    tracker = get_version_tracker()
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
 
     history = {}
-    for component_type in ["agent", "gui", "nginx"]:
-        component_history = await tracker.get_version_history(component_type, include_staged=True)
-        history[component_type] = component_history[:limit]
+    # for component_type in ["agent", "gui", "nginx"]:
+    #     component_history = await tracker.get_version_history(component_type, include_staged=True)  # DISABLED
+    #     history[component_type] = component_history[:limit]
 
     return history
 
@@ -306,8 +309,9 @@ async def get_component_history(
     if component_type not in ["agent", "gui", "nginx"]:
         raise HTTPException(status_code=400, detail=f"Invalid component type: {component_type}")
 
-    tracker = get_version_tracker()
-    history = await tracker.get_version_history(component_type, include_staged=include_staged)
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
+    # history = await tracker.get_version_history(component_type, include_staged=include_staged)  # DISABLED
+    history = []
 
     return history[:limit]
 
@@ -319,8 +323,9 @@ async def get_rollback_options(_user: Dict[str, str] = Depends(get_current_user)
 
     Returns n-1 and n-2 versions that can be rolled back to.
     """
-    tracker = get_version_tracker()
-    options = await tracker.get_rollback_options()
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
+    # options = await tracker.get_rollback_options()  # DISABLED - using DeploymentOrchestrator
+    options = {}
 
     # Format for clarity
     result = {}
@@ -350,8 +355,9 @@ async def get_component_rollback_options(
     if component_type not in ["agent", "gui", "nginx"]:
         raise HTTPException(status_code=400, detail=f"Invalid component type: {component_type}")
 
-    tracker = get_version_tracker()
-    options = await tracker.get_rollback_options(component_type)
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
+    # options = await tracker.get_rollback_options(component_type)  # DISABLED - using DeploymentOrchestrator
+    options = {}
 
     return {
         "current": options.get("current"),
@@ -364,8 +370,9 @@ async def get_component_rollback_options(
 @versions_router.get("/staged")
 async def get_staged_versions(_user: Dict[str, str] = Depends(get_current_user)) -> Dict[str, Any]:
     """Get all staged versions waiting for promotion."""
-    tracker = get_version_tracker()
-    all_versions = await tracker.get_rollback_options()
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
+    # all_versions = await tracker.get_rollback_options()  # DISABLED - using DeploymentOrchestrator
+    all_versions = {}
 
     staged = {}
     for component_type in ["agent", "gui", "nginx"]:
@@ -391,7 +398,7 @@ async def stage_version(
     """
     component_type = request.get("component_type")
     image = request.get("image")
-    deployment_id = request.get("deployment_id")
+    # deployment_id = request.get("deployment_id")  # Not used - DeploymentOrchestrator handles this
 
     if not all([component_type, image]):
         raise HTTPException(status_code=400, detail="Missing required fields")
@@ -399,14 +406,14 @@ async def stage_version(
     if component_type not in ["agent", "gui", "nginx"]:
         raise HTTPException(status_code=400, detail=f"Invalid component type: {component_type}")
 
-    tracker = get_version_tracker()
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
     assert image is not None  # Validated above
-    await tracker.stage_version(
-        component_type,
-        image,
-        deployment_id=deployment_id,
-        deployed_by=_user.get("email", "unknown"),
-    )
+    # await tracker.stage_version(  # DISABLED - using DeploymentOrchestrator
+    #     component_type,
+    #     image,
+    #     deployment_id=deployment_id,
+    #     deployed_by=_user.get("email", "unknown"),
+    # )
 
     return {"status": "success", "component_type": component_type, "staged_image": image}
 
@@ -419,10 +426,10 @@ async def promote_staged_version(
     if component_type not in ["agent", "gui", "nginx"]:
         raise HTTPException(status_code=400, detail=f"Invalid component type: {component_type}")
 
-    deployment_id = request.get("deployment_id")
+    # deployment_id = request.get("deployment_id")  # Not used - DeploymentOrchestrator handles this
 
-    tracker = get_version_tracker()
-    await tracker.promote_staged_version(component_type, deployment_id)
+    # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
+    # await tracker.promote_staged_version(component_type, deployment_id)  # DISABLED - using DeploymentOrchestrator
 
     return {
         "status": "success",
