@@ -365,10 +365,10 @@ def create_routes(manager: Any) -> APIRouter:
         deployment_orchestrator = get_deployment_orchestrator()
 
         # Build deployment options from all available deployments
-        deployment_options = []
+        deployment_options: List[Dict[str, Any]] = []
 
         # Add current active deployment if exists
-        current_deployment_data = None
+        current_deployment_data: Optional[Dict[str, Any]] = None
         if deployment_orchestrator.current_deployment:
             current = deployment_orchestrator.deployments.get(
                 deployment_orchestrator.current_deployment
@@ -385,7 +385,7 @@ def create_routes(manager: Any) -> APIRouter:
                 deployment_options.append(current_deployment_data)
 
         # Add pending/staged deployments
-        staged_deployment_data = None
+        staged_deployment_data: Optional[Dict[str, Any]] = None
         for deployment_id, deployment in deployment_orchestrator.pending_deployments.items():
             if deployment.notification and deployment.notification.agent_image:
                 staged_deployment_data = {
@@ -400,7 +400,7 @@ def create_routes(manager: Any) -> APIRouter:
                 break  # Use first pending deployment
 
         # Add completed deployments as rollback options (sorted by completion time, newest first)
-        completed_deployments = []
+        completed_deployments: List[Dict[str, Any]] = []
         for deployment_id, deployment in deployment_orchestrator.deployments.items():
             if (
                 deployment.status == "completed"
@@ -425,15 +425,10 @@ def create_routes(manager: Any) -> APIRouter:
         completed_deployments.sort(key=lambda x: x["deployed_at"] or "", reverse=True)
         deployment_options.extend(completed_deployments[:5])
 
-        # If no current deployment, mark the most recent as current for UI compatibility
-        if not current_deployment_data and deployment_options:
-            # Find the most recent deployed version (either staged or most recent completed)
-            if staged_deployment_data:
-                current_deployment_data = staged_deployment_data.copy()
-                current_deployment_data["status"] = "current"
-            elif completed_deployments:
-                current_deployment_data = completed_deployments[0].copy()
-                current_deployment_data["status"] = "current"
+        # If no current deployment, use staged deployment as current for UI compatibility
+        if not current_deployment_data and staged_deployment_data:
+            current_deployment_data = staged_deployment_data.copy()
+            current_deployment_data["status"] = "current"
 
         # Build version response
         agent_versions = []
