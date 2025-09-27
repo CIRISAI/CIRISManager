@@ -356,12 +356,18 @@ def create_routes(manager: Any) -> APIRouter:
         Uses DeploymentOrchestrator as single source of truth for version data.
         """
         from ciris_manager.docker_discovery import DockerAgentDiscovery
+        from ciris_manager.deployment_orchestrator import get_deployment_orchestrator
 
         discovery = DockerAgentDiscovery(manager.agent_registry)
         agents = discovery.discover_agents()
 
         # Get version history from deployment orchestrator (single source of truth)
-        # Current deployment
+        deployment_orchestrator = get_deployment_orchestrator()
+
+        # Build deployment options from all available deployments
+        deployment_options = []
+
+        # Add current active deployment if exists
         current_deployment_data = None
         if deployment_orchestrator.current_deployment:
             current = deployment_orchestrator.deployments.get(
@@ -374,9 +380,11 @@ def create_routes(manager: Any) -> APIRouter:
                     "digest": current.notification.commit_sha,
                     "deployed_at": current.started_at,
                     "deployment_id": current.deployment_id,
+                    "status": "current",
                 }
+                deployment_options.append(current_deployment_data)
 
-        # Pending (staged) deployments
+        # Add pending/staged deployments
         staged_deployment_data = None
         for deployment_id, deployment in deployment_orchestrator.pending_deployments.items():
             if deployment.notification and deployment.notification.agent_image:
@@ -386,8 +394,46 @@ def create_routes(manager: Any) -> APIRouter:
                     "digest": deployment.notification.commit_sha,
                     "staged_at": deployment.staged_at,
                     "deployment_id": deployment_id,
+                    "status": "staged",
                 }
+                deployment_options.append(staged_deployment_data)
                 break  # Use first pending deployment
+
+        # Add completed deployments as rollback options (sorted by completion time, newest first)
+        completed_deployments = []
+        for deployment_id, deployment in deployment_orchestrator.deployments.items():
+            if (
+                deployment.status == "completed"
+                and deployment.notification
+                and deployment.notification.agent_image
+                and deployment_id != deployment_orchestrator.current_deployment
+            ):
+                completed_deployments.append(
+                    {
+                        "image": deployment.notification.agent_image,
+                        "tag": deployment.notification.version,
+                        "digest": deployment.notification.commit_sha,
+                        "deployed_at": deployment.completed_at or deployment.started_at,
+                        "deployment_id": deployment_id,
+                        "status": "available",
+                        "agents_updated": deployment.agents_updated,
+                        "agents_total": deployment.agents_total,
+                    }
+                )
+
+        # Sort completed deployments by completion time (newest first) and take last 5
+        completed_deployments.sort(key=lambda x: x["deployed_at"] or "", reverse=True)
+        deployment_options.extend(completed_deployments[:5])
+
+        # If no current deployment, mark the most recent as current for UI compatibility
+        if not current_deployment_data and deployment_options:
+            # Find the most recent deployed version (either staged or most recent completed)
+            if staged_deployment_data:
+                current_deployment_data = staged_deployment_data.copy()
+                current_deployment_data["status"] = "current"
+            elif completed_deployments:
+                current_deployment_data = completed_deployments[0].copy()
+                current_deployment_data["status"] = "current"
 
         # Build version response
         agent_versions = []
@@ -412,12 +458,14 @@ def create_routes(manager: Any) -> APIRouter:
             "agents": agent_versions,
             "version_summary": version_summary,
             "total_agents": len(agents),
-            # Include version history from deployment orchestrator for UI to use
+            # Full deployment options list for UI selection
+            "deployment_options": deployment_options,
+            # Backward compatibility with legacy UI structure
             "agent": {
                 "current": current_deployment_data,
                 "staged": staged_deployment_data,
-                "n_minus_1": None,  # TODO: Add deployment history tracking
-                "n_minus_2": None,  # TODO: Add deployment history tracking
+                "n_minus_1": completed_deployments[0] if len(completed_deployments) > 0 else None,
+                "n_minus_2": completed_deployments[1] if len(completed_deployments) > 1 else None,
             },
             "gui": {
                 "current": None,  # GUI versions tracked separately
