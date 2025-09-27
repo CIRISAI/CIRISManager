@@ -66,7 +66,7 @@ async def get_current_versions(
     """
     # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
     # all_versions = await tracker.get_rollback_options()  # DISABLED - using DeploymentOrchestrator
-    all_versions = {}
+    all_versions: Dict[str, Any] = {}
 
     result = {}
     for component_type in ["agent", "gui", "nginx"]:
@@ -104,7 +104,7 @@ async def get_component_version(
 
     # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
     # versions = await tracker.get_rollback_options(component_type)  # DISABLED - using DeploymentOrchestrator
-    versions = {}
+    versions: Dict[str, Any] = {}
 
     return VersionInfo(
         component=component_type,
@@ -290,7 +290,7 @@ async def get_version_history(
     """
     # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
 
-    history = {}
+    history: Dict[str, Any] = {}
     # for component_type in ["agent", "gui", "nginx"]:
     #     component_history = await tracker.get_version_history(component_type, include_staged=True)  # DISABLED
     #     history[component_type] = component_history[:limit]
@@ -311,7 +311,7 @@ async def get_component_history(
 
     # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
     # history = await tracker.get_version_history(component_type, include_staged=include_staged)  # DISABLED
-    history = []
+    history: List[Dict[str, Any]] = []
 
     return history[:limit]
 
@@ -325,7 +325,7 @@ async def get_rollback_options(_user: Dict[str, str] = Depends(get_current_user)
     """
     # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
     # options = await tracker.get_rollback_options()  # DISABLED - using DeploymentOrchestrator
-    options = {}
+    options: Dict[str, Any] = {}
 
     # Format for clarity
     result = {}
@@ -357,7 +357,7 @@ async def get_component_rollback_options(
 
     # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
     # options = await tracker.get_rollback_options(component_type)  # DISABLED - using DeploymentOrchestrator
-    options = {}
+    options: Dict[str, Any] = {}
 
     return {
         "current": options.get("current"),
@@ -372,7 +372,7 @@ async def get_staged_versions(_user: Dict[str, str] = Depends(get_current_user))
     """Get all staged versions waiting for promotion."""
     # tracker = get_version_tracker()  # DISABLED - using DeploymentOrchestrator
     # all_versions = await tracker.get_rollback_options()  # DISABLED - using DeploymentOrchestrator
-    all_versions = {}
+    all_versions: Dict[str, Any] = {}
 
     staged = {}
     for component_type in ["agent", "gui", "nginx"]:
