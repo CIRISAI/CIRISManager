@@ -399,13 +399,14 @@ def create_routes(manager: Any) -> APIRouter:
                 deployment_options.append(staged_deployment_data)
                 break  # Use first pending deployment
 
-        # Add completed deployments as rollback options (sorted by completion time, newest first)
+        # Add deployments as rollback options (completed, failed, cancelled - any with valid version data)
         completed_deployments: List[Dict[str, Any]] = []
         for deployment_id, deployment in deployment_orchestrator.deployments.items():
             if (
-                deployment.status == "completed"
+                deployment.status in ["completed", "failed", "cancelled", "rejected"]
                 and deployment.notification
                 and deployment.notification.agent_image
+                and deployment.notification.version  # Must have a version tag
                 and deployment_id != deployment_orchestrator.current_deployment
             ):
                 completed_deployments.append(
@@ -415,7 +416,9 @@ def create_routes(manager: Any) -> APIRouter:
                         "digest": deployment.notification.commit_sha,
                         "deployed_at": deployment.completed_at or deployment.started_at,
                         "deployment_id": deployment_id,
-                        "status": "available",
+                        "status": "available"
+                        if deployment.status == "completed"
+                        else deployment.status,
                         "agents_updated": deployment.agents_updated,
                         "agents_total": deployment.agents_total,
                     }
