@@ -213,24 +213,18 @@ class TestSingleAgentDeployment:
             ) as mock_health:
                 mock_health.return_value = (True, {"successful_agent": "test-agent"})
 
-                # Mock version tracker
-                with patch(
-                    "ciris_manager.deployment_orchestrator.get_version_tracker"
-                ) as mock_tracker:
-                    mock_tracker.return_value.promote_staged_version = AsyncMock()
+                # Mock save state (no version tracker needed - DeploymentOrchestrator handles this internally)
+                with patch.object(orchestrator, "_save_state", new_callable=AsyncMock):
+                    # Execute deployment
+                    await orchestrator._execute_single_agent_deployment(
+                        deployment_id, update_notification, test_agent
+                    )
 
-                    # Mock save state
-                    with patch.object(orchestrator, "_save_state", new_callable=AsyncMock):
-                        # Execute deployment
-                        await orchestrator._execute_single_agent_deployment(
-                            deployment_id, update_notification, test_agent
-                        )
-
-                        # Verify success
-                        assert status.status == "completed"
-                        assert status.agents_updated == 1
-                        assert "Successfully deployed" in status.message
-                        assert orchestrator.current_deployment is None
+                    # Verify success
+                    assert status.status == "completed"
+                    assert status.agents_updated == 1
+                    assert "Successfully deployed" in status.message
+                    assert orchestrator.current_deployment is None
 
     @pytest.mark.asyncio
     async def test_execute_single_agent_deployment_defer(
