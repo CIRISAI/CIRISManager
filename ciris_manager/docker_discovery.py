@@ -202,11 +202,17 @@ class DockerAgentDiscovery:
                     result = response.json()
                     # Handle wrapped response format
                     data = result.get("data", result)
+
+                    # Normalize cognitive state - agents report "AgentState.WORK" but manager expects "WORK"
+                    cognitive_state = data.get("cognitive_state", "")
+                    if cognitive_state and cognitive_state.startswith("AgentState."):
+                        cognitive_state = cognitive_state.replace("AgentState.", "")
+
                     return {
                         "version": data.get("version"),
                         "codename": data.get("codename"),
                         "code_hash": data.get("code_hash"),
-                        "cognitive_state": data.get("cognitive_state"),
+                        "cognitive_state": cognitive_state,
                     }
                 elif response.status_code == 401:
                     # Authentication failed - try to detect correct auth format
@@ -226,11 +232,17 @@ class DockerAgentDiscovery:
                             logger.info(
                                 f"Version discovery successful for {agent_id} after format detection"
                             )
+
+                            # Normalize cognitive state - agents report "AgentState.WORK" but manager expects "WORK"
+                            cognitive_state = data.get("cognitive_state", "")
+                            if cognitive_state and cognitive_state.startswith("AgentState."):
+                                cognitive_state = cognitive_state.replace("AgentState.", "")
+
                             return {
                                 "version": data.get("version"),
                                 "codename": data.get("codename"),
                                 "code_hash": data.get("code_hash"),
-                                "cognitive_state": data.get("cognitive_state"),
+                                "cognitive_state": cognitive_state,
                             }
                         else:
                             # Record auth failure if still failing after detection
