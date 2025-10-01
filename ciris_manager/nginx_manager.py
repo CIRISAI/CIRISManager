@@ -497,6 +497,11 @@ http {
             proxy_read_timeout 300s;
             proxy_connect_timeout 75s;
 
+            # Disable buffering for SSE/streaming responses
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_set_header X-Accel-Buffering no;
+
             # WebSocket support
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
