@@ -3337,6 +3337,10 @@ class DeploymentOrchestrator:
                         "unless-stopped",
                         "--network",
                         "host",  # Use host network to match nginx
+                        "-e",
+                        "NEXT_PUBLIC_API_BASE_URL=https://agents.ciris.ai",
+                        "-e",
+                        "NEXT_TELEMETRY_DISABLED=1",
                         "--health-cmd",
                         "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1",
                         "--health-interval",
