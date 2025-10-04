@@ -169,6 +169,11 @@ jobs:
             # Ensure ciris home directory has proper permissions for group access
             chmod 755 /home/ciris
 
+            # Install/update permission helper (SUID binary for fixing agent permissions)
+            echo "Installing permission helper..."
+            cd /opt/ciris-manager/scripts
+            bash install-permission-helper.sh
+
             # Copy static files for manager UI and jailbreaker
             echo "Deploying static files..."
             mkdir -p /home/ciris/static/manager

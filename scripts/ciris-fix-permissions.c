@@ -32,20 +32,69 @@
 #define CONTAINER_UID 1000
 #define CONTAINER_GID 1000
 
-int fix_directory_permissions(const char* path, mode_t mode) {
-    // Set permissions
-    if (chmod(path, mode) != 0) {
+int fix_directory_permissions_recursive(const char* path, mode_t dir_mode, mode_t file_mode) {
+    // Set permissions on the directory itself
+    if (chmod(path, dir_mode) != 0) {
         fprintf(stderr, "Failed to chmod %s: %s\n", path, strerror(errno));
         return -1;
     }
 
-    // Set ownership
+    // Set ownership on the directory
     if (chown(path, CONTAINER_UID, CONTAINER_GID) != 0) {
         fprintf(stderr, "Failed to chown %s: %s\n", path, strerror(errno));
         return -1;
     }
 
+    // Recursively fix all files and subdirectories
+    DIR* dir = opendir(path);
+    if (dir == NULL) {
+        // Directory might be empty or inaccessible, not necessarily an error
+        return 0;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+        struct stat st;
+        if (lstat(full_path, &st) != 0) {
+            fprintf(stderr, "Failed to stat %s: %s\n", full_path, strerror(errno));
+            continue;
+        }
+
+        // Set ownership
+        if (lchown(full_path, CONTAINER_UID, CONTAINER_GID) != 0) {
+            fprintf(stderr, "Failed to chown %s: %s\n", full_path, strerror(errno));
+            continue;
+        }
+
+        // Set permissions (only for regular files and directories, not symlinks)
+        if (S_ISDIR(st.st_mode)) {
+            // Recursively fix subdirectory
+            fix_directory_permissions_recursive(full_path, dir_mode, file_mode);
+        } else if (S_ISREG(st.st_mode)) {
+            // Fix file permissions
+            if (chmod(full_path, file_mode) != 0) {
+                fprintf(stderr, "Failed to chmod %s: %s\n", full_path, strerror(errno));
+            }
+        }
+    }
+
+    closedir(dir);
     return 0;
+}
+
+int fix_directory_permissions(const char* path, mode_t mode) {
+    // For backward compatibility, call recursive version
+    // Files get 600 (owner read/write) for secure directories
+    mode_t file_mode = (mode == 0700) ? 0600 : 0644;
+    return fix_directory_permissions_recursive(path, mode, file_mode);
 }
 
 int main(int argc, char *argv[]) {
