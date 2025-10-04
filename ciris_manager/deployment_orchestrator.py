@@ -3087,6 +3087,30 @@ class DeploymentOrchestrator:
 
             logger.info(f"Successfully ran docker-compose up for agent {agent_id}")
 
+            # Fix permissions on agent directories to ensure container can access them
+            # The init_permissions.sh script may change ownership during container creation
+            logger.info(f"Fixing permissions for agent {agent_id} directories...")
+            helper_script = Path("/usr/local/bin/ciris-fix-permissions")
+            if helper_script.exists():
+                perm_result = await asyncio.create_subprocess_exec(
+                    str(helper_script),
+                    str(agent_dir),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                perm_stdout, perm_stderr = await perm_result.communicate()
+
+                if perm_result.returncode == 0:
+                    logger.info(f"Successfully fixed permissions for agent {agent_id}")
+                else:
+                    logger.warning(
+                        f"Permission fix failed for agent {agent_id}: {perm_stderr.decode()}"
+                    )
+            else:
+                logger.warning(
+                    f"Permission helper not found at {helper_script}, skipping permission fix"
+                )
+
             # Wait a moment for container to start
             await asyncio.sleep(5)
 
