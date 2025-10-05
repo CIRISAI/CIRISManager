@@ -188,6 +188,10 @@ class DeploymentStatus(BaseModel):
         default_factory=dict,
         description="Agents currently being processed: agent_id -> state (shutting_down, restarting, etc)",
     )
+    canary_assignments: Optional[Dict[str, List[str]]] = Field(
+        default=None,
+        description="Canary group assignments for this deployment: explorers, early_adopters, general",
+    )
 
 
 class AgentUpdateResponse(BaseModel):

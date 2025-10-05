@@ -81,6 +81,9 @@ class DeploymentOrchestrator:
         github_token = os.getenv("GITHUB_TOKEN") or os.getenv("CIRIS_GITHUB_TOKEN")
         self.registry_client = DockerRegistryClient(auth_token=github_token)
 
+        # Validate canary group configuration on startup
+        self._validate_canary_groups()
+
     def _load_state(self) -> None:
         """Load deployment state from persistent storage (sync version for __init__)."""
         if self.deployment_state_file.exists():
@@ -195,6 +198,84 @@ class DeploymentOrchestrator:
         logger.info(
             f"Deployment state saved: {len(self.deployments)} deployments, {len(self.pending_deployments)} pending"
         )
+
+    def _validate_canary_groups(self) -> None:
+        """
+        Validate canary group configuration on startup.
+
+        Checks for common issues like missing explorers, unbalanced groups,
+        or no agents assigned to canary groups.
+        """
+        if not self.manager or not hasattr(self.manager, "agent_registry"):
+            logger.warning("Cannot validate canary groups - no agent registry available")
+            return
+
+        try:
+            groups = self.manager.agent_registry.get_agents_by_canary_group()
+
+            explorers = groups.get("explorer", [])
+            early_adopters = groups.get("early_adopter", [])
+            general = groups.get("general", [])
+            unassigned = groups.get("unassigned", [])
+
+            total_assigned = len(explorers) + len(early_adopters) + len(general)
+            total_agents = total_assigned + len(unassigned)
+
+            if total_agents == 0:
+                logger.info("No agents registered yet - skipping canary validation")
+                return
+
+            # Critical: No explorers
+            if not explorers:
+                logger.error(
+                    "⚠️  CRITICAL: No explorer agents assigned! "
+                    "Canary deployments will skip the explorer phase. "
+                    "This reduces deployment safety."
+                )
+
+            # Critical: No early adopters
+            if not early_adopters:
+                logger.error(
+                    "⚠️  CRITICAL: No early adopter agents assigned! "
+                    "Canary deployments will skip the early adopter phase. "
+                    "This reduces deployment safety."
+                )
+
+            # Warning: Unassigned agents
+            if unassigned:
+                logger.warning(
+                    f"⚠️  {len(unassigned)} agents have no canary group assignment "
+                    f"and will not participate in deployments: "
+                    f"{[a.agent_id for a in unassigned]}"
+                )
+
+            # Warning: Unbalanced distribution
+            if total_assigned > 0:
+                explorer_pct = len(explorers) / total_assigned * 100
+                early_adopter_pct = len(early_adopters) / total_assigned * 100
+
+                if explorer_pct > 20:
+                    logger.warning(
+                        f"⚠️  Explorer group is {explorer_pct:.0f}% of agents "
+                        f"(recommended: 10-15%). Consider moving some to general."
+                    )
+
+                if early_adopter_pct > 30:
+                    logger.warning(
+                        f"⚠️  Early adopter group is {early_adopter_pct:.0f}% of agents "
+                        f"(recommended: 15-25%). Consider moving some to general."
+                    )
+
+            # Info: Current distribution
+            logger.info(
+                f"Canary group distribution: "
+                f"{len(explorers)} explorers ({[a.agent_id for a in explorers]}), "
+                f"{len(early_adopters)} early adopters ({[a.agent_id for a in early_adopters]}), "
+                f"{len(general)} general ({[a.agent_id for a in general]})"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to validate canary groups: {e}")
 
     def _add_event(
         self, deployment_id: str, event_type: str, message: str, details: Optional[dict] = None
@@ -2272,6 +2353,19 @@ class DeploymentOrchestrator:
             status.status = "failed"
             self._save_state()
             return
+
+        # Record canary assignments for this deployment (for debugging and audit trail)
+        status.canary_assignments = {
+            "explorers": [a.agent_id for a in explorers],
+            "early_adopters": [a.agent_id for a in early_adopters],
+            "general": [a.agent_id for a in general],
+        }
+        self._save_state()
+
+        logger.info(
+            f"Deployment {deployment_id}: Canary groups - "
+            f"{len(explorers)} explorers, {len(early_adopters)} early adopters, {len(general)} general"
+        )
 
         # Phase 1: Explorers (if any)
         from ciris_manager.audit import audit_deployment_action
