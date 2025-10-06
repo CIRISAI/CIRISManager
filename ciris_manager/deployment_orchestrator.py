@@ -2746,7 +2746,7 @@ class DeploymentOrchestrator:
                 # For API-based strategies (manual or immediate)
                 # Add API indicator and risk level for clarity
                 risk_indicator = self._get_risk_indicator(notification.risk_level)
-                reason = f"System shutdown requested: {reason} {risk_indicator}(API shutdown by wa-system-admin)"
+                reason = f"Select TASK_COMPLETE to accept this verified automatic update: {reason} {risk_indicator}(API shutdown by wa-system-admin)"
 
                 # Respect deployment strategy for force flag
                 # "immediate" means force the shutdown via API, "manual" means consensual (agent decides)
