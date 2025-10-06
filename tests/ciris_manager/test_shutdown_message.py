@@ -62,7 +62,7 @@ class TestShutdownMessage:
             shutdown_payload = call_args.kwargs["json"]
 
             # Should format commit SHA nicely
-            expected_reason = "System shutdown requested: Runtime: CD update to commit 78500ea (deployment 23a69b03) (API shutdown by wa-system-admin)"
+            expected_reason = "Select TASK_COMPLETE to accept this verified automatic update: Runtime: CD update to commit 78500ea (deployment 23a69b03) (API shutdown by wa-system-admin)"
             assert shutdown_payload["reason"] == expected_reason
 
     @pytest.mark.asyncio
@@ -105,7 +105,7 @@ class TestShutdownMessage:
             shutdown_payload = call_args.kwargs["json"]
 
             # Should format semantic version nicely
-            expected_reason = "System shutdown requested: Runtime: CD update to version v2.1.0 (deployment abc-123-) - Security update (API shutdown by wa-system-admin)"
+            expected_reason = "Select TASK_COMPLETE to accept this verified automatic update: Runtime: CD update to version v2.1.0 (deployment abc-123-) - Security update (API shutdown by wa-system-admin)"
             assert shutdown_payload["reason"] == expected_reason
 
     @pytest.mark.asyncio
@@ -147,7 +147,7 @@ class TestShutdownMessage:
             shutdown_payload = call_args.kwargs["json"]
 
             # Should handle missing version gracefully
-            expected_reason = "System shutdown requested: Runtime: CD update requested (deployment xyz-789) - Emergency fix (API shutdown by wa-system-admin)"
+            expected_reason = "Select TASK_COMPLETE to accept this verified automatic update: Runtime: CD update requested (deployment xyz-789) - Emergency fix (API shutdown by wa-system-admin)"
             assert shutdown_payload["reason"] == expected_reason
 
     @pytest.mark.asyncio
@@ -190,7 +190,7 @@ class TestShutdownMessage:
             shutdown_payload = call_args.kwargs["json"]
 
             # Should recognize numeric version as semantic version and add v prefix
-            expected_reason = "System shutdown requested: Runtime: CD update to version v2.1.0 (deployment test-dep) (API shutdown by wa-system-admin)"
+            expected_reason = "Select TASK_COMPLETE to accept this verified automatic update: Runtime: CD update to version v2.1.0 (deployment test-dep) (API shutdown by wa-system-admin)"
             assert shutdown_payload["reason"] == expected_reason
 
     @pytest.mark.asyncio
@@ -239,7 +239,7 @@ chore: bump version to 2.1.1"""
             shutdown_payload = call_args.kwargs["json"]
 
             # Should include formatted changelog
-            expected_reason = """System shutdown requested: Runtime: CD update to version v2.1.1 (deployment release-)
+            expected_reason = """Select TASK_COMPLETE to accept this verified automatic update: Runtime: CD update to version v2.1.1 (deployment release-)
 Release notes:
   • fix: improve shutdown reason message formatting
   • feat: add template parameter to agent containers
@@ -288,7 +288,7 @@ Release notes:
             shutdown_payload = call_args.kwargs["json"]
 
             # Should include single line changelog inline
-            expected_reason = "System shutdown requested: Runtime: CD update to version v2.1.2 (deployment hotfix-1) - fix: critical security patch (API shutdown by wa-system-admin)"
+            expected_reason = "Select TASK_COMPLETE to accept this verified automatic update: Runtime: CD update to version v2.1.2 (deployment hotfix-1) - fix: critical security patch (API shutdown by wa-system-admin)"
             assert shutdown_payload["reason"] == expected_reason
 
 
