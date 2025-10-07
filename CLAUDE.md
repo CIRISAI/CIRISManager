@@ -272,7 +272,8 @@ To get the decrypted service token for a specific agent (useful for external too
 ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
 
 # Use CIRISManager's crypto system to decrypt tokens properly
-cd /opt/ciris-manager && env MANAGER_JWT_SECRET="_AFlp77JRC55GooNp4BxfS7jIuDWlbhzJcRxPzjE00E=" CIRIS_ENCRYPTION_SALT="ciris_production_salt_2024" ./venv/bin/python3 -c "
+# Note: Replace [REDACTED] with actual values from production environment
+cd /opt/ciris-manager && env MANAGER_JWT_SECRET="[REDACTED]" CIRIS_ENCRYPTION_SALT="[REDACTED]" ./venv/bin/python3 -c "
 import sys
 import json
 sys.path.insert(0, '/opt/ciris-manager')
@@ -303,18 +304,18 @@ else:
 "
 ```
 
-**Example for common agents:**
+**Example output format:**
 ```bash
-# Get token for echo-nemesis
+# Example for echo-nemesis
 Agent ID: echo-nemesis-v2tyey
 Port: 8009
-Service Token: ciris_system_admin_28JOuDXr-FObu3zV00R9faGFw0HdnOx9R9FatwGdKxg
+Service Token: [REDACTED-EXAMPLE-TOKEN-abc123]
 API Endpoint: https://agents.ciris.ai/api/echo-nemesis-v2tyey/v1/
 
-# Get token for datum
+# Example for datum
 Agent ID: datum
 Port: 8001
-Service Token: [use script above with agent_id = 'datum']
+Service Token: [REDACTED-EXAMPLE-TOKEN-xyz789]
 API Endpoint: https://agents.ciris.ai/api/datum/v1/
 ```
 
