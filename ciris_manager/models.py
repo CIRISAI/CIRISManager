@@ -198,6 +198,9 @@ class AgentUpdateResponse(BaseModel):
     """Agent's response to update request."""
 
     agent_id: str = Field(..., description="Agent identifier")
-    decision: str = Field(..., description="Update decision: accept, defer, reject")
+    decision: str = Field(
+        ...,
+        description="Update decision: accept, defer, reject, skipped (maintenance mode), notified (delayed shutdown)",
+    )
     reason: Optional[str] = Field(None, description="Reason for decision")
     ready_at: Optional[str] = Field(None, description="When agent will be ready (if deferred)")

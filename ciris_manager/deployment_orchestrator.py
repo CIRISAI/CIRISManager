@@ -2923,26 +2923,107 @@ class DeploymentOrchestrator:
                     )
 
         except httpx.ConnectError as e:
-            # Agent not reachable, might already be shutting down
+            # Agent not reachable - could be stopped, shutting down, or in maintenance
             logger.warning(
-                f"Agent {agent.agent_id} not reachable: {e}. Assuming it may be shutting down."
+                f"Agent {agent.agent_id} not reachable: {e}. Checking maintenance status..."
             )
-            audit_deployment_action(
-                deployment_id=deployment_id,
-                action="connection_error",
-                success=True,  # We treat this as success since agent may be shutting down
-                details={
-                    "agent_id": agent.agent_id,
-                    "error": str(e),
-                    "note": "Agent unreachable, shutdown status unknown",
-                },
+
+            # Check if agent is in maintenance mode
+            agent_info = (
+                self.manager.agent_registry.get_agent(agent.agent_id) if self.manager else None
             )
-            return AgentUpdateResponse(
-                agent_id=agent.agent_id,
-                decision="notified",  # Changed to "notified" since we can't confirm
-                reason="Agent not reachable (possibly already shutting down)",
-                ready_at=None,
-            )
+            in_maintenance = agent_info and agent_info.do_not_autostart
+
+            if in_maintenance:
+                # Agent is in maintenance mode - skip it entirely
+                logger.info(f"Agent {agent.agent_id} is in maintenance mode - skipping deployment")
+                audit_deployment_action(
+                    deployment_id=deployment_id,
+                    action="skipped_maintenance",
+                    success=True,
+                    details={
+                        "agent_id": agent.agent_id,
+                        "note": "Agent in maintenance mode (do_not_autostart=true)",
+                    },
+                )
+                return AgentUpdateResponse(
+                    agent_id=agent.agent_id,
+                    decision="skipped",
+                    reason="Agent in maintenance mode",
+                    ready_at=None,
+                )
+            else:
+                # Agent is stopped but NOT in maintenance - update it
+                logger.info(
+                    f"Agent {agent.agent_id} is stopped but not in maintenance mode - updating and starting"
+                )
+
+                # Update agent metadata with new image digests
+                if self.manager:
+                    await self._update_agent_metadata(agent.agent_id, notification)
+                    logger.debug(f"Updated metadata for stopped agent {agent.agent_id}")
+
+                # Track that this agent is pending restart
+                deployment = self.deployments[deployment_id]
+                if agent.agent_id not in deployment.agents_pending_restart:
+                    deployment.agents_pending_restart.append(agent.agent_id)
+                deployment.agents_in_progress[agent.agent_id] = "restarting_stopped"
+                self._save_state()
+
+                # Recreate container with new image
+                logger.info(f"Recreating stopped agent {agent.agent_id} with new image...")
+                recreated = await self._recreate_agent_container(agent.agent_id)
+
+                if recreated:
+                    # Remove from pending and in-progress
+                    if agent.agent_id in deployment.agents_pending_restart:
+                        deployment.agents_pending_restart.remove(agent.agent_id)
+                    if agent.agent_id in deployment.agents_in_progress:
+                        del deployment.agents_in_progress[agent.agent_id]
+                    self._save_state()
+
+                    audit_deployment_action(
+                        deployment_id=deployment_id,
+                        action="stopped_agent_updated",
+                        success=True,
+                        details={
+                            "agent_id": agent.agent_id,
+                            "note": "Stopped agent updated and started with new image",
+                        },
+                    )
+
+                    logger.info(f"Successfully updated and started stopped agent {agent.agent_id}")
+                    return AgentUpdateResponse(
+                        agent_id=agent.agent_id,
+                        decision="accept",
+                        reason="Stopped agent updated and started with new image",
+                        ready_at=None,
+                    )
+                else:
+                    # Mark as failed
+                    if agent.agent_id in deployment.agents_pending_restart:
+                        deployment.agents_pending_restart.remove(agent.agent_id)
+                    if agent.agent_id in deployment.agents_in_progress:
+                        del deployment.agents_in_progress[agent.agent_id]
+                    self._save_state()
+
+                    audit_deployment_action(
+                        deployment_id=deployment_id,
+                        action="stopped_agent_update_failed",
+                        success=False,
+                        details={
+                            "agent_id": agent.agent_id,
+                            "note": "Failed to recreate stopped agent container",
+                        },
+                    )
+
+                    logger.error(f"Failed to update stopped agent {agent.agent_id}")
+                    return AgentUpdateResponse(
+                        agent_id=agent.agent_id,
+                        decision="reject",
+                        reason="Failed to recreate stopped agent container",
+                        ready_at=None,
+                    )
         except Exception as e:
             logger.error(f"Failed to update agent {agent.agent_id}: {e}", exc_info=True)
             audit_deployment_action(
