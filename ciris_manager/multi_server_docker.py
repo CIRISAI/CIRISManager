@@ -83,6 +83,11 @@ class MultiServerDockerClient:
 
             logger.debug(f"Creating remote Docker client for {server_id} at {server.docker_host}")
 
+            # Type assertions for mypy - we've already checked these are not None
+            assert server.tls_cert is not None
+            assert server.tls_key is not None
+            assert server.tls_ca is not None
+
             tls_config = TLSConfig(
                 client_cert=(server.tls_cert, server.tls_key),
                 ca_cert=server.tls_ca,
