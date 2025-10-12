@@ -271,3 +271,67 @@ class TestComposeGenerator:
 
             service = compose["services"]["agent-test"]
             assert service["ports"] == [f"{port}:8080"]
+
+    def test_generate_compose_with_billing_enabled(self, generator, temp_agent_dir):
+        """Test compose generation with billing enabled."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            billing_enabled=True,
+            billing_api_key="test-billing-key-abc123",
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        assert env["CIRIS_BILLING_ENABLED"] == "true"
+        assert env["CIRIS_BILLING_API_KEY"] == "test-billing-key-abc123"
+
+    def test_generate_compose_with_billing_disabled(self, generator, temp_agent_dir):
+        """Test compose generation with billing disabled (default)."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            billing_enabled=False,
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        assert env["CIRIS_BILLING_ENABLED"] == "false"
+        assert "CIRIS_BILLING_API_KEY" not in env
+
+    def test_generate_compose_billing_default(self, generator, temp_agent_dir):
+        """Test compose generation with default billing settings."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        # Should default to false
+        assert env["CIRIS_BILLING_ENABLED"] == "false"
+        assert "CIRIS_BILLING_API_KEY" not in env
+
+    def test_generate_compose_billing_enabled_without_key(self, generator, temp_agent_dir):
+        """Test compose generation with billing enabled but no API key provided."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            billing_enabled=True,
+            billing_api_key=None,
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        # Should still set enabled flag
+        assert env["CIRIS_BILLING_ENABLED"] == "true"
+        # But no API key should be present
+        assert "CIRIS_BILLING_API_KEY" not in env

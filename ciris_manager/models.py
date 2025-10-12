@@ -124,6 +124,12 @@ class CreateAgentRequest(BaseModel):
     wa_review_completed: Optional[bool] = Field(
         None, description="WA review completed for Tier 4/5 agents"
     )
+    billing_enabled: Optional[bool] = Field(
+        False, description="Enable paid billing with Stripe (default: false, uses free credits)"
+    )
+    billing_api_key: Optional[str] = Field(
+        None, description="Billing API key (required when billing_enabled=true)"
+    )
 
 
 class UpdateNotification(BaseModel):

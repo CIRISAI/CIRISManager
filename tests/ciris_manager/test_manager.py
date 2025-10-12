@@ -293,6 +293,96 @@ class TestCIRISManager:
         assert result["status"] == "starting"
 
     @pytest.mark.asyncio
+    async def test_create_agent_with_billing_enabled(self, manager):
+        """Test creating agent with billing enabled."""
+        # Set required environment variables for encryption
+        import os
+
+        os.environ["MANAGER_JWT_SECRET"] = "test-secret-key-for-testing-only"
+        os.environ["CIRIS_ENCRYPTION_SALT"] = "test-salt-sixteen-chars"
+
+        # Mock template verifier
+        manager.template_verifier.is_pre_approved = AsyncMock(return_value=True)
+
+        # Mock subprocess for docker-compose
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_subprocess.return_value = mock_process
+
+            # Also mock subprocess.run for sudo chown
+            with patch("subprocess.run"):
+                # Create agent with billing enabled
+                result = await manager.create_agent(
+                    template="scout",
+                    name="Scout",
+                    billing_enabled=True,
+                    billing_api_key="test-billing-key-abc123",
+                )
+
+        # Verify result
+        assert result["agent_id"].startswith("scout-")
+        assert result["status"] == "starting"
+
+        # Verify agent registered
+        agent = manager.agent_registry.get_agent(result["agent_id"])
+        assert agent is not None
+
+        # Verify compose file was created with billing environment variables
+        compose_file = Path(agent.compose_file)
+        assert compose_file.exists()
+
+        # Read and verify compose file content
+        import yaml
+
+        with open(compose_file) as f:
+            compose_config = yaml.safe_load(f)
+
+        env = compose_config["services"][result["agent_id"]]["environment"]
+        assert env["CIRIS_BILLING_ENABLED"] == "true"
+        assert env["CIRIS_BILLING_API_KEY"] == "test-billing-key-abc123"
+
+    @pytest.mark.asyncio
+    async def test_create_agent_with_billing_disabled(self, manager):
+        """Test creating agent with billing disabled (default)."""
+        # Set required environment variables for encryption
+        import os
+
+        os.environ["MANAGER_JWT_SECRET"] = "test-secret-key-for-testing-only"
+        os.environ["CIRIS_ENCRYPTION_SALT"] = "test-salt-sixteen-chars"
+
+        # Mock template verifier
+        manager.template_verifier.is_pre_approved = AsyncMock(return_value=True)
+
+        # Mock subprocess for docker-compose
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_subprocess.return_value = mock_process
+
+            # Also mock subprocess.run for sudo chown
+            with patch("subprocess.run"):
+                # Create agent with billing explicitly disabled
+                result = await manager.create_agent(
+                    template="scout", name="Scout", billing_enabled=False
+                )
+
+        # Verify compose file was created with billing disabled
+        agent = manager.agent_registry.get_agent(result["agent_id"])
+        compose_file = Path(agent.compose_file)
+
+        import yaml
+
+        with open(compose_file) as f:
+            compose_config = yaml.safe_load(f)
+
+        env = compose_config["services"][result["agent_id"]]["environment"]
+        assert env["CIRIS_BILLING_ENABLED"] == "false"
+        assert "CIRIS_BILLING_API_KEY" not in env
+
+    @pytest.mark.asyncio
     async def test_create_agent_template_not_found(self, manager):
         """Test creating agent with non-existent template."""
         # Should raise ValueError

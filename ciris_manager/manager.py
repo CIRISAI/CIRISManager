@@ -154,6 +154,8 @@ class CIRISManager:
         wa_signature: Optional[str] = None,
         use_mock_llm: Optional[bool] = None,
         enable_discord: Optional[bool] = None,
+        billing_enabled: Optional[bool] = None,
+        billing_api_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a new agent.
@@ -165,6 +167,8 @@ class CIRISManager:
             wa_signature: WA signature for non-approved templates
             use_mock_llm: Whether to use mock LLM (None = use default)
             enable_discord: Whether to enable Discord adapter (None = auto-detect)
+            billing_enabled: Whether to enable paid billing (None = use default: False)
+            billing_api_key: Billing API key (required if billing_enabled=True)
 
         Returns:
             Agent creation result
@@ -362,6 +366,8 @@ echo "Permissions fixed. Agent should now be able to start."
         actual_use_mock_llm = use_mock_llm if use_mock_llm is not None else True
         # Default to auto-detect Discord if not specified
         actual_enable_discord = enable_discord if enable_discord is not None else False
+        # Default to billing disabled if not specified
+        actual_billing_enabled = billing_enabled if billing_enabled is not None else False
 
         compose_config = self.compose_generator.generate_compose(
             agent_id=agent_id,
@@ -372,6 +378,8 @@ echo "Permissions fixed. Agent should now be able to start."
             environment=environment,
             use_mock_llm=actual_use_mock_llm,
             enable_discord=actual_enable_discord,
+            billing_enabled=actual_billing_enabled,
+            billing_api_key=billing_api_key,
         )
 
         # Write compose file

@@ -38,6 +38,8 @@ class ComposeGenerator:
         use_mock_llm: bool = True,
         enable_discord: bool = False,
         oauth_volume: str = "/home/ciris/shared/oauth",
+        billing_enabled: bool = False,
+        billing_api_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate docker-compose configuration for an agent.
@@ -52,6 +54,8 @@ class ComposeGenerator:
             use_mock_llm: Whether to use mock LLM
             enable_discord: Whether to enable Discord adapter
             oauth_volume: Path to shared OAuth configuration
+            billing_enabled: Whether to enable paid billing (default: False)
+            billing_api_key: Billing API key (required if billing_enabled=True)
 
         Returns:
             Docker compose configuration dict
@@ -68,6 +72,14 @@ class ComposeGenerator:
 
         if use_mock_llm:
             base_env["CIRIS_MOCK_LLM"] = "true"
+
+        # Add billing configuration
+        if billing_enabled:
+            base_env["CIRIS_BILLING_ENABLED"] = "true"
+            if billing_api_key:
+                base_env["CIRIS_BILLING_API_KEY"] = billing_api_key
+        else:
+            base_env["CIRIS_BILLING_ENABLED"] = "false"
 
         # Merge with additional environment
         if environment:

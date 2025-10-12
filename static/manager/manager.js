@@ -2549,6 +2549,18 @@ function openOAuthDocs() {
     window.open('https://docs.ciris.ai/oauth-setup', '_blank');
 }
 
+// Toggle billing API key section
+function toggleBillingApiKey() {
+    const billingCheckbox = document.getElementById('settings-billing-enabled');
+    const billingSection = document.getElementById('billing-config-section');
+
+    if (billingCheckbox.checked) {
+        billingSection.classList.remove('hidden');
+    } else {
+        billingSection.classList.add('hidden');
+    }
+}
+
 // Show agent settings modal
 async function showAgentSettings(agentId) {
     const modal = document.getElementById('agent-settings-modal');
@@ -2556,7 +2568,9 @@ async function showAgentSettings(agentId) {
     const mockLlmCheckbox = document.getElementById('settings-mock-llm');
     const discordCheckbox = document.getElementById('settings-discord');
     const maintenanceModeCheckbox = document.getElementById('settings-maintenance-mode');
+    const billingCheckbox = document.getElementById('settings-billing-enabled');
     const discordSection = document.getElementById('discord-config-section');
+    const billingSection = document.getElementById('billing-config-section');
     
     // Set agent ID in modal
     agentIdSpan.textContent = agentId;
@@ -2585,18 +2599,29 @@ async function showAgentSettings(agentId) {
             mockLlmCheckbox.checked = config.environment?.CIRIS_MOCK_LLM !== 'false';
             const adapters = config.environment?.CIRIS_ADAPTER || 'api';
             discordCheckbox.checked = adapters.includes('discord');
-            
+            billingCheckbox.checked = config.environment?.CIRIS_BILLING_ENABLED === 'true';
+
             // Show/hide Discord section
             if (discordCheckbox.checked) {
                 discordSection.classList.remove('hidden');
             } else {
                 discordSection.classList.add('hidden');
             }
+
+            // Show/hide Billing section
+            if (billingCheckbox.checked) {
+                billingSection.classList.remove('hidden');
+            } else {
+                billingSection.classList.add('hidden');
+            }
             
             // Populate Discord settings
             if (config.environment) {
                 document.getElementById('discord-server-id').value = config.environment.DISCORD_SERVER_ID || '';
                 document.getElementById('discord-bot-token').value = config.environment.DISCORD_BOT_TOKEN || '';
+
+                // Populate Billing settings
+                document.getElementById('settings-billing-api-key').value = config.environment.CIRIS_BILLING_API_KEY || '';
                 document.getElementById('discord-channel-ids').value = config.environment.DISCORD_CHANNEL_IDS || '';
                 document.getElementById('discord-deferral-channel').value = config.environment.DISCORD_DEFERRAL_CHANNEL_ID || '';
                 document.getElementById('wa-user-ids').value = config.environment.WA_USER_IDS || config.environment.WA_USER_ID || '';
@@ -2811,16 +2836,26 @@ async function saveAgentSettings(event, silent = false) {
     const mockLlm = document.getElementById('settings-mock-llm').checked;
     const discordAdapter = document.getElementById('settings-discord').checked;
     const maintenanceMode = document.getElementById('settings-maintenance-mode').checked;
-    
+    const billingEnabled = document.getElementById('settings-billing-enabled').checked;
+
     try {
         // Prepare configuration update
         const configUpdate = {
             environment: {}
         };
-        
+
         // Quick settings
         configUpdate.environment.CIRIS_MOCK_LLM = mockLlm ? 'true' : 'false';
         configUpdate.environment.CIRIS_ENABLE_DISCORD = discordAdapter ? 'true' : 'false';
+        configUpdate.environment.CIRIS_BILLING_ENABLED = billingEnabled ? 'true' : 'false';
+
+        // Billing configuration (if enabled)
+        if (billingEnabled) {
+            const billingApiKey = document.getElementById('settings-billing-api-key').value;
+            if (billingApiKey) {
+                configUpdate.environment.CIRIS_BILLING_API_KEY = billingApiKey;
+            }
+        }
         
         // Discord configuration (if enabled)
         if (discordAdapter) {
@@ -2916,22 +2951,32 @@ async function saveAgentSettings(event, silent = false) {
 // Save agent settings without restarting the container
 async function saveAgentSettingsWithoutRestart(event) {
     event.preventDefault();
-    
+
     const agentId = document.getElementById('settings-agent-id').dataset.agentId;
     const mockLlm = document.getElementById('settings-mock-llm').checked;
     const discordAdapter = document.getElementById('settings-discord').checked;
     const maintenanceMode = document.getElementById('settings-maintenance-mode').checked;
-    
+    const billingEnabled = document.getElementById('settings-billing-enabled').checked;
+
     try {
         // Prepare configuration update
         const configUpdate = {
             environment: {},
             restart: false  // Key difference - tell API not to restart
         };
-        
+
         // Quick settings
         configUpdate.environment.CIRIS_MOCK_LLM = mockLlm ? 'true' : 'false';
         configUpdate.environment.CIRIS_ENABLE_DISCORD = discordAdapter ? 'true' : 'false';
+        configUpdate.environment.CIRIS_BILLING_ENABLED = billingEnabled ? 'true' : 'false';
+
+        // Billing configuration (if enabled)
+        if (billingEnabled) {
+            const billingApiKey = document.getElementById('settings-billing-api-key').value;
+            if (billingApiKey) {
+                configUpdate.environment.CIRIS_BILLING_API_KEY = billingApiKey;
+            }
+        }
         
         // Discord configuration (if enabled)
         if (discordAdapter) {

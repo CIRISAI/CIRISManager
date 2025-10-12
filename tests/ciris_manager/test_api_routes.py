@@ -205,7 +205,7 @@ class TestAPIRoutes:
         assert data["port"] == 8081
         assert data["status"] == "starting"
 
-        # Verify create_agent was called correctly
+        # Verify create_agent was called correctly (includes billing params from model defaults)
         mock_manager.create_agent.assert_called_once_with(
             template="scout",
             name="Scout",
@@ -213,7 +213,107 @@ class TestAPIRoutes:
             wa_signature=None,
             use_mock_llm=None,
             enable_discord=None,
+            billing_enabled=False,
+            billing_api_key=None,
         )
+
+    def test_create_agent_with_billing_enabled(self, client, mock_manager):
+        """Test agent creation with billing enabled."""
+        mock_manager.create_agent.return_value = {
+            "agent_id": "agent-scout",
+            "container": "ciris-agent-scout",
+            "port": 8081,
+            "api_endpoint": "http://localhost:8081",
+            "compose_file": "/path/to/compose.yml",
+            "status": "starting",
+        }
+
+        response = client.post(
+            "/manager/v1/agents",
+            json={
+                "template": "scout",
+                "name": "Scout",
+                "billing_enabled": True,
+                "billing_api_key": "test-billing-key-abc123",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["agent_id"] == "agent-scout"
+
+        # Verify create_agent was called with billing parameters
+        mock_manager.create_agent.assert_called_once_with(
+            template="scout",
+            name="Scout",
+            environment={},
+            wa_signature=None,
+            use_mock_llm=None,
+            enable_discord=None,
+            billing_enabled=True,
+            billing_api_key="test-billing-key-abc123",
+        )
+
+    def test_create_agent_with_billing_disabled(self, client, mock_manager):
+        """Test agent creation with billing disabled."""
+        mock_manager.create_agent.return_value = {
+            "agent_id": "agent-scout",
+            "container": "ciris-agent-scout",
+            "port": 8081,
+            "api_endpoint": "http://localhost:8081",
+            "compose_file": "/path/to/compose.yml",
+            "status": "starting",
+        }
+
+        response = client.post(
+            "/manager/v1/agents",
+            json={
+                "template": "scout",
+                "name": "Scout",
+                "billing_enabled": False,
+            },
+        )
+
+        assert response.status_code == 200
+
+        # Verify billing_enabled=False was passed
+        mock_manager.create_agent.assert_called_once_with(
+            template="scout",
+            name="Scout",
+            environment={},
+            wa_signature=None,
+            use_mock_llm=None,
+            enable_discord=None,
+            billing_enabled=False,
+            billing_api_key=None,
+        )
+
+    def test_create_agent_billing_defaults_to_false(self, client, mock_manager):
+        """Test that billing defaults to False when not specified."""
+        mock_manager.create_agent.return_value = {
+            "agent_id": "agent-scout",
+            "container": "ciris-agent-scout",
+            "port": 8081,
+            "api_endpoint": "http://localhost:8081",
+            "compose_file": "/path/to/compose.yml",
+            "status": "starting",
+        }
+
+        response = client.post(
+            "/manager/v1/agents",
+            json={
+                "template": "scout",
+                "name": "Scout",
+            },
+        )
+
+        assert response.status_code == 200
+
+        # Verify billing was not passed (will use model default which is False)
+        call_kwargs = mock_manager.create_agent.call_args.kwargs
+        # billing_enabled should be False (from model default)
+        assert not call_kwargs.get("billing_enabled")
+        assert call_kwargs.get("billing_api_key") is None
 
     def test_create_agent_with_wa_signature(self, client, mock_manager):
         """Test agent creation with WA signature."""
@@ -239,6 +339,8 @@ class TestAPIRoutes:
             wa_signature="test_signature",
             use_mock_llm=None,
             enable_discord=None,
+            billing_enabled=False,
+            billing_api_key=None,
         )
 
     def test_create_agent_invalid_template(self, client, mock_manager):

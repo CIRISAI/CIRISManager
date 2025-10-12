@@ -586,6 +586,8 @@ def create_routes(manager: Any) -> APIRouter:
                 wa_signature=agent_request.wa_signature,
                 use_mock_llm=agent_request.use_mock_llm,
                 enable_discord=agent_request.enable_discord,
+                billing_enabled=agent_request.billing_enabled,
+                billing_api_key=agent_request.billing_api_key,
             )
 
             logger.info(f"Agent {result['agent_id']} created by {user['email']}")
