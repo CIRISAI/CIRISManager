@@ -229,17 +229,36 @@ All I/O operations use async/await for non-blocking execution:
 ## Production Deployment
 
 ### Production Server Access
+
+**Main Server (agents.ciris.ai):**
 ```bash
-# SSH connection details
 ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
 
 # Note: Use IP address for SSH, not domain (Cloudflare proxied)
 # Domain: agents.ciris.ai
-# IP: 108.61.119.117
+# Public IP: 108.61.119.117
 # User: root
 # Key: ~/.ssh/ciris_deploy
 
 # CIRIS deployment location: /opt/ciris
+```
+
+**Scout Server (scoutapi.ciris.ai):**
+```bash
+ssh -i ~/.ssh/ciris_deploy root@207.148.14.113
+
+# Independent container host for additional agent capacity
+# Domain: scoutapi.ciris.ai
+# Public IP: 207.148.14.113
+# VPC IP: 10.2.96.4 (for Docker API access from main server)
+# User: root
+# Key: ~/.ssh/ciris_deploy
+
+# Architecture:
+# - Runs own nginx container for scoutapi.ciris.ai
+# - Hosts agent containers managed remotely by main CIRISManager
+# - Docker API exposed on VPC IP:2376 with TLS
+# - Cloudflare routes scoutapi.ciris.ai traffic directly here (not via main)
 ```
 
 ### Agent API Authentication

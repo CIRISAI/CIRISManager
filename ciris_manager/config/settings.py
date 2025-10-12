@@ -96,6 +96,30 @@ class AuthConfig(BaseModel):
     )
 
 
+class ServerConfig(BaseModel):
+    """Configuration for a remote agent host server."""
+
+    server_id: str = Field(description="Unique identifier for the server (e.g., 'main', 'scout')")
+    hostname: str = Field(description="Public hostname (e.g., 'scout.ciris.ai')")
+    is_local: bool = Field(default=False, description="Whether this is the local server")
+    vpc_ip: Optional[str] = Field(
+        default=None, description="VPC private IP for Docker API access (e.g., '10.2.96.4')"
+    )
+    docker_host: Optional[str] = Field(
+        default=None,
+        description="Docker API endpoint (e.g., 'tcp://10.2.96.4:2376' or None for local socket)",
+    )
+    tls_ca: Optional[str] = Field(
+        default=None, description="Path to TLS CA certificate for Docker API"
+    )
+    tls_cert: Optional[str] = Field(
+        default=None, description="Path to TLS client certificate for Docker API"
+    )
+    tls_key: Optional[str] = Field(
+        default=None, description="Path to TLS client key for Docker API"
+    )
+
+
 class CIRISManagerConfig(BaseModel):
     """Complete CIRISManager configuration."""
 
@@ -107,6 +131,29 @@ class CIRISManagerConfig(BaseModel):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     updates: UpdateConfig = Field(default_factory=UpdateConfig)
     container_management: ContainerConfig = Field(default_factory=ContainerConfig)
+    servers: List[ServerConfig] = Field(
+        default_factory=lambda: [
+            ServerConfig(
+                server_id="main",
+                hostname="agents.ciris.ai",
+                is_local=True,
+                vpc_ip=None,
+                docker_host=None,  # Use local socket
+            ),
+            # Example remote server (uncomment and configure to enable):
+            # ServerConfig(
+            #     server_id="scout",
+            #     hostname="scoutapi.ciris.ai",
+            #     is_local=False,
+            #     vpc_ip="10.2.96.4",
+            #     docker_host="tcp://10.2.96.4:2376",
+            #     tls_ca="/etc/ciris-manager/docker-certs/scoutapi.ciris.ai/ca.pem",
+            #     tls_cert="/etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-cert.pem",
+            #     tls_key="/etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-key.pem",
+            # ),
+        ],
+        description="List of agent host servers (main + remote servers)",
+    )
 
     @classmethod
     def from_file(cls, path: str) -> "CIRISManagerConfig":

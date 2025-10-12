@@ -32,6 +32,7 @@ class RegisteredAgent:
         last_work_state_at: Optional[str] = None,
         version_transitions: Optional[List[Dict[str, Any]]] = None,
         do_not_autostart: Optional[bool] = None,
+        server_id: Optional[str] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -49,6 +50,7 @@ class RegisteredAgent:
         self.last_work_state_at = last_work_state_at
         self.version_transitions = version_transitions or []
         self.do_not_autostart = do_not_autostart or False
+        self.server_id = server_id or "main"  # Default to main server for backward compatibility
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -65,6 +67,7 @@ class RegisteredAgent:
             "last_work_state_at": self.last_work_state_at,
             "version_transitions": self.version_transitions,
             "do_not_autostart": self.do_not_autostart,
+            "server_id": self.server_id,
         }
 
     @classmethod
@@ -84,6 +87,7 @@ class RegisteredAgent:
             last_work_state_at=data.get("last_work_state_at"),
             version_transitions=data.get("version_transitions", []),
             do_not_autostart=data.get("do_not_autostart", False),
+            server_id=data.get("server_id", "main"),  # Default to main for backward compatibility
         )
 
 
@@ -153,6 +157,7 @@ class AgentRegistry:
         template: str,
         compose_file: str,
         service_token: Optional[str] = None,
+        server_id: str = "main",
     ) -> RegisteredAgent:
         """
         Register a new agent.
@@ -163,6 +168,8 @@ class AgentRegistry:
             port: Allocated port number
             template: Template used to create agent
             compose_file: Path to docker-compose.yml
+            service_token: Encrypted service token for authentication
+            server_id: Server hosting the agent (default: "main")
 
         Returns:
             Created RegisteredAgent object
@@ -175,6 +182,7 @@ class AgentRegistry:
                 template=template,
                 compose_file=compose_file,
                 service_token=service_token,
+                server_id=server_id,
             )
 
             agent.service_token = service_token
@@ -182,7 +190,7 @@ class AgentRegistry:
             self.agents[agent_id] = agent
             self._save_metadata()
 
-            logger.info(f"Registered agent: {agent_id} on port {port}")
+            logger.info(f"Registered agent: {agent_id} on port {port} (server: {server_id})")
             return agent
 
     def unregister_agent(self, agent_id: str) -> Optional[RegisteredAgent]:
