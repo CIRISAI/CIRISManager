@@ -62,6 +62,46 @@ class TestRegisteredAgent:
         assert data["compose_file"] == "/path/to/compose.yml"
         assert "created_at" in data
         assert "agent_id" not in data  # Not included in dict
+        assert data["server_id"] == "main"  # Default server
+
+    def test_server_id_default(self):
+        """Test that server_id defaults to 'main'."""
+        agent = RegisteredAgent(
+            agent_id="agent-test",
+            name="Test",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+        )
+
+        assert agent.server_id == "main"
+
+    def test_server_id_explicit(self):
+        """Test setting explicit server_id."""
+        agent = RegisteredAgent(
+            agent_id="agent-test",
+            name="Test",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            server_id="scout",
+        )
+
+        assert agent.server_id == "scout"
+
+    def test_server_id_in_to_dict(self):
+        """Test server_id is included in dict."""
+        agent = RegisteredAgent(
+            agent_id="agent-test",
+            name="Test",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            server_id="scout",
+        )
+
+        data = agent.to_dict()
+        assert data["server_id"] == "scout"
 
     def test_from_dict(self):
         """Test creating AgentInfo from dict."""
@@ -80,6 +120,22 @@ class TestRegisteredAgent:
         assert agent.template == "scout"
         assert agent.compose_file == "/path/to/compose.yml"
         assert agent.created_at == "2025-01-21T10:00:00Z"
+        assert agent.server_id == "main"  # Default when not in dict
+
+    def test_from_dict_with_server_id(self):
+        """Test creating AgentInfo from dict with server_id."""
+        data = {
+            "name": "Test",
+            "port": 8080,
+            "template": "scout",
+            "compose_file": "/path/to/compose.yml",
+            "created_at": "2025-01-21T10:00:00Z",
+            "server_id": "scout",
+        }
+
+        agent = RegisteredAgent.from_dict("agent-test", data)
+        assert agent.agent_id == "agent-test"
+        assert agent.server_id == "scout"
 
 
 class TestAgentRegistry:
@@ -121,6 +177,7 @@ class TestAgentRegistry:
         assert agent.port == 8081
         assert agent.template == "scout"
         assert agent.compose_file == "/etc/agents/scout/docker-compose.yml"
+        assert agent.server_id == "main"  # Default server
 
         # Verify in registry
         assert "agent-scout" in registry.agents
@@ -128,6 +185,24 @@ class TestAgentRegistry:
 
         # Verify metadata saved
         assert registry.metadata_path.exists()
+
+    def test_register_agent_with_server_id(self, registry):
+        """Test agent registration with explicit server_id."""
+        agent = registry.register_agent(
+            agent_id="agent-scout",
+            name="Scout",
+            port=8081,
+            template="scout",
+            compose_file="/etc/agents/scout/docker-compose.yml",
+            server_id="scout",
+        )
+
+        assert agent.agent_id == "agent-scout"
+        assert agent.server_id == "scout"
+
+        # Verify in registry
+        assert "agent-scout" in registry.agents
+        assert registry.agents["agent-scout"].server_id == "scout"
 
     def test_unregister_agent(self, registry):
         """Test agent unregistration."""
