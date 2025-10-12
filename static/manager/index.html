@@ -65,6 +65,9 @@
                         <button onclick="switchTab('canary')" id="canary-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
                             Canary Groups
                         </button>
+                        <button onclick="switchTab('servers')" id="servers-tab" class="py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-server mr-1"></i>Servers
+                        </button>
                     </nav>
                 </div>
 
@@ -283,6 +286,103 @@
                                 </div>
                             </div>
 
+                        </div>
+                    </div>
+
+                    <!-- Servers Tab -->
+                    <div id="servers-content" class="hidden">
+                        <div class="space-y-6">
+                            <!-- Server Overview -->
+                            <div>
+                                <h3 class="text-lg font-semibold mb-4">Server Infrastructure</h3>
+                                <div id="servers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <!-- Server cards will be populated here -->
+                                </div>
+                            </div>
+
+                            <!-- Selected Server Details -->
+                            <div id="server-details-section" class="hidden">
+                                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <i class="fas fa-server text-blue-600"></i>
+                                    <span id="server-details-name">Server Details</span>
+                                </h3>
+
+                                <!-- Server Stats -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-sm text-blue-600 font-medium">CPU Usage</p>
+                                                <p id="server-cpu" class="text-2xl font-bold text-blue-900">--%</p>
+                                            </div>
+                                            <i class="fas fa-microchip text-3xl text-blue-400"></i>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-sm text-green-600 font-medium">Memory</p>
+                                                <p id="server-memory" class="text-2xl font-bold text-green-900">--GB</p>
+                                            </div>
+                                            <i class="fas fa-memory text-3xl text-green-400"></i>
+                                        </div>
+                                        <p id="server-memory-total" class="text-xs text-green-600 mt-1">of --GB</p>
+                                    </div>
+
+                                    <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-sm text-purple-600 font-medium">Disk Usage</p>
+                                                <p id="server-disk" class="text-2xl font-bold text-purple-900">--GB</p>
+                                            </div>
+                                            <i class="fas fa-hdd text-3xl text-purple-400"></i>
+                                        </div>
+                                        <p id="server-disk-total" class="text-xs text-purple-600 mt-1">of --GB</p>
+                                    </div>
+
+                                    <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border border-orange-200">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-sm text-orange-600 font-medium">Agents</p>
+                                                <p id="server-agent-count" class="text-2xl font-bold text-orange-900">0</p>
+                                            </div>
+                                            <i class="fas fa-robot text-3xl text-orange-400"></i>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Server Information -->
+                                <div class="bg-gray-50 p-4 rounded-lg mb-6">
+                                    <h4 class="font-medium text-gray-700 mb-3">Server Information</h4>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span class="text-gray-600">Hostname:</span>
+                                            <span id="server-hostname" class="font-mono ml-2">-</span>
+                                        </div>
+                                        <div>
+                                            <span class="text-gray-600">Access Method:</span>
+                                            <span id="server-access" class="ml-2">-</span>
+                                        </div>
+                                        <div>
+                                            <span class="text-gray-600">Public IP:</span>
+                                            <span id="server-public-ip" class="font-mono ml-2">-</span>
+                                        </div>
+                                        <div>
+                                            <span class="text-gray-600">VPC IP:</span>
+                                            <span id="server-vpc-ip" class="font-mono ml-2">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Agents on Server -->
+                                <div>
+                                    <h4 class="font-medium text-gray-700 mb-3">Agents Hosted on This Server</h4>
+                                    <div id="server-agents-list" class="space-y-2">
+                                        <!-- Agent list will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

@@ -27,6 +27,23 @@ docker:
   registry: ghcr.io/cirisai    # Container registry
   image: ciris-agent:latest    # Default agent image
 
+# Multi-server configuration (optional)
+servers:
+  - server_id: main            # Primary server (local)
+    hostname: localhost
+    is_local: true             # Uses local Docker socket
+
+  # Example remote server configuration:
+  # - server_id: remote
+  #   hostname: remote.example.com
+  #   is_local: false
+  #   public_ip: 1.2.3.4
+  #   vpc_ip: 10.0.0.5         # Optional VPC private IP
+  #   docker_host: https://10.0.0.5:2376
+  #   tls_ca: /path/to/ca.pem
+  #   tls_cert: /path/to/cert.pem
+  #   tls_key: /path/to/key.pem
+
 # Port allocation
 ports:
   start: 8000                  # First port for agents

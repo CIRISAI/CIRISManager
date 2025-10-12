@@ -525,7 +525,12 @@ function switchTab(tab) {
     if (tab === 'canary') {
         fetchCanaryData();
     }
-    
+
+    // Fetch server data when switching to servers tab
+    if (tab === 'servers') {
+        fetchServerData();
+    }
+
     // Dashboard has been moved to external CIRISLens service
 }
 
@@ -4097,7 +4102,7 @@ async function confirmRollback() {
 function showNotification(message, type = 'info') {
     const alertDiv = document.getElementById('error-alert');
     const messageSpan = document.getElementById('error-message');
-    
+
     messageSpan.textContent = message;
     alertDiv.className = `mb-6 px-4 py-3 rounded border ${
         type === 'success' ? 'bg-green-50 border-green-200 text-green-700' :
@@ -4105,9 +4110,167 @@ function showNotification(message, type = 'info') {
         'bg-blue-50 border-blue-200 text-blue-700'
     }`;
     alertDiv.classList.remove('hidden');
-    
+
     // Auto-hide after 5 seconds
     setTimeout(() => {
         alertDiv.classList.add('hidden');
     }, 5000);
+}
+
+// ============================================================================
+// Server Management Functions
+// ============================================================================
+
+let servers = [];
+let selectedServer = null;
+
+// Fetch server data
+async function fetchServerData() {
+    try {
+        const token = localStorage.getItem('managerToken');
+        const response = await fetch('/manager/v1/servers', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch servers');
+
+        servers = await response.json();
+        renderServerCards();
+    } catch (error) {
+        console.error('Error fetching servers:', error);
+        showAlert('Failed to load server data', 'error');
+    }
+}
+
+// Render server cards
+function renderServerCards() {
+    const grid = document.getElementById('servers-grid');
+    if (!grid) return;
+
+    if (servers.length === 0) {
+        grid.innerHTML = '<p class="text-gray-600">No servers configured</p>';
+        return;
+    }
+
+    grid.innerHTML = servers.map(server => {
+        const statusColor = server.healthy ? 'green' : 'red';
+        const statusIcon = server.healthy ? 'check-circle' : 'exclamation-circle';
+        const accessType = server.is_local ? 'Local (Docker Socket)' : 'Remote (TLS)';
+
+        return `
+            <div class="bg-white border-2 border-gray-200 rounded-lg p-4 hover:border-blue-400 cursor-pointer transition-colors"
+                 onclick="selectServer('${server.server_id}')">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="font-semibold text-lg">${server.server_id}</h4>
+                    <i class="fas fa-${statusIcon} text-${statusColor}-500"></i>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center text-gray-600">
+                        <i class="fas fa-globe w-5"></i>
+                        <span class="font-mono">${server.hostname}</span>
+                    </div>
+                    <div class="flex items-center text-gray-600">
+                        <i class="fas fa-network-wired w-5"></i>
+                        <span>${accessType}</span>
+                    </div>
+                    <div class="flex items-center text-gray-600">
+                        <i class="fas fa-robot w-5"></i>
+                        <span>${server.agent_count} agent(s)</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Select a server to view details
+async function selectServer(serverId) {
+    selectedServer = serverId;
+
+    try {
+        const token = localStorage.getItem('managerToken');
+
+        // Fetch server details
+        const detailsResponse = await fetch(`/manager/v1/servers/${serverId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!detailsResponse.ok) throw new Error('Failed to fetch server details');
+        const details = await detailsResponse.json();
+
+        // Fetch server stats
+        const statsResponse = await fetch(`/manager/v1/servers/${serverId}/stats`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!statsResponse.ok) throw new Error('Failed to fetch server stats');
+        const stats = await statsResponse.json();
+
+        // Fetch agents on this server
+        const agentsResponse = await fetch(`/manager/v1/servers/${serverId}/agents`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!agentsResponse.ok) throw new Error('Failed to fetch server agents');
+        const serverAgents = await agentsResponse.json();
+
+        // Display server details
+        displayServerDetails(details, stats, serverAgents);
+
+    } catch (error) {
+        console.error('Error loading server details:', error);
+        showAlert('Failed to load server details', 'error');
+    }
+}
+
+// Display server details
+function displayServerDetails(details, stats, serverAgents) {
+    const section = document.getElementById('server-details-section');
+    section.classList.remove('hidden');
+
+    // Update server name
+    document.getElementById('server-details-name').textContent = `${details.server_id} Details`;
+
+    // Update stats
+    const cpuUsage = stats.cpu_percent?.toFixed(1) || '--';
+    const memUsedGB = stats.memory_used_gb?.toFixed(1) || '--';
+    const memTotalGB = stats.memory_total_gb?.toFixed(1) || '--';
+    const diskUsedGB = stats.disk_used_gb?.toFixed(1) || '--';
+    const diskTotalGB = stats.disk_total_gb?.toFixed(1) || '--';
+
+    document.getElementById('server-cpu').textContent = `${cpuUsage}%`;
+    document.getElementById('server-memory').textContent = `${memUsedGB}GB`;
+    document.getElementById('server-memory-total').textContent = `of ${memTotalGB}GB`;
+    document.getElementById('server-disk').textContent = `${diskUsedGB}GB`;
+    document.getElementById('server-disk-total').textContent = `of ${diskTotalGB}GB`;
+    document.getElementById('server-agent-count').textContent = serverAgents.length;
+
+    // Update server information
+    document.getElementById('server-hostname').textContent = details.hostname;
+    document.getElementById('server-access').textContent = details.is_local ? 'Local (Docker Socket)' : 'Remote (Docker TLS)';
+    document.getElementById('server-public-ip').textContent = details.public_ip || 'N/A';
+    document.getElementById('server-vpc-ip').textContent = details.vpc_ip || 'N/A';
+
+    // Render agents list
+    const agentsList = document.getElementById('server-agents-list');
+    if (serverAgents.length === 0) {
+        agentsList.innerHTML = '<p class="text-gray-600 text-sm">No agents on this server</p>';
+    } else {
+        agentsList.innerHTML = serverAgents.map(agent => {
+            const statusColor = agent.status === 'running' ? 'green' : 'gray';
+            return `
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-2 rounded-full bg-${statusColor}-500"></div>
+                        <div>
+                            <p class="font-medium">${agent.agent_name}</p>
+                            <p class="text-xs text-gray-500">${agent.agent_id}</p>
+                        </div>
+                    </div>
+                    <div class="text-sm">
+                        <span class="px-2 py-1 bg-${statusColor}-100 text-${statusColor}-700 rounded-full text-xs">
+                            ${agent.status}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
 }

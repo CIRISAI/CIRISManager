@@ -22,6 +22,7 @@ class CreateAgentRequest(BaseModel):
     template: str
     deployment: str = "CIRIS_DISCORD_PILOT"
     environment: Optional[Dict[str, str]] = None
+    server_id: Optional[str] = None
 
 
 class AgentConfig(BaseModel):
@@ -93,7 +94,10 @@ async def create_agent(
 
     # Create agent
     result = await manager.create_agent(
-        template=request.template, name=request.name, environment=request.environment
+        template=request.template,
+        name=request.name,
+        environment=request.environment,
+        server_id=request.server_id,
     )
 
     if not result.get("success"):

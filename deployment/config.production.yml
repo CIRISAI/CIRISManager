@@ -25,6 +25,25 @@ docker:
   image: ciris-agent:latest
   network_name: ciris-network
 
+# Multi-server configuration
+servers:
+  - server_id: main
+    hostname: agents.ciris.ai
+    is_local: true
+    # Local server uses Docker socket directly
+
+  - server_id: scout
+    hostname: scoutapi.ciris.ai
+    is_local: false
+    public_ip: 207.148.14.113
+    vpc_ip: 10.2.96.4
+    docker_host: https://10.2.96.4:2376
+    tls_ca: /opt/ciris-manager/certs/scout/ca.pem
+    tls_cert: /opt/ciris-manager/certs/scout/cert.pem
+    tls_key: /opt/ciris-manager/certs/scout/key.pem
+    # Note: Scout server runs its own nginx for scoutapi.ciris.ai domain
+    # TLS certificates must be installed in /opt/ciris-manager/certs/scout/
+
 # Watchdog configuration
 watchdog:
   enabled: true

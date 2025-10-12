@@ -182,6 +182,7 @@ class CIRISManager:
         enable_discord: Optional[bool] = None,
         billing_enabled: Optional[bool] = None,
         billing_api_key: Optional[str] = None,
+        server_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a new agent.
@@ -195,6 +196,7 @@ class CIRISManager:
             enable_discord: Whether to enable Discord adapter (None = auto-detect)
             billing_enabled: Whether to enable paid billing (None = use default: False)
             billing_api_key: Billing API key (required if billing_enabled=True)
+            server_id: Target server ID (defaults to 'main')
 
         Returns:
             Agent creation result
@@ -204,9 +206,31 @@ class CIRISManager:
             PermissionError: WA signature required but not provided
         """
         start_time = time.time()
-        agent_logger.info(f"Starting agent creation - name: {name}, template: {template}")
+
+        # Default to main server if not specified
+        target_server_id = server_id or "main"
+
+        # Validate server exists
+        if target_server_id not in self.docker_client.servers:
+            available_servers = ", ".join(self.docker_client.list_servers())
+            raise ValueError(
+                f"Unknown server '{target_server_id}'. Available servers: {available_servers}"
+            )
+
+        server_config = self.docker_client.get_server_config(target_server_id)
+        agent_logger.info(
+            f"Starting agent creation - name: {name}, template: {template}, "
+            f"server: {target_server_id} ({server_config.hostname})"
+        )
         log_agent_operation(
-            "create_start", agent_id="pending", details={"agent_name": name, "template": template}
+            "create_start",
+            agent_id="pending",
+            details={
+                "agent_name": name,
+                "template": template,
+                "server_id": target_server_id,
+                "server_hostname": server_config.hostname,
+            },
         )
         # Validate inputs - prevent path traversal
         import re
@@ -274,92 +298,13 @@ class CIRISManager:
             dir_path.chmod(permissions)
             logger.info(f"Created directory {dir_path} with permissions {oct(permissions)}")
 
-        # Change ownership to match container's ciris user (uid=1000, gid=1000)
-        # IMPORTANT: Container ciris user is 1000, not 1005 like host ciris user!
-        # Try to set ownership using subprocess with sudo (if available)
+        # NOTE: We defer ownership changes until AFTER all files are written
+        # This ensures the manager can write docker-compose.yml and init scripts
         import os
         import subprocess
         import shutil
 
-        try:
-            # Try to change ownership to uid 1000 (container user)
-            # The ciris-manager user has sudo access to chown without password
-            # per /etc/sudoers.d/ciris-manager configuration
-
-            # Use sudo chown which should work with our sudoers config
-            # Note: This works even with NoNewPrivileges=true in systemd
-            # because sudo is a separate process with its own privileges
-
-            # Method 1: Try sudo chown (most reliable)
-            logger.debug(f"Attempting sudo chown for {agent_dir}")
-            result = subprocess.run(
-                ["sudo", "chown", "-R", "1000:1000", str(agent_dir)], capture_output=True, text=True
-            )
-
-            if result.returncode == 0:
-                logger.info(f"Successfully set ownership to uid:gid 1000:1000 for {agent_dir}")
-            else:
-                logger.warning(f"sudo chown failed for {agent_dir}:")
-                logger.warning(f"  Return code: {result.returncode}")
-                if result.stdout:
-                    logger.warning(f"  stdout: {result.stdout}")
-                if result.stderr:
-                    logger.warning(f"  stderr: {result.stderr}")
-
-                # Method 2: Try direct chown (works if running as root)
-                logger.debug("Attempting direct os.chown")
-                try:
-                    os.chown(agent_dir, 1000, 1000)
-                    for dir_name in directories.keys():
-                        dir_path = agent_dir / dir_name
-                        os.chown(dir_path, 1000, 1000)
-                    logger.info(f"Successfully set ownership using direct chown for {agent_dir}")
-                except PermissionError as pe:
-                    logger.debug(f"Direct chown failed: {pe}")
-
-                    # Method 3: Try using a setuid helper script if it exists
-                    helper_script = Path("/usr/local/bin/ciris-fix-permissions")
-                    if helper_script.exists():
-                        logger.debug(f"Attempting helper script: {helper_script}")
-                        helper_result = subprocess.run(
-                            [str(helper_script), str(agent_dir)], capture_output=True, text=True
-                        )
-                        if helper_result.returncode == 0:
-                            logger.info(f"Fixed permissions using helper script for {agent_dir}")
-                        else:
-                            logger.warning(f"Helper script failed: {helper_result.stderr}")
-                            raise PermissionError(f"Helper script failed: {helper_result.stderr}")
-                    else:
-                        # Method 4: Try emergency script approach
-                        logger.debug("Attempting emergency script method")
-                        try:
-                            self._run_emergency_permission_fix(agent_dir, agent_id)
-                            logger.info(f"Fixed permissions using emergency script for {agent_dir}")
-                        except Exception as script_error:
-                            logger.debug(f"Emergency script failed: {script_error}")
-                            raise PermissionError(
-                                f"All permission fixing methods failed. Last error: {script_error}"
-                            )
-
-        except Exception as e:
-            logger.warning(
-                f"Could not set ownership to uid 1000 for {agent_dir}: {e}\n"
-                f"Agent may fail to start due to permission issues.\n"
-                f"Manual fix required: sudo chown -R 1000:1000 {agent_dir}"
-            )
-
-            # Write a script to fix permissions that can be run manually
-            fix_script = agent_dir / "fix_permissions.sh"
-            fix_script.write_text(f"""#!/bin/bash
-# Fix permissions for agent {agent_id}
-echo "Fixing permissions for {agent_dir}..."
-chmod 755 {agent_dir}/data {agent_dir}/data_archive {agent_dir}/logs {agent_dir}/config
-chmod 700 {agent_dir}/audit_keys {agent_dir}/.secrets
-chown -R 1000:1000 {agent_dir}/data {agent_dir}/data_archive {agent_dir}/logs {agent_dir}/config {agent_dir}/audit_keys {agent_dir}/.secrets
-echo "Permissions fixed. Agent should now be able to start."
-""")
-            fix_script.chmod(0o755)
-            logger.info(f"Created fix_permissions.sh script in {agent_dir} - run with sudo to fix")
+        # Ownership change deferred to after all files are written (see below)
 
         # Copy init script to agent directory
         init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
@@ -447,6 +392,45 @@ echo "Permissions fixed. Agent should now be able to start."
             except Exception as sudo_error:
                 logger.warning(f"Sudo fallback failed: {sudo_error}")
 
+        # NOW change ownership of data directories to container user (uid 1000)
+        # This happens AFTER all files are written so the manager can create them
+        # The compose file stays owned by ciris-manager so it can be updated later
+        logger.debug("Changing ownership of data directories to container user (1000:1000)")
+        try:
+            # Only change ownership of the data directories, NOT the compose file
+            dirs_to_chown = [
+                agent_dir / "data",
+                agent_dir / "data_archive",
+                agent_dir / "logs",
+                agent_dir / "config",
+                agent_dir / "audit_keys",
+                agent_dir / ".secrets",
+            ]
+
+            # Also include init_permissions.sh if it exists
+            if (agent_dir / "init_permissions.sh").exists():
+                dirs_to_chown.append(agent_dir / "init_permissions.sh")
+
+            # Change ownership of all data directories
+            result = subprocess.run(
+                ["sudo", "chown", "-R", "1000:1000"] + [str(d) for d in dirs_to_chown],
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode == 0:
+                logger.info("Successfully set ownership of data directories to uid:gid 1000:1000")
+            else:
+                logger.warning(f"Failed to set data directory ownership: {result.stderr}")
+                logger.warning(
+                    f"Agent may have permission issues. Manual fix: sudo chown -R 1000:1000 {agent_dir}/data {agent_dir}/logs {agent_dir}/config"
+                )
+        except Exception as e:
+            logger.warning(f"Could not change data directory ownership: {e}")
+            logger.warning(
+                f"Agent may have permission issues. Manual fix: sudo chown -R 1000:1000 {agent_dir}/data {agent_dir}/logs {agent_dir}/config"
+            )
+
         # Register agent
         self.agent_registry.register_agent(
             agent_id=agent_id,
@@ -455,13 +439,18 @@ echo "Permissions fixed. Agent should now be able to start."
             template=template,
             compose_file=str(compose_path),
             service_token=encrypted_token,  # Store encrypted version
+            server_id=target_server_id,
         )
 
         # Start the agent FIRST so Docker discovery can find it
-        agent_logger.info(f"Starting container for agent {sanitize_agent_id(agent_id)}")
+        agent_logger.info(
+            f"Starting container for agent {sanitize_agent_id(agent_id)} on server {target_server_id}"
+        )
         try:
-            await self._start_agent(agent_id, compose_path)
-            agent_logger.info(f"✅ Container started for agent {sanitize_agent_id(agent_id)}")
+            await self._start_agent(agent_id, compose_path, target_server_id)
+            agent_logger.info(
+                f"✅ Container started for agent {sanitize_agent_id(agent_id)} on {target_server_id}"
+            )
         except Exception as e:
             agent_logger.error(
                 f"❌ Failed to start container for {sanitize_agent_id(agent_id)}: {e}"
@@ -544,19 +533,85 @@ echo "Permissions fixed. Agent should now be able to start."
         if not success:
             raise RuntimeError("Failed to update nginx configuration")
 
-    async def _start_agent(self, agent_id: str, compose_path: Path) -> None:
-        """Start an agent container."""
-        cmd = ["docker-compose", "-f", str(compose_path), "up", "-d"]
-        process = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
+    async def _start_agent(
+        self, agent_id: str, compose_path: Path, server_id: str = "main"
+    ) -> None:
+        """
+        Start an agent container on the specified server.
 
-        if process.returncode != 0:
-            logger.error(f"Failed to start agent {agent_id}: {stderr.decode()}")
-            raise RuntimeError(f"Failed to start agent: {stderr.decode()}")
+        Args:
+            agent_id: Agent identifier
+            compose_path: Path to docker-compose.yml file
+            server_id: Target server ID (defaults to 'main')
+        """
+        server_config = self.docker_client.get_server_config(server_id)
 
-        logger.info(f"Started agent {agent_id}")
+        if server_config.is_local:
+            # Local server: use docker-compose CLI
+            cmd = ["docker-compose", "-f", str(compose_path), "up", "-d"]
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                logger.error(f"Failed to start agent {agent_id}: {stderr.decode()}")
+                raise RuntimeError(f"Failed to start agent: {stderr.decode()}")
+
+            logger.info(f"Started agent {agent_id} on local server")
+        else:
+            # Remote server: use Docker API to create container from compose config
+            logger.info(f"Starting agent {agent_id} on remote server {server_id} via Docker API")
+
+            import yaml
+
+            # Read and parse compose file
+            with open(compose_path, "r") as f:
+                compose_config = yaml.safe_load(f)
+
+            # Get the first service (should be the agent)
+            services = compose_config.get("services", {})
+            if not services:
+                raise ValueError(f"No services found in compose file {compose_path}")
+
+            service_name, service_config = next(iter(services.items()))
+
+            # Get Docker client for remote server
+            docker_client = self.docker_client.get_client(server_id)
+
+            # Extract container configuration
+            image = service_config.get("image")
+            environment = service_config.get("environment", {})
+            ports = service_config.get("ports", [])
+            # Note: volumes not yet supported for remote servers
+            container_name = service_config.get("container_name", f"ciris-{agent_id}")
+            restart_policy = service_config.get("restart", "unless-stopped")
+
+            # Convert ports to port bindings format
+            port_bindings = {}
+            for port_mapping in ports:
+                if ":" in str(port_mapping):
+                    host_port, container_port = str(port_mapping).split(":")
+                    port_bindings[container_port] = host_port
+
+            # Note: Volume mounting for remote servers requires volumes to exist on remote host
+            # For now, we'll skip volumes as they need to be pre-created on remote server
+            logger.warning(f"Volume mounting not yet supported for remote server {server_id}")
+
+            try:
+                # Create and start container
+                docker_client.containers.run(
+                    image=image,
+                    name=container_name,
+                    environment=environment,
+                    ports=port_bindings,
+                    detach=True,
+                    restart_policy={"Name": restart_policy},
+                )
+                logger.info(f"✅ Started container {container_name} on remote server {server_id}")
+            except Exception as e:
+                logger.error(f"Failed to start container on remote server {server_id}: {e}")
+                raise RuntimeError(f"Failed to start agent on {server_id}: {e}")
 
     async def container_management_loop(self) -> None:
         """Container management loop - handles crash recovery only.
@@ -588,7 +643,7 @@ echo "Permissions fixed. Agent should now be able to start."
         """Recover containers that have crashed (stopped unexpectedly).
 
         This method:
-        1. Finds all stopped containers
+        1. Finds all stopped containers across ALL servers
         2. Checks if they're part of an active deployment
         3. Only restarts containers that crashed (not part of deployment)
         """
@@ -596,66 +651,90 @@ echo "Permissions fixed. Agent should now be able to start."
             import docker
             from docker.errors import DockerException
 
-            client = docker.from_env()
-
             # Get all registered agents
             agents = self.agent_registry.list_agents()
 
-            for agent_info in agents:
-                agent_id = agent_info.agent_id
-                container_name = f"ciris-{agent_id}"
+            # Check containers on ALL servers
+            for server in self.config.servers:
+                server_id = server.server_id
 
                 try:
-                    # Check container status
-                    container = client.containers.get(container_name)
+                    # Get Docker client for this server
+                    client = self.docker_client.get_client(server_id)
 
-                    # CRITICAL: Only act on stopped containers
-                    # Never touch running containers (maintains autonomy)
-                    if container.status != "exited":
-                        continue
+                    # Filter agents for this server
+                    server_agents = [
+                        a
+                        for a in agents
+                        if (hasattr(a, "server_id") and a.server_id == server_id)
+                        or (not hasattr(a, "server_id") and server_id == "main")
+                    ]
 
-                    # Check exit code to determine if it was a crash or consensual shutdown
-                    exit_code = container.attrs.get("State", {}).get("ExitCode", -1)
+                    logger.debug(f"Checking {len(server_agents)} agents on server {server_id}")
 
-                    # Exit code 0 = consensual shutdown (deployment or user request)
-                    # Non-zero = crash or error
-                    if exit_code == 0:
-                        logger.debug(
-                            f"Container {container_name} exited cleanly (code 0), not restarting"
-                        )
-                        continue
-
-                    # Check if this agent is part of an active deployment
-                    # by looking for recent deployment activity
-                    if await self._is_agent_in_deployment(agent_id):
-                        logger.debug(
-                            f"Container {container_name} is part of active deployment, skipping recovery"
-                        )
-                        continue
-
-                    # Check if agent has do_not_autostart flag set (maintenance mode)
-                    if hasattr(agent_info, "do_not_autostart") and agent_info.do_not_autostart:
-                        # Skip logging crash warnings for agents in maintenance mode
-                        continue
-
-                    # This is a crashed container that should be restarted
-                    logger.warning(
-                        f"Container {container_name} crashed (exit code {exit_code}), checking restart policy"
-                    )
-
-                    logger.info(f"Attempting recovery for {agent_id}")
-                    # Use docker-compose to restart (maintains configuration)
-                    compose_path = Path(agent_info.compose_file)
-                    if compose_path.exists():
-                        await self._restart_crashed_container(agent_id, compose_path)
-                    else:
-                        logger.error(f"Compose file not found for {agent_id}: {compose_path}")
-
-                except docker.errors.NotFound:
-                    # Container doesn't exist - might be newly created or deleted
-                    logger.debug(f"Container {container_name} not found, may be new or deleted")
                 except Exception as e:
-                    logger.error(f"Error checking container {container_name}: {e}")
+                    logger.error(f"Failed to get Docker client for server {server_id}: {e}")
+                    continue
+
+                for agent_info in server_agents:
+                    agent_id = agent_info.agent_id
+                    container_name = f"ciris-{agent_id}"
+
+                    try:
+                        # Check container status
+                        container = client.containers.get(container_name)
+
+                        # CRITICAL: Only act on stopped containers
+                        # Never touch running containers (maintains autonomy)
+                        if container.status != "exited":
+                            continue
+
+                        # Check exit code to determine if it was a crash or consensual shutdown
+                        exit_code = container.attrs.get("State", {}).get("ExitCode", -1)
+
+                        # Exit code 0 = consensual shutdown (deployment or user request)
+                        # Non-zero = crash or error
+                        if exit_code == 0:
+                            logger.debug(
+                                f"Container {container_name} exited cleanly (code 0), not restarting"
+                            )
+                            continue
+
+                        # Check if this agent is part of an active deployment
+                        # by looking for recent deployment activity
+                        if await self._is_agent_in_deployment(agent_id):
+                            logger.debug(
+                                f"Container {container_name} is part of active deployment, skipping recovery"
+                            )
+                            continue
+
+                        # Check if agent has do_not_autostart flag set (maintenance mode)
+                        if hasattr(agent_info, "do_not_autostart") and agent_info.do_not_autostart:
+                            # Skip logging crash warnings for agents in maintenance mode
+                            continue
+
+                        # This is a crashed container that should be restarted
+                        logger.warning(
+                            f"Container {container_name} crashed (exit code {exit_code}), checking restart policy"
+                        )
+
+                        logger.info(f"Attempting recovery for {agent_id} on server {server_id}")
+                        # Restart using appropriate method for server type
+                        compose_path = Path(agent_info.compose_file)
+                        if compose_path.exists():
+                            await self._restart_crashed_container(agent_id, compose_path, server_id)
+                        else:
+                            logger.error(f"Compose file not found for {agent_id}: {compose_path}")
+
+                    except docker.errors.NotFound:
+                        # Container doesn't exist - might be newly created or deleted
+                        logger.debug(
+                            f"Container {container_name} not found on {server_id}, may be new or deleted"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Error checking container {container_name} on {server_id}: {e}"
+                        )
 
         except DockerException as e:
             logger.error(f"Docker error in crash recovery: {e}")
@@ -697,31 +776,41 @@ echo "Permissions fixed. Agent should now be able to start."
 
         return False
 
-    async def _restart_crashed_container(self, agent_id: str, compose_path: Path) -> None:
-        """Restart a crashed container using docker-compose.
+    async def _restart_crashed_container(
+        self, agent_id: str, compose_path: Path, server_id: str = "main"
+    ) -> None:
+        """Restart a crashed container on the specified server.
 
-        This uses 'docker-compose up -d' which will:
-        - Start the container if stopped
-        - Do nothing if already running (safe operation)
-        - Use the existing image (no pull)
+        Args:
+            agent_id: Agent identifier
+            compose_path: Path to docker-compose.yml file
+            server_id: Target server ID (defaults to 'main')
         """
         try:
-            logger.info(f"Restarting crashed container for agent {agent_id}")
+            server_config = self.docker_client.get_server_config(server_id)
+            logger.info(f"Restarting crashed container for agent {agent_id} on server {server_id}")
 
-            # Use docker-compose up -d (safe - won't affect running containers)
-            cmd = ["docker-compose", "-f", str(compose_path), "up", "-d"]
-            process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await process.communicate()
+            if server_config.is_local:
+                # Local server: use docker-compose
+                cmd = ["docker-compose", "-f", str(compose_path), "up", "-d"]
+                process = await asyncio.create_subprocess_exec(
+                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
 
-            if process.returncode == 0:
-                logger.info(f"Successfully restarted crashed container for agent {agent_id}")
+                if process.returncode == 0:
+                    logger.info(f"✅ Successfully restarted crashed container for agent {agent_id}")
+                else:
+                    logger.error(f"Failed to restart container for {agent_id}: {stderr.decode()}")
             else:
-                logger.error(f"Failed to restart container for {agent_id}: {stderr.decode()}")
+                # Remote server: use _start_agent which handles remote deployment
+                await self._start_agent(agent_id, compose_path, server_id)
+                logger.info(
+                    f"✅ Successfully restarted crashed container for agent {agent_id} on {server_id}"
+                )
 
         except Exception as e:
-            logger.error(f"Error restarting container for {agent_id}: {e}")
+            logger.error(f"Error restarting container for {agent_id} on {server_id}: {e}")
 
     async def _pull_agent_images(self, compose_path: Path) -> None:
         """Pull latest images for an agent."""
@@ -781,6 +870,7 @@ echo "Permissions fixed. Agent should now be able to start."
             from .api.routes import create_routes
             from .api.auth import create_auth_routes, load_oauth_config
             from .api.device_auth_routes import create_device_auth_routes
+            from .api.server_routes import create_server_routes
 
             app = FastAPI(title="CIRISManager API", version="1.0.0")
             logger.info("DEBUG: FastAPI app created in manager.py")
@@ -824,6 +914,11 @@ echo "Permissions fixed. Agent should now be able to start."
             logger.info("DEBUG: create_routes returned successfully in manager.py")
             app.include_router(router, prefix="/manager/v1")
             logger.info("DEBUG: Included router in FastAPI app in manager.py")
+
+            # Include server management routes
+            server_router = create_server_routes(self)
+            app.include_router(server_router, prefix="/manager/v1")
+            logger.info("Server management routes mounted at /manager/v1/servers")
 
             # Include auth routes if in production mode
             if self.config.auth.mode == "production":
@@ -910,15 +1005,39 @@ echo "Permissions fixed. Agent should now be able to start."
                 logger.error(f"Agent {agent_id} not found")
                 return False
 
-            # Stop the agent container
+            # Determine which server the agent is on
+            server_id = (
+                agent_info.server_id
+                if hasattr(agent_info, "server_id") and agent_info.server_id
+                else "main"
+            )
+            server_config = self.docker_client.get_server_config(server_id)
+
+            # Get compose path (used by both local and remote)
             compose_path = Path(agent_info.compose_file)
-            if compose_path.exists():
-                logger.info(f"Stopping agent {agent_id}")
-                cmd = ["docker-compose", "-f", str(compose_path), "down", "-v"]
-                process = await asyncio.create_subprocess_exec(
-                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                )
-                await process.communicate()
+
+            # Stop the agent container
+            if server_config.is_local:
+                # Local server: use docker-compose
+                if compose_path.exists():
+                    logger.info(f"Stopping agent {agent_id} on local server")
+                    cmd = ["docker-compose", "-f", str(compose_path), "down", "-v"]
+                    process = await asyncio.create_subprocess_exec(
+                        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    )
+                    await process.communicate()
+            else:
+                # Remote server: use Docker API
+                logger.info(f"Stopping agent {agent_id} on remote server {server_id}")
+                try:
+                    docker_client = self.docker_client.get_client(server_id)
+                    container_name = f"ciris-{agent_id}"
+                    container = docker_client.containers.get(container_name)
+                    container.stop(timeout=10)
+                    container.remove(v=True)  # Remove volumes
+                    logger.info(f"✅ Stopped and removed container {container_name} on {server_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to stop container on remote server {server_id}: {e}")
 
             # Remove nginx routes (no conditional needed)
             logger.info(f"Removing nginx routes for {agent_id}")

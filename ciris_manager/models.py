@@ -130,6 +130,9 @@ class CreateAgentRequest(BaseModel):
     billing_api_key: Optional[str] = Field(
         None, description="Billing API key (required when billing_enabled=true)"
     )
+    server_id: Optional[str] = Field(
+        None, description="Target server ID (defaults to 'main' if not specified)"
+    )
 
 
 class UpdateNotification(BaseModel):
