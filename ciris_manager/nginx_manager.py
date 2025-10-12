@@ -23,16 +23,23 @@ logger = logging.getLogger("ciris_manager.nginx")
 class NginxManager:
     """Manages nginx configuration using template generation."""
 
-    def __init__(self, config_dir: str = "/home/ciris/nginx", container_name: str = "ciris-nginx"):
+    def __init__(
+        self,
+        config_dir: str = "/home/ciris/nginx",
+        container_name: str = "ciris-nginx",
+        hostname: str = "agents.ciris.ai",
+    ):
         """
         Initialize nginx manager.
 
         Args:
             config_dir: Directory for nginx configuration files
             container_name: Name of the nginx Docker container
+            hostname: Hostname for this nginx instance (e.g., agents.ciris.ai, scoutapi.ciris.ai)
         """
         self.config_dir = Path(config_dir)
         self.container_name = container_name
+        self.hostname = hostname
         self.config_path = self.config_dir / "nginx.conf"
         self.new_config_path = self.config_dir / "nginx.conf.new"
         self.backup_path = self.config_dir / "nginx.conf.backup"
@@ -246,12 +253,17 @@ http {
 
 """
 
+    def _is_main_server(self) -> bool:
+        """Check if this is the main server (agents.ciris.ai)."""
+        return self.hostname == "agents.ciris.ai"
+
     def _generate_upstreams(self, agents: List[AgentInfo]) -> str:
         """Generate upstream blocks for all services."""
-        # When nginx runs in host network mode, use localhost
-        # This is the default for production deployments
-        upstreams = """    # === UPSTREAMS ===
-    # Agent GUI upstream (multi-tenant container from CIRISAgent)
+        upstreams = "    # === UPSTREAMS ===\n"
+
+        # Main server upstreams (GUI, Manager, CIRISLens, eee.ciris.ai)
+        if self._is_main_server():
+            upstreams += """    # Agent GUI upstream (multi-tenant container from CIRISAgent)
     upstream agent_gui {
         server 127.0.0.1:3000;
     }
@@ -276,7 +288,7 @@ http {
     }
 """
 
-        # Add agent upstreams
+        # Add agent upstreams (all servers)
         if agents:
             upstreams += "\n    # Agent upstreams\n"
             for agent in agents:
@@ -294,45 +306,51 @@ http {
         return upstreams + "\n"
 
     def _generate_server_block(self, agents: List[AgentInfo]) -> str:
-        """Generate main server block with all routes."""
+        """Generate server block with routes (main-only or agent-only)."""
 
-        server = """    # === MAIN SERVER ===
+        is_main = self._is_main_server()
+
+        server = f"""    # === {'MAIN' if is_main else 'AGENT'} SERVER ({self.hostname}) ===
     # Redirect HTTP to HTTPS (with health check exception)
-    server {
+    server {{
         listen 80;
-        server_name agents.ciris.ai;
+        server_name {self.hostname};
 
         # Health check endpoint (must be available on HTTP for Docker health check)
-        location /health {
+        location /health {{
             access_log off;
-            return 200 "healthy\n";
+            return 200 "healthy\\n";
             add_header Content-Type text/plain;
-        }
+        }}
 
         # Redirect everything else to HTTPS
-        location / {
+        location / {{
             return 301 https://$server_name$request_uri;
-        }
-    }
+        }}
+    }}
 
     # HTTPS Server
-    server {
+    server {{
         listen 443 ssl http2;
-        server_name agents.ciris.ai;
+        server_name {self.hostname};
 
         # SSL configuration
-        ssl_certificate /etc/letsencrypt/live/agents.ciris.ai/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/agents.ciris.ai/privkey.pem;
+        ssl_certificate /etc/letsencrypt/live/{self.hostname}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/{self.hostname}/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_ciphers HIGH:!aNULL:!MD5;
 
         # Health check endpoint
-        location /health {
+        location /health {{
             access_log off;
             return 200 "healthy\\n";
             add_header Content-Type text/plain;
-        }
+        }}
+"""
 
+        # Main server only: Manager UI, Jailbreaker, Agent GUI, CIRISLens
+        if is_main:
+            server += """
         # Manager UI static files (HTML, JS, CSS)
         location /manager/ {
             root /home/ciris/static;
@@ -352,7 +370,6 @@ http {
             add_header X-Frame-Options "SAMEORIGIN";
             add_header X-Content-Type-Options "nosniff";
         }
-
 
         # Agent GUI (multi-tenant container)
         location ~ ^/agent/([^/]+) {
@@ -396,7 +413,6 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
-
 
         # CIRISLens Grafana dashboards
         location = /lens {
@@ -455,8 +471,7 @@ http {
         }
 """
 
-        # === AGENT API ROUTES - Must come before root location ===
-        # Add agent-specific routes
+        # === AGENT API ROUTES (all servers) ===
         if agents:
             server += "\n        # === AGENT ROUTES ===\n"
             for agent in agents:
@@ -508,8 +523,9 @@ http {
         }}
 """
 
-        # OAuth GUI callback routes - must come before root catch-all
-        server += """
+        # Main server only: GUI OAuth callbacks, Grafana assets, root location
+        if is_main:
+            server += """
         # GUI OAuth callback routes (for post-auth redirect from agents)
         location ~ ^/oauth/([^/]+)/([^/]+)/callback {
             proxy_pass http://agent_gui/oauth/$1/$2/callback$is_args$args;
@@ -547,8 +563,22 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
-    }
+"""
+        else:
+            # Remote servers: simple 404 for root
+            server += """
+        # Remote server - no GUI, return 404 for unmatched routes
+        location / {
+            return 404 "Agent server - API only\\n";
+            add_header Content-Type text/plain;
+        }
+"""
 
+        server += "    }\n"
+
+        # Main server only: eee.ciris.ai server block
+        if is_main:
+            server += """
     # === EEE.CIRIS.AI SERVER ===
     # HTTP Server - Redirect to HTTPS
     server {
@@ -636,9 +666,74 @@ http {
             proxy_set_header X-Auth-Request-Email $upstream_http_x_auth_request_email;
         }
     }
-}
 """
+
+        server += "}\n"
         return server
+
+    def deploy_remote_config(
+        self, config_content: str, docker_client, container_name: str = "ciris-nginx"
+    ) -> bool:
+        """
+        Deploy nginx config to remote server via Docker API.
+
+        Args:
+            config_content: The nginx configuration content
+            docker_client: Docker client for the remote server
+            container_name: Name of the nginx container on remote server
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get the nginx container
+            container = docker_client.containers.get(container_name)
+
+            # Write config to container using exec
+            # We write to a temp file first, validate, then move to final location
+            temp_path = "/tmp/nginx.conf.new"
+            final_path = "/etc/nginx/nginx.conf"
+
+            # Write to temp file using heredoc (no escaping needed)
+            write_cmd = f"sh -c 'cat > {temp_path} << \"EOF\"\n{config_content}\nEOF'"
+            exec_result = container.exec_run(write_cmd)
+
+            if exec_result.exit_code != 0:
+                logger.error(f"Failed to write config to remote: {exec_result.output.decode()}")
+                return False
+
+            # Validate config
+            validate_cmd = f"nginx -t -c {temp_path}"
+            exec_result = container.exec_run(validate_cmd)
+
+            if exec_result.exit_code != 0:
+                logger.error(f"Remote nginx validation failed: {exec_result.output.decode()}")
+                return False
+
+            # Move to final location
+            move_cmd = f"mv {temp_path} {final_path}"
+            exec_result = container.exec_run(move_cmd)
+
+            if exec_result.exit_code != 0:
+                logger.error(
+                    f"Failed to move config to final location: {exec_result.output.decode()}"
+                )
+                return False
+
+            # Reload nginx
+            reload_cmd = "nginx -s reload"
+            exec_result = container.exec_run(reload_cmd)
+
+            if exec_result.exit_code != 0:
+                logger.error(f"Failed to reload remote nginx: {exec_result.output.decode()}")
+                return False
+
+            logger.info(f"Successfully deployed config to remote nginx container {container_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to deploy remote nginx config: {e}", exc_info=True)
+            return False
 
     def _validate_config(self) -> bool:
         """Validate nginx configuration using docker exec."""

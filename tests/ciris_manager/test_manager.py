@@ -124,6 +124,8 @@ class TestCIRISManager:
         nginx_config_dir = temp_dirs["base"] / "nginx"
         nginx_config_dir.mkdir(exist_ok=True)
 
+        from ciris_manager.config.settings import ServerConfig
+
         return CIRISManagerConfig(
             manager={
                 "agents_directory": str(temp_dirs["agents"]),
@@ -135,6 +137,13 @@ class TestCIRISManager:
             docker={"registry": "test.registry", "image": "test-image:latest"},
             ports={"start": 8080, "end": 8090, "reserved": [8888]},
             nginx={"config_dir": str(nginx_config_dir), "container_name": "test-nginx"},
+            servers=[
+                ServerConfig(
+                    server_id="main",
+                    hostname="agents.ciris.ai",
+                    is_local=True,
+                )
+            ],
         )
 
     @pytest.fixture
@@ -145,17 +154,35 @@ class TestCIRISManager:
             return_value=True,
         ):
             with patch("ciris_manager.nginx_manager.NginxManager") as mock_nginx_class:
-                # Configure nginx manager mock
-                mock_nginx = Mock()
-                mock_nginx.ensure_managed_sections = Mock(return_value=True)
-                mock_nginx.add_agent_route = Mock(return_value=True)
-                mock_nginx.remove_agent_route = Mock(return_value=True)
-                mock_nginx.reload_nginx = Mock(return_value=True)
-                mock_nginx_class.return_value = mock_nginx
+                with patch(
+                    "ciris_manager.multi_server_docker.MultiServerDockerClient"
+                ) as mock_docker_class:
+                    with patch("ciris_manager.manager.DockerImageCleanup") as mock_cleanup_class:
+                        # Configure nginx manager mock
+                        mock_nginx = Mock()
+                        mock_nginx.ensure_managed_sections = Mock(return_value=True)
+                        mock_nginx.add_agent_route = Mock(return_value=True)
+                        mock_nginx.remove_agent_route = Mock(return_value=True)
+                        mock_nginx.reload_nginx = Mock(return_value=True)
+                        mock_nginx_class.return_value = mock_nginx
 
-                manager = CIRISManager(config)
-                manager.nginx_manager = mock_nginx
-                return manager
+                        # Configure multi-server Docker client mock
+                        mock_docker_client = Mock()
+                        mock_docker_client.test_connection = Mock(return_value=True)
+                        mock_docker_client.get_client = Mock()
+                        mock_docker_client.get_server_config = Mock()
+                        mock_docker_client.list_servers = Mock(return_value=["main"])
+                        mock_docker_class.return_value = mock_docker_client
+
+                        # Configure image cleanup mock
+                        mock_cleanup = Mock()
+                        mock_cleanup.run_periodic_cleanup = AsyncMock()
+                        mock_cleanup_class.return_value = mock_cleanup
+
+                        manager = CIRISManager(config)
+                        manager.nginx_manager = mock_nginx
+                        manager.docker_client = mock_docker_client
+                        return manager
 
     def test_initialization(self, manager, config):
         """Test CIRISManager initialization."""
@@ -201,7 +228,10 @@ class TestCIRISManager:
             "ciris_manager.template_verifier.TemplateVerifier._verify_manifest_signature",
             return_value=True,
         ):
-            manager = CIRISManager(config)
+            with patch("ciris_manager.multi_server_docker.MultiServerDockerClient"):
+                with patch("ciris_manager.nginx_manager.NginxManager"):
+                    with patch("ciris_manager.manager.DockerImageCleanup"):
+                        manager = CIRISManager(config)
 
         # Verify agent was found
         agent = manager.agent_registry.get_agent("agent-scout")
@@ -518,7 +548,10 @@ class TestCIRISManager:
             "ciris_manager.template_verifier.TemplateVerifier._verify_manifest_signature",
             return_value=True,
         ):
-            manager2 = CIRISManager(manager.config)
+            with patch("ciris_manager.multi_server_docker.MultiServerDockerClient"):
+                with patch("ciris_manager.nginx_manager.NginxManager"):
+                    with patch("ciris_manager.manager.DockerImageCleanup"):
+                        manager2 = CIRISManager(manager.config)
 
         # Ports should still be allocated to the actual agent IDs
         assert manager2.port_manager.get_port(agent_id1) == 8080

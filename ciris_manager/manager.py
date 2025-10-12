@@ -23,6 +23,7 @@ from ciris_manager.agent_registry import AgentRegistry
 from ciris_manager.compose_generator import ComposeGenerator
 from ciris_manager.nginx_manager import NginxManager
 from ciris_manager.docker_image_cleanup import DockerImageCleanup
+from ciris_manager.multi_server_docker import MultiServerDockerClient
 from ciris_manager.logging_config import log_agent_operation
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id
 
@@ -81,15 +82,40 @@ class CIRISManager:
             default_image=self.config.docker.image,
         )
 
+        # Initialize multi-server Docker client
+        logger.info(
+            f"Initializing multi-server Docker client with {len(self.config.servers)} servers"
+        )
+        self.docker_client = MultiServerDockerClient(self.config.servers)
+
+        # Test connections to all servers
+        for server in self.config.servers:
+            if self.docker_client.test_connection(server.server_id):
+                logger.info(
+                    f"✅ Docker connection successful: {server.server_id} ({server.hostname})"
+                )
+            else:
+                logger.error(f"❌ Docker connection failed: {server.server_id} ({server.hostname})")
+                if not server.is_local:
+                    logger.warning(
+                        f"Remote server {server.server_id} is not reachable - agents on this server may not work"
+                    )
+
         # Initialize nginx manager - fail fast if there are issues
         if self.config.nginx.enabled:
             logger.info(
                 f"Initializing Nginx Manager with config_dir: {self.config.nginx.config_dir}"
             )
             try:
+                # Use main server's hostname for nginx manager
+                main_server = next(
+                    (s for s in self.config.servers if s.server_id == "main"),
+                    self.config.servers[0],
+                )
                 self.nginx_manager = NginxManager(
                     config_dir=self.config.nginx.config_dir,
                     container_name=self.config.nginx.container_name,
+                    hostname=main_server.hostname,
                 )
                 logger.info("Successfully initialized Nginx Manager")
             except Exception as e:
