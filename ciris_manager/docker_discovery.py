@@ -35,7 +35,7 @@ class DockerAgentDiscovery:
                 logger.error(f"Failed to connect to Docker: {e}")
                 self.client = None  # type: ignore[assignment]
         else:
-            self.client = None
+            self.client = None  # type: ignore[assignment]
 
         self.agent_registry = agent_registry
 

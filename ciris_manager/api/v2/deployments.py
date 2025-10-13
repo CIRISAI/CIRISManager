@@ -290,6 +290,10 @@ async def deploy_to_target(
     # Create agent info object with all required fields
     from ciris_manager.models import AgentInfo
 
+    # Determine server_id and deployment_type
+    server_id = agent.server_id if hasattr(agent, "server_id") else "main"
+    deployment_type = "FULL" if server_id == "main" else "API_ONLY"
+
     agent_info = AgentInfo(
         agent_id=request.agent_id,
         agent_name=agent.name,
@@ -299,6 +303,8 @@ async def deploy_to_target(
         deployment=agent.metadata.get("deployment", "CIRIS_DISCORD_PILOT")
         if hasattr(agent, "metadata")
         else "CIRIS_DISCORD_PILOT",
+        server_id=server_id,
+        deployment_type=deployment_type,
         # Optional fields with defaults
         api_port=agent.port if hasattr(agent, "port") else None,
         image=request.version,
