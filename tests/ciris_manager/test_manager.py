@@ -170,7 +170,8 @@ class TestCIRISManager:
                         mock_docker_client = Mock()
                         mock_docker_client.test_connection = Mock(return_value=True)
                         mock_docker_client.get_client = Mock()
-                        mock_docker_client.get_server_config = Mock()
+                        # Return the server config from the config object
+                        mock_docker_client.get_server_config = Mock(return_value=config.servers[0])
                         mock_docker_client.list_servers = Mock(return_value=["main"])
                         mock_docker_class.return_value = mock_docker_client
 
@@ -679,25 +680,28 @@ class TestCIRISManager:
             compose_file=str(compose_file),
         )
 
-        # Mock Docker client
-        with patch("docker.from_env") as mock_docker:
-            mock_client = MagicMock()
-            mock_container = MagicMock()
+        # Mock Docker client for multi-server support
+        mock_client = MagicMock()
+        mock_container = MagicMock()
 
-            # Container has crashed (non-zero exit code)
-            mock_container.status = "exited"
-            mock_container.attrs = {"State": {"ExitCode": 1}}  # Non-zero = crash
+        # Container has crashed (non-zero exit code)
+        mock_container.status = "exited"
+        mock_container.attrs = {"State": {"ExitCode": 1}}  # Non-zero = crash
 
-            mock_client.containers.get.return_value = mock_container
-            mock_docker.return_value = mock_client
+        mock_client.containers.get.return_value = mock_container
 
-            # Mock subprocess for docker-compose restart
-            with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-                mock_process = AsyncMock()
-                mock_process.returncode = 0
-                mock_process.communicate = AsyncMock(return_value=(b"Container restarted", b""))
-                mock_subprocess.return_value = mock_process
+        # Configure manager's docker_client to return our mock
+        manager.docker_client.get_client = Mock(return_value=mock_client)
 
+        # Mock subprocess for docker-compose restart
+        with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"Container restarted", b""))
+            mock_subprocess.return_value = mock_process
+
+            # Also mock docker.from_env for _is_agent_in_deployment check
+            with patch("docker.from_env", return_value=mock_client):
                 # Run recovery
                 await manager._recover_crashed_containers()
 
@@ -849,44 +853,45 @@ class TestCIRISManager:
             compose_file=str(compose_file),
         )
 
-        # Mock Docker client
-        with patch("docker.from_env") as mock_docker:
-            mock_client = MagicMock()
-            mock_container = MagicMock()
+        # Mock Docker client for multi-server support
+        mock_client = MagicMock()
+        mock_container = MagicMock()
 
-            # Container crashed a while ago (not deployment)
-            mock_container.status = "exited"
-            mock_container.attrs = {
-                "State": {
-                    "ExitCode": 1,
-                    "FinishedAt": "2024-01-01T11:00:00.000000000Z",  # Old timestamp
-                }
+        # Container crashed a while ago (not deployment)
+        mock_container.status = "exited"
+        mock_container.attrs = {
+            "State": {
+                "ExitCode": 1,
+                "FinishedAt": "2024-01-01T11:00:00.000000000Z",  # Old timestamp
             }
+        }
 
-            # First call for main check, second for deployment check
-            mock_client.containers.get.return_value = mock_container
-            mock_docker.return_value = mock_client
+        # First call for main check, second for deployment check
+        mock_client.containers.get.return_value = mock_container
 
-            # Mock time to show crash was > 5 minutes ago
-            with patch("ciris_manager.manager.datetime") as mock_datetime:
-                from datetime import datetime, timezone
+        # Configure manager's docker_client to return our mock
+        manager.docker_client.get_client = Mock(return_value=mock_client)
 
-                mock_datetime.now.return_value = datetime(
-                    2024, 1, 1, 12, 10, 0, tzinfo=timezone.utc
-                )
-                mock_datetime.timezone = timezone
+        # Mock time to show crash was > 5 minutes ago
+        with patch("ciris_manager.manager.datetime") as mock_datetime:
+            from datetime import datetime, timezone
 
-                # Mock dateutil.parser
-                with patch("ciris_manager.manager.dateutil.parser.parse") as mock_parse:
-                    mock_parse.return_value = datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc)
+            mock_datetime.now.return_value = datetime(2024, 1, 1, 12, 10, 0, tzinfo=timezone.utc)
+            mock_datetime.timezone = timezone
 
-                    # Mock subprocess for restart
-                    with patch("asyncio.create_subprocess_exec") as mock_subprocess:
-                        mock_process = AsyncMock()
-                        mock_process.returncode = 0
-                        mock_process.communicate = AsyncMock(return_value=(b"Restarted", b""))
-                        mock_subprocess.return_value = mock_process
+            # Mock dateutil.parser
+            with patch("ciris_manager.manager.dateutil.parser.parse") as mock_parse:
+                mock_parse.return_value = datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc)
 
+                # Mock subprocess for restart
+                with patch("asyncio.create_subprocess_exec") as mock_subprocess:
+                    mock_process = AsyncMock()
+                    mock_process.returncode = 0
+                    mock_process.communicate = AsyncMock(return_value=(b"Restarted", b""))
+                    mock_subprocess.return_value = mock_process
+
+                    # Also mock docker.from_env for _is_agent_in_deployment check
+                    with patch("docker.from_env", return_value=mock_client):
                         # Run recovery
                         await manager._recover_crashed_containers()
 

@@ -210,13 +210,7 @@ class CIRISManager:
         # Default to main server if not specified
         target_server_id = server_id or "main"
 
-        # Validate server exists
-        if target_server_id not in self.docker_client.servers:
-            available_servers = ", ".join(self.docker_client.list_servers())
-            raise ValueError(
-                f"Unknown server '{target_server_id}'. Available servers: {available_servers}"
-            )
-
+        # Validate server exists (get_server_config will raise ValueError if not found)
         server_config = self.docker_client.get_server_config(target_server_id)
         agent_logger.info(
             f"Starting agent creation - name: {name}, template: {template}, "
