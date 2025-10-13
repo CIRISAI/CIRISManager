@@ -130,7 +130,9 @@ async def get_agent_versions(_user: Dict[str, str] = Depends(get_current_user)) 
     from ciris_manager.manager_core import get_manager
 
     manager = get_manager()
-    discovery = DockerAgentDiscovery(manager.agent_registry)
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
     agents = discovery.discover_agents()
 
     agent_versions = []
@@ -180,7 +182,9 @@ async def get_agent_version(
     from ciris_manager.manager_core import get_manager
 
     manager = get_manager()
-    discovery = DockerAgentDiscovery(manager.agent_registry)
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
     agents = discovery.discover_agents()
 
     for agent in agents:
@@ -213,7 +217,9 @@ async def get_version_adoption(_user: Dict[str, str] = Depends(get_current_user)
     from ciris_manager.manager_core import get_manager
 
     manager = get_manager()
-    discovery = DockerAgentDiscovery(manager.agent_registry)
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
     agents = discovery.discover_agents()
 
     if not agents:
@@ -260,7 +266,9 @@ async def get_version_adoption_details(
     from ciris_manager.manager_core import get_manager
 
     manager = get_manager()
-    discovery = DockerAgentDiscovery(manager.agent_registry)
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
     agents = discovery.discover_agents()
 
     agents_with_version = [agent.agent_id for agent in agents if agent.version == version]

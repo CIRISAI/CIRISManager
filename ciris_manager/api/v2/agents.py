@@ -43,7 +43,9 @@ async def list_agents(
     List all agents with optional filters.
     """
     manager = get_manager()
-    discovery = DockerAgentDiscovery(manager.agent_registry)
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
     agents = discovery.discover_agents()
 
     # Convert to clean Agent models
@@ -126,7 +128,9 @@ async def get_agent(agent_id: str, _user: Dict[str, str] = Depends(get_current_u
     Get specific agent by ID.
     """
     manager = get_manager()
-    discovery = DockerAgentDiscovery(manager.agent_registry)
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
     agents = discovery.discover_agents()
 
     for agent in agents:

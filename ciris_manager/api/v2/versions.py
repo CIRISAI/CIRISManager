@@ -65,7 +65,9 @@ async def get_fleet_versions(_user: Dict[str, str] = Depends(get_current_user)) 
     Replaces old /agents/versions endpoint.
     """
     manager = get_manager()
-    discovery = DockerAgentDiscovery(manager.agent_registry)
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
     agents = discovery.discover_agents()
 
     fleet_agents = []
@@ -107,7 +109,9 @@ async def get_agent_version(
     Get version information for a specific agent.
     """
     manager = get_manager()
-    discovery = DockerAgentDiscovery(manager.agent_registry)
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
     agents = discovery.discover_agents()
 
     for agent in agents:
