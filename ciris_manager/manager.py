@@ -591,26 +591,33 @@ class CIRISManager:
                     # Remote server: deploy config via Docker API
                     logger.info(f"Deploying nginx config to remote server {server_id}")
 
-                    # Generate config for this server
-                    config_content = nginx_manager.generate_config(server_agents)
+                    try:
+                        # Generate config for this server
+                        config_content = nginx_manager.generate_config(server_agents)
 
-                    # Get Docker client for remote server
-                    docker_client = self.docker_client.get_client(server_id)
+                        # Get Docker client for remote server
+                        docker_client = self.docker_client.get_client(server_id)
 
-                    # Deploy to remote nginx container
-                    success = nginx_manager.deploy_remote_config(
-                        config_content=config_content,
-                        docker_client=docker_client,
-                        container_name="ciris-nginx",
-                    )
-
-                    if success:
-                        logger.info(
-                            f"✅ Deployed nginx config to remote server {server_id} with {len(server_agents)} agents"
+                        # Deploy to remote nginx container
+                        success = nginx_manager.deploy_remote_config(
+                            config_content=config_content,
+                            docker_client=docker_client,
+                            container_name="ciris-nginx",
                         )
-                    else:
+
+                        if success:
+                            logger.info(
+                                f"✅ Deployed nginx config to remote server {server_id} with {len(server_agents)} agents"
+                            )
+                        else:
+                            logger.error(
+                                f"❌ Failed to deploy nginx config to remote server {server_id}"
+                            )
+                            all_success = False
+                    except Exception as e:
                         logger.error(
-                            f"❌ Failed to deploy nginx config to remote server {server_id}"
+                            f"❌ Exception deploying nginx config to remote server {server_id}: {e}",
+                            exc_info=True,
                         )
                         all_success = False
 

@@ -510,3 +510,299 @@ CIRISManager generates one complete nginx.conf that includes:
 - Agent containers: Serve API at `/v1/*` internally
 - GUI container: Multi-tenant, serves all agents at `/agent/{id}`
 - Manager GUI: Static files served directly by nginx
+
+## Multi-Server Architecture
+
+CIRISManager supports deploying agents across multiple physical servers while maintaining centralized management from the main server.
+
+### Server Types
+
+**Main Server** (`agents.ciris.ai` / 108.61.119.117):
+- Runs CIRISManager service (systemd, not Docker)
+- Hosts nginx with **FULL deployment** (Manager GUI + Agent GUI + API routing)
+- Runs local agent containers
+- Manages remote servers via Docker API over TLS
+- Stores agent registry (`/opt/ciris/agents/metadata.json`)
+
+**Remote Servers** (e.g., `scoutapi.ciris.ai` / 207.148.14.113):
+- Runs nginx container with **API_ONLY deployment** (no GUI routes)
+- Runs agent containers assigned via `server_id` in registry
+- No CIRISManager installation needed
+- Docker daemon exposes TLS API on VPC IP:2376
+- Receives nginx config deployments via Docker exec
+
+### Configuration
+
+Multi-server configuration in `/etc/ciris-manager/config.yml`:
+
+```yaml
+servers:
+  - server_id: main
+    hostname: agents.ciris.ai
+    is_local: true
+    # Main server - runs CIRISManager directly on host
+
+  - server_id: scout
+    hostname: scoutapi.ciris.ai
+    is_local: false
+    public_ip: 207.148.14.113
+    vpc_ip: 10.2.96.4                    # Used for Docker API and agent HTTP calls
+    docker_host: https://10.2.96.4:2376  # TLS-secured Docker API
+    tls_ca: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/ca.pem
+    tls_cert: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-cert.pem
+    tls_key: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-key.pem
+```
+
+### Docker API Security
+
+Remote Docker daemons expose TLS-secured API:
+
+```bash
+# On remote server (scoutapi.ciris.ai):
+dockerd -H tcp://0.0.0.0:2376 --tlsverify \
+  --tlscacert=/etc/docker/ca.pem \
+  --tlscert=/etc/docker/server-cert.pem \
+  --tlskey=/etc/docker/server-key.pem
+```
+
+- Certificate-based authentication (CA + client cert + client key)
+- Manager connects via **VPC IP** (10.2.96.4) not public IP for security
+- Certificates stored in `/etc/ciris-manager/docker-certs/{hostname}/`
+- Used for: container management, nginx config deployment, log viewing
+
+### Agent Discovery and Grouping
+
+**Agent Registry** stores `server_id` for each agent:
+
+```json
+{
+  "agents": {
+    "datum": {
+      "server_id": "main",
+      "port": 8001
+    },
+    "scout-remote-5r5ft8": {
+      "server_id": "scout",
+      "port": 8000
+    }
+  }
+}
+```
+
+**Discovery Process** (`manager.py:update_nginx_config()`):
+
+```python
+# 1. Discover ALL agents across ALL servers
+discovery = DockerAgentDiscovery(
+    agent_registry=self.agent_registry,
+    docker_client_manager=self.docker_client
+)
+all_agents = discovery.discover_agents()  # Queries main + scout Docker APIs
+
+# 2. Group agents by server_id from registry
+agents_by_server = {}
+for agent in all_agents:
+    agent_info = self.agent_registry.get_agent(agent.agent_id)
+    server_id = agent_info.server_id  # "main" or "scout"
+    agents_by_server[server_id].append(agent)
+
+# 3. Update nginx on EACH server with its agents
+for server_id, nginx_manager in self.nginx_managers.items():
+    server_agents = agents_by_server.get(server_id, [])
+    if server_config.is_local:
+        # Main: write to /home/ciris/nginx/nginx.conf
+        nginx_manager.update_config(server_agents)
+    else:
+        # Remote: deploy via Docker API
+        config = nginx_manager.generate_config(server_agents)
+        docker_client = self.docker_client.get_client(server_id)
+        nginx_manager.deploy_remote_config(config, docker_client, "ciris-nginx")
+```
+
+### Remote Nginx Deployment
+
+**Deployment Flow** (`nginx_manager.py:deploy_remote_config()`):
+
+```python
+def deploy_remote_config(config_content: str, docker_client, container_name: str):
+    container = docker_client.containers.get(container_name)
+
+    # Step 1: Write config to temp file (base64 to avoid shell escaping)
+    encoded = base64.b64encode(config_content.encode()).decode()
+    container.exec_run(f"sh -c 'echo {encoded} | base64 -d > /tmp/nginx.conf.new'")
+
+    # Step 2: Validate config
+    result = container.exec_run("nginx -t -c /tmp/nginx.conf.new")
+    if result.exit_code != 0:
+        raise ValidationError(result.output)
+
+    # Step 3: Atomic update (write directly, preserving file)
+    container.exec_run("cat /tmp/nginx.conf.new > /etc/nginx/nginx.conf")
+
+    # Step 4: Reload nginx
+    container.exec_run("nginx -s reload")
+```
+
+**Why base64 encoding?** Avoids shell escaping issues with special characters in nginx config (quotes, dollar signs, etc.)
+
+**Why cat instead of mv?** Preserves the file inode if nginx is watching it.
+
+### Remote Nginx Config Generation
+
+**Main Server** (`hostname: agents.ciris.ai`):
+- Full UI routes: Manager GUI (`/`), Agent GUI (`/agent/{id}`), Jailbreaker
+- Manager API: `/manager/v1/*`
+- OAuth routes: `/manager/v1/oauth/*`
+- Agent API routes: `/api/{agent_id}/v1/*`
+- Agent OAuth routes: `/v1/auth/oauth/{agent_id}/*`
+
+**Remote Servers** (`hostname: scoutapi.ciris.ai`):
+- **NO UI routes** - only API routing
+- Agent API routes: `/api/{agent_id}/v1/*`
+- Agent OAuth routes: `/v1/auth/oauth/{agent_id}/*`
+- Root path: `return 404 "Agent server - API only\n"`
+
+**Example Remote Nginx Config** for `scout-remote-5r5ft8` on port 8000:
+
+```nginx
+# OAuth callback route
+location ~ ^/v1/auth/oauth/scout-remote-5r5ft8/(.+)/callback$ {
+    proxy_pass http://agent_scout-remote-5r5ft8/v1/auth/oauth/$1/callback$is_args$args;
+    proxy_set_header Host $host;
+}
+
+# Agent API routes
+location ~ ^/api/scout-remote-5r5ft8/v1/(.*)$ {
+    proxy_pass http://agent_scout-remote-5r5ft8/v1/$1$is_args$args;
+    proxy_set_header Host $host;
+}
+
+# Upstream for agent
+upstream agent_scout-remote-5r5ft8 {
+    server localhost:8000;
+}
+```
+
+### Agent Operations on Remote Servers
+
+**Creating Agent on Remote Server:**
+
+```python
+# Via API or manager.create_agent()
+await manager.create_agent(
+    name="scout",
+    template="scout",
+    server_id="scout"  # Deploy to remote server
+)
+```
+
+**What happens:**
+1. Registry updated: `agent_id="scout-xyz", server_id="scout", port=8000`
+2. Docker-compose.yml generated locally
+3. Container created on remote via Docker API:
+   ```python
+   docker_client = self.docker_client.get_client("scout")
+   docker_client.containers.run(image=image, name=name, ports={8000: 8000}, ...)
+   ```
+4. Admin password set via HTTP to VPC IP:
+   ```python
+   base_url = server_config.vpc_ip  # 10.2.96.4, not scoutapi.ciris.ai
+   url = f"http://{base_url}:8000/v1/auth/login"
+   ```
+5. Nginx config deployed to remote via Docker exec
+
+**Agent Discovery on Remote Server:**
+
+```python
+# DockerAgentDiscovery._discover_multi_server()
+for server_id in ["main", "scout"]:
+    client = docker_client_manager.get_client(server_id)  # Gets Docker API client
+    containers = client.containers.list()  # Lists containers on this server
+
+    for container in containers:
+        env = container.attrs.get("Config", {}).get("Env", [])
+        if "CIRIS_AGENT_ID" in env:
+            agent_info = _extract_agent_info(container, server_id=server_id)
+            all_agents.append(agent_info)
+```
+
+**URL Construction for Remote Agent Calls:**
+
+```python
+# When calling agent APIs (health, status, updates)
+if server_id == "main":
+    base_url = "localhost"
+else:
+    server_config = docker_client.get_server_config(server_id)
+    base_url = server_config.vpc_ip  # Use VPC IP, not hostname!
+
+url = f"http://{base_url}:{port}/v1/agent/status"
+# For scout: http://10.2.96.4:8000/v1/agent/status
+```
+
+**Why VPC IP?** Remote agent containers are not publicly accessible. Only nginx on the remote server exposes them via `scoutapi.ciris.ai`. Manager must use VPC networking.
+
+### Troubleshooting Multi-Server Setup
+
+**Check remote Docker connection:**
+```bash
+# From main server
+docker --host https://10.2.96.4:2376 \
+  --tlsverify \
+  --tlscacert /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/ca.pem \
+  --tlscert /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-cert.pem \
+  --tlskey /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-key.pem \
+  ps --filter 'name=ciris'
+```
+
+**Check remote nginx container:**
+```bash
+# Test nginx config on remote
+docker --host https://10.2.96.4:2376 --tlsverify [...] exec ciris-nginx nginx -t
+
+# View remote nginx logs
+docker --host https://10.2.96.4:2376 --tlsverify [...] logs ciris-nginx --tail 50
+```
+
+**Check agent grouping:**
+```bash
+# Manager logs show agent counts per server
+journalctl -u ciris-manager | grep "Updating nginx config for server"
+# Expected:
+#   Updating nginx config for server main with 6 agents
+#   Updating nginx config for server scout with 2 agents
+```
+
+**Check remote nginx deployment:**
+```bash
+# Manager logs show deployment status
+journalctl -u ciris-manager | grep "deploy.*remote"
+# Success: "✅ Deployed nginx config to remote server scout with 2 agents"
+# Failure: "❌ Failed to deploy nginx config to remote server scout"
+```
+
+**Common Issues:**
+
+1. **"Updating nginx config for server scout with 0 agents"**
+   - **Cause**: Agent registry has `server_id: "scout"` but Docker discovery didn't find the agent
+   - **Fix**: Check agent container is running on remote server and has `CIRIS_AGENT_ID` env var
+
+2. **"❌ Failed to deploy nginx config to remote server scout"**
+   - **Cause**: Docker API connection failed or nginx container not found
+   - **Fix**: Test Docker API connectivity, verify `ciris-nginx` container exists on remote
+
+3. **OAuth URLs return 404 on remote (e.g., `/v1/auth/oauth/google/login`)**
+   - **Cause**: Nginx config on remote server has no routes for this agent
+   - **Fix**: Check nginx deployment succeeded, verify agent appears in `agents_by_server["scout"]`
+
+4. **Agent API calls fail from manager to remote agent**
+   - **Cause**: Using `localhost` or public hostname instead of VPC IP
+   - **Fix**: Ensure `server_config.vpc_ip` is used for remote agent HTTP calls
+
+### Multi-Server Best Practices
+
+1. **Always use VPC IPs** for manager-to-remote-agent communication
+2. **Store `server_id` in registry** immediately when creating agent
+3. **Monitor nginx deployment logs** after agent changes
+4. **Test Docker API connectivity** before adding new remote servers
+5. **Keep nginx containers named `ciris-nginx`** on all servers for consistency

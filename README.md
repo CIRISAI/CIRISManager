@@ -831,6 +831,80 @@ graph LR
                         └──────────────────────────────┘
 ```
 
+### Multi-Server Architecture
+
+CIRISManager supports deploying agents across multiple physical servers while maintaining centralized management:
+
+```
+Main Server (agents.ciris.ai)              Remote Server (scoutapi.ciris.ai)
+┌────────────────────────────┐             ┌────────────────────────────┐
+│  CIRISManager (systemd)    │─────TLS────▶│  Docker Daemon (TCP:2376)  │
+│  - Agent Registry          │  Docker API │  - Exposes API over VPC     │
+│  - Port Manager            │             │  - Certificate auth         │
+│  - Nginx Config Generator  │             └────────────────────────────┘
+└────────────────────────────┘                       │
+          │                                           ▼
+          │                                  ┌────────────────────────────┐
+          ▼                                  │  Nginx Container           │
+┌────────────────────────────┐             │  - API-only routes         │
+│  Nginx Container (FULL)    │             │  - OAuth callbacks         │
+│  - Manager GUI (/)         │             │  - Agent API routing       │
+│  - Agent GUI (/agent/{id}) │             └────────────────────────────┘
+│  - Manager API             │                       │
+│  - Agent APIs              │                       ▼
+└────────────────────────────┘             ┌────────────────────────────┐
+          │                                  │  Agent Containers          │
+          ▼                                  │  - Assigned via server_id  │
+┌────────────────────────────┐             │  - Accessed via VPC IP     │
+│  Agent Containers          │             └────────────────────────────┘
+│  - Main server agents      │
+│  - server_id: "main"       │
+└────────────────────────────┘
+```
+
+**Key Features:**
+- **Centralized Management**: Single CIRISManager instance controls all servers
+- **TLS-Secured Docker API**: Remote Docker access via certificate-based auth
+- **VPC Networking**: Manager communicates with remote agents via VPC IPs
+- **Per-Server Nginx**: Each server runs its own nginx with appropriate routes
+- **Automatic Discovery**: Agents discovered across all servers and grouped by `server_id`
+- **Remote Deployment**: Nginx configs deployed via Docker exec commands
+
+**Configuration Example:**
+```yaml
+servers:
+  - server_id: main
+    hostname: agents.ciris.ai
+    is_local: true
+
+  - server_id: scout
+    hostname: scoutapi.ciris.ai
+    is_local: false
+    public_ip: 207.148.14.113
+    vpc_ip: 10.2.96.4
+    docker_host: https://10.2.96.4:2376
+    tls_ca: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/ca.pem
+    tls_cert: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-cert.pem
+    tls_key: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-key.pem
+```
+
+**Agent Assignment:**
+Agents are assigned to servers via `server_id` in the registry:
+```json
+{
+  "datum": {"server_id": "main", "port": 8001},
+  "scout-remote-5r5ft8": {"server_id": "scout", "port": 8000}
+}
+```
+
+**Remote Nginx Routes:**
+Remote servers get simplified nginx configs with only API routing:
+- OAuth callbacks: `/v1/auth/oauth/{agent_id}/*`
+- Agent APIs: `/api/{agent_id}/v1/*`
+- No GUI routes (Manager GUI and Agent GUI only on main server)
+
+For complete multi-server setup and troubleshooting, see `CLAUDE.md`.
+
 ### Directory Structure
 
 ```
