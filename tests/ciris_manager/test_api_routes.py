@@ -215,6 +215,7 @@ class TestAPIRoutes:
             enable_discord=None,
             billing_enabled=False,
             billing_api_key=None,
+            server_id=None,
         )
 
     def test_create_agent_with_billing_enabled(self, client, mock_manager):
@@ -252,6 +253,7 @@ class TestAPIRoutes:
             enable_discord=None,
             billing_enabled=True,
             billing_api_key="test-billing-key-abc123",
+            server_id=None,
         )
 
     def test_create_agent_with_billing_disabled(self, client, mock_manager):
@@ -286,6 +288,7 @@ class TestAPIRoutes:
             enable_discord=None,
             billing_enabled=False,
             billing_api_key=None,
+            server_id=None,
         )
 
     def test_create_agent_billing_defaults_to_false(self, client, mock_manager):
@@ -341,6 +344,7 @@ class TestAPIRoutes:
             enable_discord=None,
             billing_enabled=False,
             billing_api_key=None,
+            server_id=None,
         )
 
     def test_create_agent_invalid_template(self, client, mock_manager):

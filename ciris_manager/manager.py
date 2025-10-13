@@ -588,11 +588,11 @@ class CIRISManager:
             restart_policy = service_config.get("restart", "unless-stopped")
 
             # Convert ports to port bindings format
-            port_bindings = {}
+            port_bindings: dict[str, int | tuple[str, int] | None] = {}
             for port_mapping in ports:
                 if ":" in str(port_mapping):
                     host_port, container_port = str(port_mapping).split(":")
-                    port_bindings[container_port] = host_port
+                    port_bindings[container_port] = int(host_port)
 
             # Note: Volume mounting for remote servers requires volumes to exist on remote host
             # For now, we'll skip volumes as they need to be pre-created on remote server
