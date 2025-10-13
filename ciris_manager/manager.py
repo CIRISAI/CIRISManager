@@ -694,8 +694,10 @@ class CIRISManager:
 
                     # Write script to remote server using nginx container
                     script_path = f"{base_path}/init_permissions.sh"
+                    # Use separate commands to avoid heredoc + && syntax issues
                     write_cmd = f"cat > {script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT\n"
-                    write_cmd += f" && chmod 755 {script_path} && chown 1000:1000 {script_path}"
+                    write_cmd += f"chmod 755 {script_path}\n"
+                    write_cmd += f"chown 1000:1000 {script_path}"
 
                     try:
                         nginx_container = docker_client.containers.get("ciris-nginx")
