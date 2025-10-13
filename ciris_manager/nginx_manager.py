@@ -685,54 +685,152 @@ http {
         Returns:
             True if successful, False otherwise
         """
+        start_time = time.time()
+        config_size = len(config_content)
+        config_lines = len(config_content.splitlines())
+
+        logger.info(f"[Remote Deploy] Starting deployment to {container_name} on {self.hostname}")
+        logger.info(f"[Remote Deploy] Config size: {config_size} bytes, {config_lines} lines")
+        logger.debug(f"[Remote Deploy] First 300 chars:\n{config_content[:300]}")
+
         try:
             # Get the nginx container
+            logger.debug(f"[Remote Deploy] Getting container: {container_name}")
             container = docker_client.containers.get(container_name)
+            logger.info(
+                f"[Remote Deploy] ✓ Found container {container_name} (status: {container.status})"
+            )
 
             # Write config to container using exec
             # We write to a temp file first, validate, then move to final location
             temp_path = "/tmp/nginx.conf.new"
             final_path = "/etc/nginx/nginx.conf"
 
-            # Write to temp file using heredoc (no escaping needed)
+            # Step 1: Write config to temp file using heredoc
+            logger.info(f"[Remote Deploy] Step 1/4: Writing config to {temp_path}")
             write_cmd = f"sh -c 'cat > {temp_path} << \"EOF\"\n{config_content}\nEOF'"
+            logger.debug(f"[Remote Deploy] Write command length: {len(write_cmd)} chars")
+
             exec_result = container.exec_run(write_cmd)
 
             if exec_result.exit_code != 0:
-                logger.error(f"Failed to write config to remote: {exec_result.output.decode()}")
+                error_msg = exec_result.output.decode()
+                logger.error(f"[Remote Deploy] ✗ Step 1 failed: Write to {temp_path}")
+                logger.error(f"[Remote Deploy] Exit code: {exec_result.exit_code}")
+                logger.error(f"[Remote Deploy] Error output:\n{error_msg}")
                 return False
 
-            # Validate config
+            logger.info(f"[Remote Deploy] ✓ Step 1 complete: Config written to {temp_path}")
+
+            # Verify what was written by reading it back
+            logger.debug("[Remote Deploy] Verifying written config...")
+            verify_cmd = f"head -20 {temp_path}"
+            verify_result = container.exec_run(verify_cmd)
+            if verify_result.exit_code == 0:
+                logger.debug(
+                    f"[Remote Deploy] First 20 lines of written config:\n{verify_result.output.decode()}"
+                )
+            else:
+                logger.warning(
+                    f"[Remote Deploy] Could not verify written config: {verify_result.output.decode()}"
+                )
+
+            # Step 2: Validate config
+            logger.info("[Remote Deploy] Step 2/4: Validating config with nginx -t")
             validate_cmd = f"nginx -t -c {temp_path}"
             exec_result = container.exec_run(validate_cmd)
 
             if exec_result.exit_code != 0:
-                logger.error(f"Remote nginx validation failed: {exec_result.output.decode()}")
+                error_output = exec_result.output.decode()
+                logger.error("[Remote Deploy] ✗ Step 2 failed: Nginx validation")
+                logger.error(f"[Remote Deploy] Exit code: {exec_result.exit_code}")
+                logger.error(f"[Remote Deploy] Validation error:\n{error_output}")
+
+                # Try to show the problematic line from the config
+                if "line" in error_output:
+                    import re
+
+                    line_match = re.search(r"line (\d+)", error_output)
+                    if line_match:
+                        line_num = int(line_match.group(1))
+                        logger.error(f"[Remote Deploy] Problem around line {line_num}:")
+                        lines = config_content.splitlines()
+                        start = max(0, line_num - 3)
+                        end = min(len(lines), line_num + 2)
+                        for i in range(start, end):
+                            prefix = ">>>" if i == line_num - 1 else "   "
+                            logger.error(f"[Remote Deploy]   {prefix} {i+1:4d}: {lines[i]}")
+
+                # Clean up temp file
+                logger.debug(f"[Remote Deploy] Cleaning up {temp_path}")
+                container.exec_run(f"rm -f {temp_path}")
                 return False
 
-            # Move to final location
+            logger.info("[Remote Deploy] ✓ Step 2 complete: Config validation passed")
+            if exec_result.output:
+                logger.debug(f"[Remote Deploy] Validation output:\n{exec_result.output.decode()}")
+
+            # Step 3: Move to final location
+            logger.info(f"[Remote Deploy] Step 3/4: Moving config to {final_path}")
             move_cmd = f"mv {temp_path} {final_path}"
             exec_result = container.exec_run(move_cmd)
 
             if exec_result.exit_code != 0:
-                logger.error(
-                    f"Failed to move config to final location: {exec_result.output.decode()}"
-                )
+                error_msg = exec_result.output.decode()
+                logger.error("[Remote Deploy] ✗ Step 3 failed: Move to final location")
+                logger.error(f"[Remote Deploy] Exit code: {exec_result.exit_code}")
+                logger.error(f"[Remote Deploy] Error output:\n{error_msg}")
                 return False
 
-            # Reload nginx
+            logger.info(f"[Remote Deploy] ✓ Step 3 complete: Config moved to {final_path}")
+
+            # Step 4: Reload nginx
+            logger.info("[Remote Deploy] Step 4/4: Reloading nginx")
             reload_cmd = "nginx -s reload"
             exec_result = container.exec_run(reload_cmd)
 
             if exec_result.exit_code != 0:
-                logger.error(f"Failed to reload remote nginx: {exec_result.output.decode()}")
+                error_msg = exec_result.output.decode()
+                logger.error("[Remote Deploy] ✗ Step 4 failed: Nginx reload")
+                logger.error(f"[Remote Deploy] Exit code: {exec_result.exit_code}")
+                logger.error(f"[Remote Deploy] Error output:\n{error_msg}")
                 return False
 
-            logger.info(f"Successfully deployed config to remote nginx container {container_name}")
+            logger.info("[Remote Deploy] ✓ Step 4 complete: Nginx reloaded")
+            if exec_result.output:
+                logger.debug(f"[Remote Deploy] Reload output:\n{exec_result.output.decode()}")
+
+            duration_ms = int((time.time() - start_time) * 1000)
+            logger.info(
+                f"[Remote Deploy] ✅ Successfully deployed config to {self.hostname} in {duration_ms}ms"
+            )
+
+            # Log success with structured data
+            log_nginx_operation(
+                operation="deploy_remote_config",
+                success=True,
+                details={
+                    "hostname": self.hostname,
+                    "container": container_name,
+                    "config_size": config_size,
+                    "config_lines": config_lines,
+                    "duration_ms": duration_ms,
+                },
+            )
             return True
 
         except Exception as e:
-            logger.error(f"Failed to deploy remote nginx config: {e}", exc_info=True)
+            duration_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                f"[Remote Deploy] ❌ Failed to deploy remote nginx config after {duration_ms}ms"
+            )
+            logger.error(f"[Remote Deploy] Exception: {e}", exc_info=True)
+            log_nginx_operation(
+                operation="deploy_remote_config",
+                success=False,
+                error=str(e),
+                details={"hostname": self.hostname, "container": container_name},
+            )
             return False
 
     def _validate_config(self) -> bool:
