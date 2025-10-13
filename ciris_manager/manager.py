@@ -860,6 +860,7 @@ class CIRISManager:
             volumes_config = service_config.get("volumes", [])
             container_name = service_config.get("container_name", f"ciris-{agent_id}")
             restart_policy = service_config.get("restart", "unless-stopped")
+            labels = service_config.get("labels", {})
 
             # Create agent directories on remote server BEFORE starting container
             logger.info(f"Creating agent directories on remote server {server_id}")
@@ -915,6 +916,7 @@ class CIRISManager:
                     environment=environment,
                     ports=port_bindings,
                     volumes=volumes,
+                    labels=labels,
                     detach=True,
                     restart_policy={"Name": restart_policy},
                 )

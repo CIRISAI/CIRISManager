@@ -176,3 +176,7 @@ CLAUDE.local.md
 *.tsbuildinfo
 next-env.d.ts
 docker-certs-*/
+
+# Scout test configs (contain secrets)
+scout-*.json
+deploy_scout.py
