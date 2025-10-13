@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import time
+import base64
 from pathlib import Path
 from typing import List, Optional
 import logging
@@ -706,10 +707,14 @@ http {
             temp_path = "/tmp/nginx.conf.new"
             final_path = "/etc/nginx/nginx.conf"
 
-            # Step 1: Write config to temp file using heredoc
+            # Step 1: Write config to temp file using base64 encoding
+            # Base64 encoding avoids all shell escaping issues with quotes, newlines, etc.
             logger.info(f"[Remote Deploy] Step 1/4: Writing config to {temp_path}")
-            write_cmd = f"sh -c 'cat > {temp_path} << \"EOF\"\n{config_content}\nEOF'"
-            logger.debug(f"[Remote Deploy] Write command length: {len(write_cmd)} chars")
+            encoded_config = base64.b64encode(config_content.encode()).decode()
+            write_cmd = f"sh -c 'echo {encoded_config} | base64 -d > {temp_path}'"
+            logger.debug(
+                f"[Remote Deploy] Encoded config size: {len(encoded_config)} bytes (base64)"
+            )
 
             exec_result = container.exec_run(write_cmd)
 
