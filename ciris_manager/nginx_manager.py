@@ -474,14 +474,44 @@ http {
 
         # === AGENT API ROUTES (all servers) ===
         if agents:
-            server += "\n        # === AGENT ROUTES ===\n"
-            for agent in agents:
-                # Skip agents without valid ports
-                if not agent.has_port:
-                    continue
+            # Remote servers with single agent: use simple pass-through routes
+            # Main server or multiple agents: use agent-specific routes
+            if not is_main and len(agents) == 1:
+                agent = agents[0]
+                if agent.has_port:
+                    server += f"""
+        # === AGENT ROUTES (Simple pass-through for single agent) ===
+        # All /v1/* requests go directly to the agent
+        location /v1/ {{
+            proxy_pass http://agent_{agent.agent_id}/v1/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
 
-                # OAuth callback route
-                server += f"""
+            # Disable buffering for SSE/streaming responses
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_set_header X-Accel-Buffering no;
+
+            # WebSocket support
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }}
+"""
+            else:
+                # Main server or multiple agents: use agent-specific routes
+                server += "\n        # === AGENT ROUTES ===\n"
+                for agent in agents:
+                    # Skip agents without valid ports
+                    if not agent.has_port:
+                        continue
+
+                    # OAuth callback route
+                    server += f"""
         # {agent.agent_name} OAuth callbacks
         location ~ ^/v1/auth/oauth/{agent.agent_id}/(.+)/callback$ {{
             proxy_pass http://agent_{agent.agent_id}/v1/auth/oauth/$1/callback$is_args$args;
