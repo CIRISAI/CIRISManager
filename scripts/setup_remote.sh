@@ -396,7 +396,7 @@ if [ -f "/etc/letsencrypt/live/$HOSTNAME/fullchain.pem" ]; then
         --restart unless-stopped \
         -p 80:80 \
         -p 443:443 \
-        -v /opt/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+        -v /opt/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf \
         -v /etc/letsencrypt:/etc/letsencrypt:ro \
         -v /opt/ciris/nginx/certs:/etc/nginx/certs:ro \
         nginx:alpine
@@ -408,7 +408,7 @@ else
         --name ciris-nginx \
         --restart unless-stopped \
         -p 80:80 \
-        -v /opt/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+        -v /opt/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf \
         -v /opt/ciris/nginx/certs:/etc/nginx/certs:ro \
         nginx:alpine
 
