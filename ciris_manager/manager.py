@@ -101,25 +101,47 @@ class CIRISManager:
                         f"Remote server {server.server_id} is not reachable - agents on this server may not work"
                     )
 
-        # Initialize nginx manager - fail fast if there are issues
+        # Initialize nginx managers - one for each server
         if self.config.nginx.enabled:
-            logger.info(
-                f"Initializing Nginx Manager with config_dir: {self.config.nginx.config_dir}"
-            )
+            logger.info(f"Initializing Nginx Managers for {len(self.config.servers)} servers")
             try:
-                # Use main server's hostname for nginx manager
+                # Create nginx managers dict
+                self.nginx_managers: Dict[str, NginxManager] = {}
+
+                # Main server nginx manager (manages local nginx config file)
                 main_server = next(
                     (s for s in self.config.servers if s.server_id == "main"),
                     self.config.servers[0],
                 )
-                self.nginx_manager = NginxManager(
+                self.nginx_managers["main"] = NginxManager(
                     config_dir=self.config.nginx.config_dir,
                     container_name=self.config.nginx.container_name,
                     hostname=main_server.hostname,
                 )
-                logger.info("Successfully initialized Nginx Manager")
+                logger.info(
+                    f"✅ Initialized Nginx Manager for main server ({main_server.hostname})"
+                )
+
+                # Remote server nginx managers (for config generation only, deployed via Docker API)
+                for server in self.config.servers:
+                    if not server.is_local and server.server_id != "main":
+                        # For remote servers, we only need the NginxManager for config generation
+                        # The deploy_remote_config() method will handle deployment via Docker API
+                        self.nginx_managers[server.server_id] = NginxManager(
+                            config_dir="/tmp",  # Not used for remote servers
+                            container_name="ciris-nginx",  # Standard nginx container name
+                            hostname=server.hostname,
+                        )
+                        logger.info(
+                            f"✅ Initialized Nginx Manager for remote server {server.server_id} ({server.hostname})"
+                        )
+
+                # Keep backward compatibility - self.nginx_manager points to main
+                self.nginx_manager = self.nginx_managers["main"]
+
+                logger.info(f"Successfully initialized {len(self.nginx_managers)} Nginx Managers")
             except Exception as e:
-                logger.error(f"Failed to initialize Nginx Manager: {e}")
+                logger.error(f"Failed to initialize Nginx Managers: {e}")
                 logger.error(f"Config dir: {self.config.nginx.config_dir}")
                 logger.error(f"Container name: {self.config.nginx.container_name}")
                 raise
@@ -497,26 +519,82 @@ class CIRISManager:
         }
 
     async def update_nginx_config(self) -> bool:
-        """Update nginx configuration with all current agents."""
+        """Update nginx configuration with all current agents across all servers."""
         try:
-            # Discover all running agents
+            # Discover all running agents (from Docker on local server)
             from ciris_manager.docker_discovery import DockerAgentDiscovery
 
             discovery = DockerAgentDiscovery(self.agent_registry)
-            agents = discovery.discover_agents()
+            all_agents = discovery.discover_agents()
 
-            # Update nginx config with current agent list
-            success = self.nginx_manager.update_config(agents)
+            # Group agents by server_id
+            agents_by_server: Dict[str, list] = {}
+            for agent in all_agents:
+                # Get server_id from agent registry
+                agent_info = self.agent_registry.get_agent(agent.agent_id)
+                server_id = (
+                    agent_info.server_id
+                    if agent_info and hasattr(agent_info, "server_id")
+                    else "main"
+                )
 
-            if success:
-                logger.info(f"Updated nginx config with {len(agents)} agents")
-            else:
-                logger.error("Failed to update nginx configuration")
+                if server_id not in agents_by_server:
+                    agents_by_server[server_id] = []
+                agents_by_server[server_id].append(agent)
 
-            return success
+            # Update nginx on each server
+            all_success = True
+            for server_id, nginx_manager in self.nginx_managers.items():
+                # Get agents for this server
+                server_agents = agents_by_server.get(server_id, [])
+                logger.info(
+                    f"Updating nginx config for server {server_id} with {len(server_agents)} agents"
+                )
+
+                # Get server config
+                server_config = self.docker_client.get_server_config(server_id)
+
+                if server_config.is_local:
+                    # Main server: update local nginx config file
+                    success = nginx_manager.update_config(server_agents)
+                    if success:
+                        logger.info(
+                            f"✅ Updated nginx config for main server with {len(server_agents)} agents"
+                        )
+                    else:
+                        logger.error("❌ Failed to update nginx config for main server")
+                        all_success = False
+                else:
+                    # Remote server: deploy config via Docker API
+                    logger.info(f"Deploying nginx config to remote server {server_id}")
+
+                    # Generate config for this server
+                    config_content = nginx_manager.generate_config(server_agents)
+
+                    # Get Docker client for remote server
+                    docker_client = self.docker_client.get_client(server_id)
+
+                    # Deploy to remote nginx container
+                    success = nginx_manager.deploy_remote_config(
+                        config_content=config_content,
+                        docker_client=docker_client,
+                        container_name="ciris-nginx",
+                    )
+
+                    if success:
+                        logger.info(
+                            f"✅ Deployed nginx config to remote server {server_id} with {len(server_agents)} agents"
+                        )
+                    else:
+                        logger.error(
+                            f"❌ Failed to deploy nginx config to remote server {server_id}"
+                        )
+                        all_success = False
+
+            return all_success
 
         except Exception as e:
-            logger.error(f"Error updating nginx config: {e}")
+            logger.error(f"Error updating nginx config: {e}", exc_info=True)
             return False
 
     async def _add_nginx_route(self, agent_id: str, port: int) -> None:
