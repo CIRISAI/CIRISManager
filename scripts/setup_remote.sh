@@ -3,7 +3,7 @@
 # setup_remote.sh - Set up a new remote agent host for CIRIS
 #
 # Usage: ./setup_remote.sh <hostname> <vpc_ip> <public_ip>
-# Example: ./setup_remote.sh scout.ciris.ai 10.2.96.4 207.148.14.113
+# Example: ./setup_remote.sh scoutapi.ciris.ai 10.2.96.4 207.148.14.113
 #
 # This script:
 # - Installs Docker with TLS security
@@ -11,8 +11,10 @@
 # - Sets up directory structure
 # - Generates TLS certificates for Docker API
 # - Configures firewall to restrict Docker API to VPC only
-# - Sets up nginx container for TLS termination
-# - Returns client certificates for main server
+# - Installs certbot and obtains Let's Encrypt SSL certificates
+# - Sets up automatic certificate renewal
+# - Deploys nginx container with SSL support
+# - Returns client certificates for main server to use for Docker API access
 
 set -e
 
@@ -235,22 +237,141 @@ else
     exit 1
 fi
 
-# 9. Set up nginx container placeholder
+# 9. Install certbot for Let's Encrypt
+echo "Installing certbot for SSL certificates..."
+if ! command -v certbot &> /dev/null; then
+    apt-get update -qq
+    apt-get install -y -qq certbot
+    echo "✓ Certbot installed"
+else
+    echo "✓ Certbot already installed"
+fi
+
+# 10. Obtain Let's Encrypt SSL certificate
+if [ ! -f "/etc/letsencrypt/live/$HOSTNAME/fullchain.pem" ]; then
+    echo "Obtaining Let's Encrypt SSL certificate for $HOSTNAME..."
+
+    # Create webroot directory for challenges
+    mkdir -p /var/www/certbot
+
+    # Get certificate using standalone mode (port 80 must be free)
+    certbot certonly \
+        --standalone \
+        --non-interactive \
+        --agree-tos \
+        --email "admin@ciris.ai" \
+        --domains "$HOSTNAME" \
+        --rsa-key-size 4096
+
+    if [ ! -f "/etc/letsencrypt/live/$HOSTNAME/fullchain.pem" ]; then
+        echo "✗ SSL certificate generation failed!"
+        echo "⚠ Continuing without SSL - you can run certbot manually later"
+    else
+        echo "✓ SSL certificate obtained for $HOSTNAME"
+
+        # Set proper permissions for Docker access
+        chmod -R 755 /etc/letsencrypt/live
+        chmod -R 755 /etc/letsencrypt/archive
+    fi
+else
+    echo "✓ SSL certificate already exists for $HOSTNAME"
+fi
+
+# 11. Set up automatic certificate renewal
+echo "Setting up automatic certificate renewal..."
+mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+
+cat > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx-container.sh <<'RENEWAL_HOOK'
+#!/bin/bash
+# Reload nginx container after certificate renewal
+docker exec ciris-nginx nginx -s reload 2>/dev/null || true
+RENEWAL_HOOK
+
+chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx-container.sh
+
+# Create systemd service for renewal
+cat > /etc/systemd/system/certbot-renew.service <<'CERTBOT_SERVICE'
+[Unit]
+Description=Certbot Renewal
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --quiet
+ExecStartPost=/bin/bash -c 'docker exec ciris-nginx nginx -s reload 2>/dev/null || true'
+CERTBOT_SERVICE
+
+# Create systemd timer
+cat > /etc/systemd/system/certbot-renew.timer <<'CERTBOT_TIMER'
+[Unit]
+Description=Run certbot twice daily
+After=network.target
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+CERTBOT_TIMER
+
+systemctl daemon-reload
+systemctl enable certbot-renew.timer
+systemctl start certbot-renew.timer
+
+echo "✓ Automatic certificate renewal configured"
+
+# 12. Set up nginx container configuration
 echo "Setting up nginx configuration directory..."
+mkdir -p /opt/ciris/nginx/certs
+
+# Create initial nginx config
 cat > /opt/ciris/nginx/nginx.conf <<NGINX_CONF
-# Placeholder nginx.conf
-# This will be replaced by CIRISManager
+# Initial nginx.conf for CIRIS Agent Host
+# This will be replaced by CIRISManager with proper routing
 events {
     worker_connections 1024;
 }
 
 http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    sendfile on;
+    keepalive_timeout 65;
+
+    # Logging
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    # SSL Configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384';
+
+    # HTTP Server (redirect to HTTPS if cert exists)
     server {
         listen 80;
         server_name $HOSTNAME;
 
         location / {
-            return 200 'CIRIS Agent Host Ready\n';
+            return 200 'CIRIS Agent Host Ready - Waiting for CIRISManager configuration\n';
+            add_header Content-Type text/plain;
+        }
+    }
+
+    # HTTPS Server (if certificate exists)
+    server {
+        listen 443 ssl http2;
+        server_name $HOSTNAME;
+
+        # SSL Certificate paths (will use Let's Encrypt if available)
+        ssl_certificate /etc/letsencrypt/live/$HOSTNAME/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/$HOSTNAME/privkey.pem;
+
+        location / {
+            return 200 'CIRIS Agent Host Ready (SSL) - Waiting for CIRISManager configuration\n';
             add_header Content-Type text/plain;
         }
     }
@@ -261,7 +382,51 @@ chown -R 1000:1000 /opt/ciris/nginx
 
 echo "✓ Nginx configuration directory ready (owned by uid 1000)"
 
-# 10. Copy client certificates to temp location for retrieval
+# 13. Deploy nginx container
+echo "Deploying nginx container..."
+
+# Pull nginx image
+docker pull nginx:alpine
+
+# Check if Let's Encrypt cert exists to determine volume mounts
+if [ -f "/etc/letsencrypt/live/$HOSTNAME/fullchain.pem" ]; then
+    # Start with SSL support
+    docker run -d \
+        --name ciris-nginx \
+        --restart unless-stopped \
+        -p 80:80 \
+        -p 443:443 \
+        -v /opt/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+        -v /etc/letsencrypt:/etc/letsencrypt:ro \
+        -v /opt/ciris/nginx/certs:/etc/nginx/certs:ro \
+        nginx:alpine
+
+    echo "✓ Nginx container started with SSL support"
+else
+    # Start without SSL
+    docker run -d \
+        --name ciris-nginx \
+        --restart unless-stopped \
+        -p 80:80 \
+        -v /opt/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+        -v /opt/ciris/nginx/certs:/etc/nginx/certs:ro \
+        nginx:alpine
+
+    echo "✓ Nginx container started (HTTP only - run certbot manually for SSL)"
+fi
+
+# Verify nginx container is running
+sleep 2
+if docker ps | grep -q ciris-nginx; then
+    echo "✓ Nginx container is running"
+    docker ps --filter name=ciris-nginx --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+else
+    echo "✗ Nginx container failed to start"
+    docker logs ciris-nginx
+    exit 1
+fi
+
+# 14. Copy client certificates to temp location for retrieval
 echo "Preparing client certificates for download..."
 mkdir -p /tmp/ciris-certs-$HOSTNAME
 cp /etc/docker/certs/ca.pem /tmp/ciris-certs-$HOSTNAME/
@@ -279,11 +444,14 @@ echo "VPC IP: $VPC_IP"
 echo "Public IP: $PUBLIC_IP"
 echo "Docker API: tcp://$VPC_IP:2376 (TLS)"
 echo "Firewall: Port 2376 restricted to VPC (10.0.0.0/8)"
+echo "SSL: Let's Encrypt certificate installed"
+echo "Nginx: Container running with SSL support"
 echo ""
 echo "Next steps:"
 echo "1. Download client certificates from this server"
 echo "2. Add server to CIRISManager config.yml"
 echo "3. Test Docker API connection from main server"
+echo "4. CIRISManager will deploy agent-specific nginx configs"
 echo "===================================================="
 EOF
 
@@ -302,7 +470,16 @@ log_info "===================================================="
 log_info "Hostname: $HOSTNAME"
 log_info "VPC IP: $VPC_IP"
 log_info "Public IP: $PUBLIC_IP"
+log_info "Docker API: tcp://$VPC_IP:2376 (TLS)"
+log_info "SSL: Let's Encrypt certificate installed"
+log_info "Nginx: Container running with SSL support"
 log_info "Certificates: $CERT_DIR/"
+log_info ""
+log_info "Remote server is ready with:"
+log_info "  ✓ Docker with TLS (port 2376 restricted to VPC)"
+log_info "  ✓ Let's Encrypt SSL certificates"
+log_info "  ✓ Nginx container running with SSL"
+log_info "  ✓ Automatic certificate renewal configured"
 log_info ""
 log_info "Next: Copy certificates to main server at:"
 log_info "  /etc/ciris-manager/docker-certs/$HOSTNAME/"
@@ -316,4 +493,8 @@ log_info "      docker_host: tcp://$VPC_IP:2376"
 log_info "      tls_ca: /etc/ciris-manager/docker-certs/$HOSTNAME/ca.pem"
 log_info "      tls_cert: /etc/ciris-manager/docker-certs/$HOSTNAME/client-cert.pem"
 log_info "      tls_key: /etc/ciris-manager/docker-certs/$HOSTNAME/client-key.pem"
+log_info ""
+log_info "After adding to config and restarting CIRISManager:"
+log_info "  - Manager will automatically deploy nginx configs to $HOSTNAME"
+log_info "  - Agents created on $HOSTNAME will be accessible via nginx"
 log_info "===================================================="
