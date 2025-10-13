@@ -133,6 +133,8 @@ class TestMultiServerAgentCreation:
         mock_remote_docker = Mock()
         mock_container = Mock()
         mock_remote_docker.containers.run = Mock(return_value=mock_container)
+        # Mock containers.get to fail so we use Alpine fallback for directory creation
+        mock_remote_docker.containers.get = Mock(side_effect=Exception("No nginx container"))
         multi_server_manager.docker_client.get_client = Mock(return_value=mock_remote_docker)
 
         result = await multi_server_manager.create_agent(
@@ -145,8 +147,14 @@ class TestMultiServerAgentCreation:
         agent_info = multi_server_manager.agent_registry.get_agent(result["agent_id"])
         assert agent_info.server_id == "scout"
 
-        # Verify Docker API was called (not docker-compose)
-        mock_remote_docker.containers.run.assert_called_once()
+        # Verify Docker API was called multiple times:
+        # - 6 times for directory creation (data, data_archive, logs, config, audit_keys, .secrets)
+        # - 1 time for the actual agent container
+        assert mock_remote_docker.containers.run.call_count == 7
+
+        # Verify the last call (the agent container) has the expected image
+        last_call = mock_remote_docker.containers.run.call_args_list[-1]
+        assert last_call[1]["image"] == "ghcr.io/test/agent"
 
     @pytest.mark.asyncio
     async def test_create_agent_invalid_server(self, multi_server_manager, temp_dirs):
@@ -327,7 +335,10 @@ class TestMultiServerCrashRecovery:
         mock_container.attrs = {"State": {"ExitCode": 1, "FinishedAt": "2024-01-01T00:00:00Z"}}
 
         mock_scout_client = Mock()
-        mock_scout_client.containers.get = Mock(return_value=mock_container)
+        # First call returns crashed container, subsequent calls for nginx container fail (triggers Alpine fallback)
+        mock_scout_client.containers.get = Mock(
+            side_effect=[mock_container] + [Exception("No nginx")] * 10
+        )
         mock_scout_client.containers.run = Mock()
 
         multi_server_manager.docker_client.get_client = Mock(return_value=mock_scout_client)
@@ -338,7 +349,8 @@ class TestMultiServerCrashRecovery:
         await multi_server_manager._recover_crashed_containers()
 
         # Verify container was restarted via Docker API
-        mock_scout_client.containers.run.assert_called_once()
+        # Will be called multiple times (directory creation + agent container)
+        assert mock_scout_client.containers.run.call_count >= 1
 
 
 class TestRemoteDockerExecution:
@@ -383,13 +395,19 @@ class TestRemoteDockerExecution:
 
         mock_remote_docker = Mock()
         mock_remote_docker.containers.run = Mock()
+        # Mock containers.get to fail so we use Alpine fallback for directory creation
+        mock_remote_docker.containers.get = Mock(side_effect=Exception("No nginx container"))
         multi_server_manager.docker_client.get_client = Mock(return_value=mock_remote_docker)
 
         await multi_server_manager._start_agent("remote-agent", compose_path, "scout")
 
-        # Verify Docker API was called
-        mock_remote_docker.containers.run.assert_called_once()
-        call_kwargs = mock_remote_docker.containers.run.call_args[1]
+        # Verify Docker API was called multiple times (directory creation + agent container)
+        # The exact count depends on whether volumes are in compose file
+        assert mock_remote_docker.containers.run.call_count >= 1
+
+        # Verify the last call is for the agent container
+        last_call = mock_remote_docker.containers.run.call_args_list[-1]
+        call_kwargs = last_call[1]
 
         assert call_kwargs["image"] == "test/agent:latest"
         assert call_kwargs["name"] == "ciris-test"

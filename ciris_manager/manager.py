@@ -635,6 +635,74 @@ class CIRISManager:
         if not success:
             raise RuntimeError("Failed to update nginx configuration")
 
+    async def _create_remote_agent_directories(self, agent_id: str, server_id: str) -> None:
+        """
+        Create agent directory structure on a remote server.
+
+        Args:
+            agent_id: Agent identifier
+            server_id: Remote server ID
+
+        Raises:
+            RuntimeError: If directory creation fails
+        """
+        logger.info(f"Creating agent directories for {agent_id} on remote server {server_id}")
+
+        # Get Docker client for remote server
+        docker_client = self.docker_client.get_client(server_id)
+
+        # Base path for agent directories on remote server
+        base_path = f"/opt/ciris/agents/{agent_id}"
+
+        # Subdirectories to create with their permissions
+        directories = {
+            "data": "755",
+            "data_archive": "755",
+            "logs": "755",
+            "config": "755",
+            "audit_keys": "700",
+            ".secrets": "700",
+        }
+
+        try:
+            # Create directories using a temporary busybox container
+            # This is more reliable than trying to use SSH
+            for dir_name, perms in directories.items():
+                dir_path = f"{base_path}/{dir_name}"
+
+                # Create directory with proper permissions using Docker exec on a temporary container
+                # We use the ciris-nginx container which should always exist on remote servers
+                create_cmd = f"mkdir -p {dir_path} && chmod {perms} {dir_path} && chown -R 1000:1000 {dir_path}"
+
+                try:
+                    # Try to find a running container to exec into
+                    # First try ciris-nginx (should always be running)
+                    nginx_container = docker_client.containers.get("ciris-nginx")
+                    exec_result = nginx_container.exec_run(f"sh -c '{create_cmd}'", user="root")
+                    if exec_result.exit_code != 0:
+                        raise RuntimeError(
+                            f"Failed to create directory {dir_path}: {exec_result.output}"
+                        )
+
+                except Exception as e:
+                    logger.warning(f"Could not use nginx container for directory creation: {e}")
+                    # Fallback: Use a temporary Alpine container
+                    logger.info("Using temporary Alpine container for directory creation")
+                    result = docker_client.containers.run(
+                        "alpine:latest",
+                        command=f"sh -c '{create_cmd}'",
+                        volumes={"/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"}},
+                        remove=True,
+                        detach=False,
+                    )
+                    logger.debug(f"Directory creation output: {result}")
+
+            logger.info(f"✅ Created agent directories on {server_id} at {base_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to create agent directories on {server_id}: {e}")
+            raise RuntimeError(f"Failed to create agent directories on {server_id}: {e}")
+
     async def _start_agent(
         self, agent_id: str, compose_path: Path, server_id: str = "main"
     ) -> None:
@@ -685,9 +753,13 @@ class CIRISManager:
             image = service_config.get("image")
             environment = service_config.get("environment", {})
             ports = service_config.get("ports", [])
-            # Note: volumes not yet supported for remote servers
+            volumes_config = service_config.get("volumes", [])
             container_name = service_config.get("container_name", f"ciris-{agent_id}")
             restart_policy = service_config.get("restart", "unless-stopped")
+
+            # Create agent directories on remote server BEFORE starting container
+            logger.info(f"Creating agent directories on remote server {server_id}")
+            await self._create_remote_agent_directories(agent_id, server_id)
 
             # Convert ports to port bindings format
             port_bindings: dict[str, int | tuple[str, int] | None] = {}
@@ -696,21 +768,55 @@ class CIRISManager:
                     host_port, container_port = str(port_mapping).split(":")
                     port_bindings[container_port] = int(host_port)
 
-            # Note: Volume mounting for remote servers requires volumes to exist on remote host
-            # For now, we'll skip volumes as they need to be pre-created on remote server
-            logger.warning(f"Volume mounting not yet supported for remote server {server_id}")
+            # Convert volume mounts from docker-compose format to Docker SDK format
+            # docker-compose format: ["./data:/app/data:rw", "./logs:/app/logs:rw"]
+            # Docker SDK format: {"/host/path": {"bind": "/container/path", "mode": "rw"}}
+            volumes: dict[str, dict[str, str]] = {}
+            for volume_str in volumes_config:
+                if isinstance(volume_str, str) and ":" in volume_str:
+                    parts = volume_str.split(":")
+                    if len(parts) >= 2:
+                        host_path = parts[0]
+                        container_path = parts[1]
+                        mode = parts[2] if len(parts) > 2 else "rw"
+
+                        # Convert paths to remote server paths
+                        # Relative paths (e.g., "./data") -> /opt/ciris/agents/{agent_id}/data
+                        if not host_path.startswith("/"):
+                            host_path = f"/opt/ciris/agents/{agent_id}/{host_path.lstrip('./')}"
+                        # Absolute paths referencing local agents dir -> convert to remote path
+                        # e.g., /home/ciris/agents/{agent_id}/data -> /opt/ciris/agents/{agent_id}/data
+                        elif f"agents/{agent_id}" in host_path:
+                            # Extract the path after agents/{agent_id}/
+                            path_after_agent = (
+                                host_path.split(f"agents/{agent_id}/", 1)[1]
+                                if f"agents/{agent_id}/" in host_path
+                                else ""
+                            )
+                            if path_after_agent:
+                                host_path = f"/opt/ciris/agents/{agent_id}/{path_after_agent}"
+                            else:
+                                # Just the agent directory itself
+                                host_path = f"/opt/ciris/agents/{agent_id}"
+
+                        volumes[host_path] = {"bind": container_path, "mode": mode}
+
+            logger.info(f"Configured {len(volumes)} volume mounts for remote server {server_id}")
 
             try:
-                # Create and start container
+                # Create and start container with volume mounts
                 docker_client.containers.run(
                     image=image,
                     name=container_name,
                     environment=environment,
                     ports=port_bindings,
+                    volumes=volumes,
                     detach=True,
                     restart_policy={"Name": restart_policy},
                 )
-                logger.info(f"✅ Started container {container_name} on remote server {server_id}")
+                logger.info(
+                    f"✅ Started container {container_name} on remote server {server_id} with {len(volumes)} volumes"
+                )
             except Exception as e:
                 logger.error(f"Failed to start container on remote server {server_id}: {e}")
                 raise RuntimeError(f"Failed to start agent on {server_id}: {e}")
