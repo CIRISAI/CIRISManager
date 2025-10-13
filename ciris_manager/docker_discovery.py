@@ -231,7 +231,7 @@ class DockerAgentDiscovery:
 
             # Query version info if agent is running
             if agent_info.is_running and agent_info.has_port and agent_info.api_port:
-                version_info = self._query_agent_version(agent_id, agent_info.api_port)
+                version_info = self._query_agent_version(agent_id, agent_info.api_port, server_id)
                 if version_info:
                     agent_info.version = version_info.get("version")
                     agent_info.codename = version_info.get("codename")
@@ -253,7 +253,9 @@ class DockerAgentDiscovery:
             logger.error(f"Error extracting info from container {container.name}: {e}")
             return None
 
-    def _query_agent_version(self, agent_id: str, port: int) -> Optional[Dict[str, str]]:
+    def _query_agent_version(
+        self, agent_id: str, port: int, server_id: str = "main"
+    ) -> Optional[Dict[str, str]]:
         """Query agent's /v1/agent/status endpoint for version information."""
         try:
             # Use synchronous httpx client for simplicity in sync context
@@ -276,7 +278,17 @@ class DockerAgentDiscovery:
                 logger.warning(f"Cannot authenticate with agent {agent_id}: {e}")
                 return None
 
-            url = f"http://localhost:{port}/v1/agent/status"
+            # Build URL based on server location
+            if server_id == "main" or not self.docker_client_manager:
+                # Local server - use localhost
+                base_url = "localhost"
+            else:
+                # Remote server - get VPC IP from server config
+                server_config = self.docker_client_manager.get_server_config(server_id)
+                base_url = server_config.vpc_ip if server_config.vpc_ip else server_config.hostname
+
+            url = f"http://{base_url}:{port}/v1/agent/status"
+            logger.debug(f"Querying agent version at {url}")
             with httpx.Client(timeout=2.0) as client:
                 response = client.get(url, headers=headers)
                 if response.status_code == 200:
