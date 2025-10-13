@@ -42,6 +42,10 @@ def main():
     new_env["CIRIS_ADAPTER"] = "api"
     print("\n  ✓ Changed CIRIS_ADAPTER to: api")
 
+    # Update OAuth callback URL for scout server
+    new_env["OAUTH_CALLBACK_BASE_URL"] = "https://scoutapi.ciris.ai"
+    print("  ✓ Changed OAUTH_CALLBACK_BASE_URL to: https://scoutapi.ciris.ai")
+
     print(f"\nTotal variables: {len(new_env)}")
     print(f"Removed: {len(source_env) - len(new_env)}")
 

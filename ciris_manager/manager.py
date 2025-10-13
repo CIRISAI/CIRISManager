@@ -88,12 +88,21 @@ class CIRISManager:
         )
         self.docker_client = MultiServerDockerClient(self.config.servers)
 
-        # Test connections to all servers
+        # Test connections to all servers and initialize remote server shared files
         for server in self.config.servers:
             if self.docker_client.test_connection(server.server_id):
                 logger.info(
                     f"✅ Docker connection successful: {server.server_id} ({server.hostname})"
                 )
+                # Initialize shared files on remote servers
+                if not server.is_local:
+                    try:
+                        self._ensure_remote_server_shared_files(server.server_id)
+                        logger.info(f"✅ Initialized shared files on {server.server_id}")
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to initialize shared files on {server.server_id}: {e}"
+                        )
             else:
                 logger.error(f"❌ Docker connection failed: {server.server_id} ({server.hostname})")
                 if not server.is_local:
@@ -635,6 +644,69 @@ class CIRISManager:
         if not success:
             raise RuntimeError("Failed to update nginx configuration")
 
+    def _ensure_remote_server_shared_files(self, server_id: str) -> None:
+        """
+        Ensure shared files exist on a remote server.
+
+        Copies common scripts like fix_agent_permissions.sh to /home/ciris/shared/
+        on the remote server. This is done once per server, not per agent.
+
+        Args:
+            server_id: Remote server ID
+        """
+        logger.info(f"Ensuring shared files exist on remote server {server_id}")
+
+        docker_client = self.docker_client.get_client(server_id)
+
+        # Create /home/ciris/shared directory if it doesn't exist
+        shared_dir_cmd = "mkdir -p /home/ciris/shared && chown 1000:1000 /home/ciris/shared"
+        try:
+            nginx_container = docker_client.containers.get("ciris-nginx")
+            exec_result = nginx_container.exec_run(f"sh -c '{shared_dir_cmd}'", user="root")
+            if exec_result.exit_code != 0:
+                raise RuntimeError(f"Failed to create shared directory: {exec_result.output}")
+        except Exception as e:
+            logger.warning(f"Could not use nginx container for shared directory: {e}")
+            docker_client.containers.run(
+                "alpine:latest",
+                command=f"sh -c '{shared_dir_cmd}'",
+                volumes={"/home/ciris": {"bind": "/home/ciris", "mode": "rw"}},
+                remove=True,
+                detach=False,
+            )
+
+        # Copy fix_agent_permissions.sh script
+        script_src = Path(__file__).parent / "templates" / "fix_agent_permissions.sh"
+        if script_src.exists():
+            with open(script_src, "r") as f:
+                script_content = f.read()
+
+            script_path = "/home/ciris/shared/fix_agent_permissions.sh"
+            write_cmd = f"cat > {script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT\n"
+            write_cmd += f"chmod 755 {script_path}\n"
+            write_cmd += f"chown 1000:1000 {script_path}"
+
+            try:
+                nginx_container = docker_client.containers.get("ciris-nginx")
+                exec_result = nginx_container.exec_run(f"sh -c '{write_cmd}'", user="root")
+                if exec_result.exit_code != 0:
+                    raise RuntimeError(
+                        f"Failed to write fix_agent_permissions.sh: {exec_result.output}"
+                    )
+            except Exception as e:
+                logger.warning(f"Could not use nginx container for script copy: {e}")
+                docker_client.containers.run(
+                    "alpine:latest",
+                    command=f"sh -c '{write_cmd}'",
+                    volumes={"/home/ciris": {"bind": "/home/ciris", "mode": "rw"}},
+                    remove=True,
+                    detach=False,
+                )
+
+            logger.info(f"✅ Copied fix_agent_permissions.sh to {server_id}:/home/ciris/shared/")
+        else:
+            logger.warning(f"Script not found at {script_src}")
+
     async def _create_remote_agent_directories(self, agent_id: str, server_id: str) -> None:
         """
         Create agent directory structure on a remote server.
@@ -683,49 +755,7 @@ class CIRISManager:
                 )
             logger.info(f"Created base directory: {base_path}")
 
-            # Copy init_permissions.sh script to remote server BEFORE creating subdirectories
-            init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
-            if init_script_src.exists():
-                logger.info(f"Copying init_permissions.sh to remote server {server_id}")
-                try:
-                    # Read the script content
-                    with open(init_script_src, "r") as f:
-                        script_content = f.read()
-
-                    # Write script to remote server using nginx container
-                    script_path = f"{base_path}/init_permissions.sh"
-                    # Use separate commands to avoid heredoc + && syntax issues
-                    write_cmd = f"cat > {script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT\n"
-                    write_cmd += f"chmod 755 {script_path}\n"
-                    write_cmd += f"chown 1000:1000 {script_path}"
-
-                    try:
-                        nginx_container = docker_client.containers.get("ciris-nginx")
-                        exec_result = nginx_container.exec_run(f"sh -c '{write_cmd}'", user="root")
-                        if exec_result.exit_code != 0:
-                            raise RuntimeError(f"Failed to write init script: {exec_result.output}")
-                    except Exception as e:
-                        logger.warning(f"Could not use nginx container for script copy: {e}")
-                        # Fallback: Use temporary Alpine container with volume mount
-                        logger.info("Using temporary Alpine container for script copy")
-                        docker_client.containers.run(
-                            "alpine:latest",
-                            command=f"sh -c '{write_cmd}'",
-                            volumes={"/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"}},
-                            remove=True,
-                            detach=False,
-                        )
-
-                    logger.info(f"✅ Copied init_permissions.sh to {server_id}")
-                except Exception as e:
-                    logger.error(f"Failed to copy init script to {server_id}: {e}")
-                    raise RuntimeError(f"Failed to copy init script to {server_id}: {e}")
-            else:
-                logger.warning(
-                    f"Init script not found at {init_script_src}, remote agent may have permission issues"
-                )
-
-            # Now create subdirectories with proper permissions
+            # Create subdirectories
             for dir_name, perms in directories.items():
                 dir_path = f"{base_path}/{dir_name}"
                 create_cmd = (
@@ -748,6 +778,28 @@ class CIRISManager:
                     )
 
                 logger.debug(f"Created directory {dir_path} with permissions {perms}")
+
+            # Run the shared permission fix script to ensure correct ownership
+            logger.info(f"Running permission fix script for {agent_id} on {server_id}")
+            fix_cmd = f"/home/ciris/shared/fix_agent_permissions.sh {base_path}"
+            try:
+                nginx_container = docker_client.containers.get("ciris-nginx")
+                exec_result = nginx_container.exec_run(f"sh -c '{fix_cmd}'", user="root")
+                if exec_result.exit_code != 0:
+                    raise RuntimeError(f"Permission fix failed: {exec_result.output.decode()}")
+                logger.info(f"✅ Fixed permissions: {exec_result.output.decode().strip()}")
+            except Exception as e:
+                logger.warning(f"Could not use nginx container for permission fix: {e}")
+                docker_client.containers.run(
+                    "alpine:latest",
+                    command=f"sh -c '{fix_cmd}'",
+                    volumes={
+                        "/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"},
+                        "/home/ciris": {"bind": "/home/ciris", "mode": "ro"},
+                    },
+                    remove=True,
+                    detach=False,
+                )
 
             logger.info(f"✅ Created agent directories on {server_id} at {base_path}")
 
