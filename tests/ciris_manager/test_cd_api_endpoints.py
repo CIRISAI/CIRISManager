@@ -41,6 +41,8 @@ class TestCDAPIEndpoints:
                 ),
             ]
         )
+        # Mock docker_client to prevent discovery issues
+        manager.docker_client = None
         return manager
 
     @pytest.fixture
