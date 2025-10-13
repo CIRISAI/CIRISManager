@@ -43,6 +43,11 @@ class AgentInfo(BaseModel):
     deployment: str = Field(
         "CIRIS_DISCORD_PILOT", description="Deployment identifier (e.g., CIRIS_DISCORD_PILOT)"
     )
+    server_id: Optional[str] = Field("main", description="Server ID where agent is deployed")
+    deployment_type: Optional[str] = Field(
+        None,
+        description="Deployment type: API_ONLY for remote servers, FULL for main server with GUI",
+    )
     created_at: Optional[str] = Field(None, description="When agent was created")
     health: Optional[str] = Field(None, description="Agent health status")
     api_endpoint: Optional[str] = Field(None, description="Full API endpoint URL")

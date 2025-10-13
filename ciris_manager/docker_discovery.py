@@ -15,22 +15,44 @@ logger = logging.getLogger("ciris_manager.docker_discovery")
 class DockerAgentDiscovery:
     """Discovers CIRIS agents running in Docker containers."""
 
-    def __init__(self, agent_registry=None) -> None:
-        try:
-            self.client = docker.from_env()
-            logger.debug("Connected to Docker daemon successfully")
-        except Exception as e:
-            logger.error(f"Failed to connect to Docker: {e}")
-            self.client = None  # type: ignore[assignment]
+    def __init__(self, agent_registry=None, docker_client_manager=None) -> None:
+        """
+        Initialize agent discovery.
+
+        Args:
+            agent_registry: Agent registry for metadata
+            docker_client_manager: MultiServerDockerClient for multi-server support
+        """
+        # For backward compatibility, support both local-only and multi-server modes
+        self.docker_client_manager = docker_client_manager
+
+        if not docker_client_manager:
+            # Legacy mode: local Docker only
+            try:
+                self.client = docker.from_env()
+                logger.debug("Connected to Docker daemon successfully")
+            except Exception as e:
+                logger.error(f"Failed to connect to Docker: {e}")
+                self.client = None  # type: ignore[assignment]
+        else:
+            self.client = None
 
         self.agent_registry = agent_registry
 
     def discover_agents(self) -> List[AgentInfo]:
-        """Discover all CIRIS agent containers."""
-        if not self.client:
+        """Discover all CIRIS agent containers across all servers."""
+        if self.docker_client_manager:
+            # Multi-server mode: discover from all servers
+            return self._discover_multi_server()
+        elif self.client:
+            # Legacy mode: local Docker only
+            return self._discover_local()
+        else:
             logger.warning("No Docker client available, returning empty agent list")
             return []
 
+    def _discover_local(self) -> List[AgentInfo]:
+        """Discover agents from local Docker daemon (legacy mode)."""
         agents = []
         try:
             # Find all containers with CIRIS agent characteristics
@@ -67,7 +89,63 @@ class DockerAgentDiscovery:
 
         return agents
 
-    def _extract_agent_info(self, container: Any, env_dict: Dict[str, str]) -> Optional[AgentInfo]:
+    def _discover_multi_server(self) -> List[AgentInfo]:
+        """Discover agents from all configured Docker servers."""
+        all_agents = []
+
+        # Get all server IDs
+        server_ids = self.docker_client_manager.list_servers()
+        logger.debug(f"Discovering agents from {len(server_ids)} servers: {server_ids}")
+
+        for server_id in server_ids:
+            try:
+                # Get Docker client for this server
+                client = self.docker_client_manager.get_client(server_id)
+                server_config = self.docker_client_manager.get_server_config(server_id)
+
+                # Find all containers on this server
+                containers = client.containers.list(all=True)
+                logger.debug(
+                    f"Found {len(containers)} total containers on server {server_id} ({server_config.hostname})"
+                )
+
+                for container in containers:
+                    # Check if this is a CIRIS agent
+                    env_vars = container.attrs.get("Config", {}).get("Env", [])
+                    env_dict = {}
+                    for env in env_vars:
+                        if "=" in env:
+                            key, value = env.split("=", 1)
+                            env_dict[key] = value
+
+                    # Is this a CIRIS agent?
+                    if "CIRIS_AGENT_ID" in env_dict:
+                        logger.debug(
+                            f"Found CIRIS agent on {server_id}: {container.name} (ID: {env_dict.get('CIRIS_AGENT_ID')})"
+                        )
+                        agent_info = self._extract_agent_info(
+                            container, env_dict, server_id=server_id
+                        )
+                        if agent_info:
+                            logger.debug(
+                                f"Extracted agent info from {server_id}: {agent_info.agent_id} on port {agent_info.api_port}"
+                            )
+                            all_agents.append(agent_info)
+                        else:
+                            logger.warning(
+                                f"Could not extract agent info from container {container.name} on {server_id}"
+                            )
+
+            except Exception as e:
+                logger.error(f"Error discovering agents on server {server_id}: {e}")
+                continue
+
+        logger.info(f"Discovered {len(all_agents)} agents across all servers")
+        return all_agents
+
+    def _extract_agent_info(
+        self, container: Any, env_dict: Dict[str, str], server_id: str = "main"
+    ) -> Optional[AgentInfo]:
         """Extract agent information from a container."""
         try:
             # Get container details
@@ -120,6 +198,11 @@ class DockerAgentDiscovery:
                 if hasattr(registry_agent, "metadata") and registry_agent.metadata:
                     deployment = registry_agent.metadata.get("deployment", "CIRIS_DISCORD_PILOT")
 
+            # Determine deployment type based on server
+            # Main server (agents.ciris.ai) has FULL deployment (GUI + API)
+            # Remote servers are API_ONLY
+            deployment_type = "FULL" if server_id == "main" else "API_ONLY"
+
             # Build agent info - simple and typed
             agent_info = AgentInfo(
                 agent_id=agent_id,
@@ -138,6 +221,8 @@ class DockerAgentDiscovery:
                 discord_enabled=discord_enabled,
                 template=template,
                 deployment=deployment,
+                server_id=server_id,
+                deployment_type=deployment_type,
                 created_at=None,
                 health="healthy" if container.status == "running" else "unhealthy",
                 api_endpoint=f"http://localhost:{api_port}" if api_port else None,

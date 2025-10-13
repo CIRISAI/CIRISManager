@@ -521,10 +521,12 @@ class CIRISManager:
     async def update_nginx_config(self) -> bool:
         """Update nginx configuration with all current agents across all servers."""
         try:
-            # Discover all running agents (from Docker on local server)
+            # Discover all running agents (from Docker across all servers)
             from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            discovery = DockerAgentDiscovery(self.agent_registry)
+            discovery = DockerAgentDiscovery(
+                agent_registry=self.agent_registry, docker_client_manager=self.docker_client
+            )
             all_agents = discovery.discover_agents()
 
             # Group agents by server_id
@@ -1116,7 +1118,9 @@ class CIRISManager:
             # Get current list of agents to pass to nginx manager
             from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            discovery = DockerAgentDiscovery(self.agent_registry)
+            discovery = DockerAgentDiscovery(
+                agent_registry=self.agent_registry, docker_client_manager=self.docker_client
+            )
             agents = discovery.discover_agents()
             self.nginx_manager.remove_agent_routes(agent_id, agents)
 
