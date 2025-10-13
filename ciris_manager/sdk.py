@@ -60,6 +60,15 @@ class CIRISManagerClient:
 
     def _load_token(self) -> Optional[str]:
         """Load token from config file."""
+        # Try ~/.manager_token first (simple token file)
+        token_file = Path.home() / ".manager_token"
+        if token_file.exists():
+            try:
+                return token_file.read_text().strip()
+            except Exception:
+                pass
+
+        # Fall back to config file with expiry
         config_file = Path.home() / ".config" / "ciris-manager" / "token.json"
         if config_file.exists():
             try:
@@ -123,6 +132,18 @@ class CIRISManagerClient:
         response = self._request("GET", f"/manager/v1/agents/{safe_id}")
         return response.json()
 
+    def get_agent_config(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Get agent configuration including environment variables.
+
+        Returns:
+            Dictionary with agent_id, environment dict, and compose_file path
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/config")
+        return response.json()
+
     def create_agent(
         self,
         name: str,
@@ -131,6 +152,9 @@ class CIRISManagerClient:
         mounts: Optional[List[Dict[str, str]]] = None,
         use_mock_llm: bool = False,
         enable_discord: bool = False,
+        server_id: Optional[str] = None,
+        billing_enabled: bool = False,
+        billing_api_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a new agent.
@@ -140,6 +164,11 @@ class CIRISManagerClient:
             template: Template to use (default: "basic")
             environment: Environment variables for the agent
             mounts: Volume mounts for the agent
+            use_mock_llm: Use mock LLM instead of real one
+            enable_discord: Enable Discord adapter
+            server_id: Target server ID (e.g., "main", "scout")
+            billing_enabled: Enable paid billing
+            billing_api_key: Billing API key (required if billing_enabled=True)
 
         Returns:
             Created agent details
@@ -153,6 +182,12 @@ class CIRISManagerClient:
         }
         if mounts:
             payload["mounts"] = mounts
+        if server_id:
+            payload["server_id"] = server_id
+        if billing_enabled:
+            payload["billing_enabled"] = billing_enabled
+        if billing_api_key:
+            payload["billing_api_key"] = billing_api_key
 
         response = self._request("POST", "/manager/v1/agents", json=payload)
         return response.json()

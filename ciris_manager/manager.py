@@ -665,41 +665,25 @@ class CIRISManager:
         }
 
         try:
-            # Create directories using a temporary busybox container
-            # This is more reliable than trying to use SSH
-            for dir_name, perms in directories.items():
-                dir_path = f"{base_path}/{dir_name}"
+            # First, create the base agent directory
+            base_dir_cmd = f"mkdir -p {base_path} && chown 1000:1000 {base_path}"
+            try:
+                nginx_container = docker_client.containers.get("ciris-nginx")
+                exec_result = nginx_container.exec_run(f"sh -c '{base_dir_cmd}'", user="root")
+                if exec_result.exit_code != 0:
+                    raise RuntimeError(f"Failed to create base directory: {exec_result.output}")
+            except Exception as e:
+                logger.warning(f"Could not use nginx container for base directory: {e}")
+                docker_client.containers.run(
+                    "alpine:latest",
+                    command=f"sh -c '{base_dir_cmd}'",
+                    volumes={"/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"}},
+                    remove=True,
+                    detach=False,
+                )
+            logger.info(f"Created base directory: {base_path}")
 
-                # Create directory with proper permissions using Docker exec on a temporary container
-                # We use the ciris-nginx container which should always exist on remote servers
-                create_cmd = f"mkdir -p {dir_path} && chmod {perms} {dir_path} && chown -R 1000:1000 {dir_path}"
-
-                try:
-                    # Try to find a running container to exec into
-                    # First try ciris-nginx (should always be running)
-                    nginx_container = docker_client.containers.get("ciris-nginx")
-                    exec_result = nginx_container.exec_run(f"sh -c '{create_cmd}'", user="root")
-                    if exec_result.exit_code != 0:
-                        raise RuntimeError(
-                            f"Failed to create directory {dir_path}: {exec_result.output}"
-                        )
-
-                except Exception as e:
-                    logger.warning(f"Could not use nginx container for directory creation: {e}")
-                    # Fallback: Use a temporary Alpine container
-                    logger.info("Using temporary Alpine container for directory creation")
-                    result = docker_client.containers.run(
-                        "alpine:latest",
-                        command=f"sh -c '{create_cmd}'",
-                        volumes={"/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"}},
-                        remove=True,
-                        detach=False,
-                    )
-                    # Decode bytes output if present
-                    output = result.decode() if isinstance(result, bytes) else str(result)
-                    logger.debug(f"Directory creation output: {output}")
-
-            # Copy init_permissions.sh script to remote server
+            # Copy init_permissions.sh script to remote server BEFORE creating subdirectories
             init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
             if init_script_src.exists():
                 logger.info(f"Copying init_permissions.sh to remote server {server_id}")
@@ -738,6 +722,30 @@ class CIRISManager:
                 logger.warning(
                     f"Init script not found at {init_script_src}, remote agent may have permission issues"
                 )
+
+            # Now create subdirectories with proper permissions
+            for dir_name, perms in directories.items():
+                dir_path = f"{base_path}/{dir_name}"
+                create_cmd = (
+                    f"mkdir -p {dir_path} && chmod {perms} {dir_path} && chown 1000:1000 {dir_path}"
+                )
+
+                try:
+                    nginx_container = docker_client.containers.get("ciris-nginx")
+                    exec_result = nginx_container.exec_run(f"sh -c '{create_cmd}'", user="root")
+                    if exec_result.exit_code != 0:
+                        raise RuntimeError(f"Failed to create directory: {exec_result.output}")
+                except Exception as e:
+                    logger.warning(f"Could not use nginx container for {dir_name}: {e}")
+                    docker_client.containers.run(
+                        "alpine:latest",
+                        command=f"sh -c '{create_cmd}'",
+                        volumes={"/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"}},
+                        remove=True,
+                        detach=False,
+                    )
+
+                logger.debug(f"Created directory {dir_path} with permissions {perms}")
 
             logger.info(f"✅ Created agent directories on {server_id} at {base_path}")
 
