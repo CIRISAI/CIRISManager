@@ -113,7 +113,9 @@ fi
 echo "Creating directory structure..."
 mkdir -p /opt/ciris/{agents,nginx}
 mkdir -p /etc/ciris-manager/docker-certs
+mkdir -p /home/ciris/shared/oauth
 chown -R 1000:1000 /opt/ciris
+chown -R 1000:1000 /home/ciris/shared
 echo "✓ Directories created (owned by uid 1000)"
 
 # 5. Generate TLS certificates for Docker API
@@ -463,6 +465,19 @@ scp -i "$SSH_KEY" root@"$PUBLIC_IP":/tmp/ciris-certs-"$HOSTNAME"/* "$CERT_DIR"/
 ssh -i "$SSH_KEY" root@"$PUBLIC_IP" "rm -rf /tmp/ciris-certs-$HOSTNAME"
 
 log_info "Client certificates saved to: $CERT_DIR/"
+
+# Copy OAuth configuration files to remote server
+log_info "Copying OAuth configuration files to remote server..."
+OAUTH_DIR="/home/ciris/shared/oauth"
+if [ -d "$OAUTH_DIR" ]; then
+    # Copy OAuth files (excluding .ciris_keys directory which is server-specific)
+    scp -i "$SSH_KEY" "$OAUTH_DIR"/*.yml "$OAUTH_DIR"/*.json "$OAUTH_DIR"/*.enc root@"$PUBLIC_IP":/home/ciris/shared/oauth/ 2>/dev/null || log_warn "Some OAuth files may not exist yet"
+    ssh -i "$SSH_KEY" root@"$PUBLIC_IP" "chown -R 1000:1000 /home/ciris/shared/oauth"
+    log_info "OAuth configuration files copied"
+else
+    log_warn "OAuth directory not found at $OAUTH_DIR - skipping OAuth file copy"
+    log_warn "You may need to manually copy OAuth files later"
+fi
 log_info ""
 log_info "===================================================="
 log_info "Setup Complete!"

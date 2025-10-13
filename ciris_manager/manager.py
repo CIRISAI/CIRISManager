@@ -695,7 +695,49 @@ class CIRISManager:
                         remove=True,
                         detach=False,
                     )
-                    logger.debug(f"Directory creation output: {result}")
+                    # Decode bytes output if present
+                    output = result.decode() if isinstance(result, bytes) else str(result)
+                    logger.debug(f"Directory creation output: {output}")
+
+            # Copy init_permissions.sh script to remote server
+            init_script_src = Path(__file__).parent / "templates" / "init_permissions.sh"
+            if init_script_src.exists():
+                logger.info(f"Copying init_permissions.sh to remote server {server_id}")
+                try:
+                    # Read the script content
+                    with open(init_script_src, "r") as f:
+                        script_content = f.read()
+
+                    # Write script to remote server using nginx container
+                    script_path = f"{base_path}/init_permissions.sh"
+                    write_cmd = f"cat > {script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT\n"
+                    write_cmd += f" && chmod 755 {script_path} && chown 1000:1000 {script_path}"
+
+                    try:
+                        nginx_container = docker_client.containers.get("ciris-nginx")
+                        exec_result = nginx_container.exec_run(f"sh -c '{write_cmd}'", user="root")
+                        if exec_result.exit_code != 0:
+                            raise RuntimeError(f"Failed to write init script: {exec_result.output}")
+                    except Exception as e:
+                        logger.warning(f"Could not use nginx container for script copy: {e}")
+                        # Fallback: Use temporary Alpine container with volume mount
+                        logger.info("Using temporary Alpine container for script copy")
+                        docker_client.containers.run(
+                            "alpine:latest",
+                            command=f"sh -c '{write_cmd}'",
+                            volumes={"/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"}},
+                            remove=True,
+                            detach=False,
+                        )
+
+                    logger.info(f"✅ Copied init_permissions.sh to {server_id}")
+                except Exception as e:
+                    logger.error(f"Failed to copy init script to {server_id}: {e}")
+                    raise RuntimeError(f"Failed to copy init script to {server_id}: {e}")
+            else:
+                logger.warning(
+                    f"Init script not found at {init_script_src}, remote agent may have permission issues"
+                )
 
             logger.info(f"✅ Created agent directories on {server_id} at {base_path}")
 

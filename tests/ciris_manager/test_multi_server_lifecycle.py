@@ -149,8 +149,9 @@ class TestMultiServerAgentCreation:
 
         # Verify Docker API was called multiple times:
         # - 6 times for directory creation (data, data_archive, logs, config, audit_keys, .secrets)
+        # - 1 time for copying init_permissions.sh
         # - 1 time for the actual agent container
-        assert mock_remote_docker.containers.run.call_count == 7
+        assert mock_remote_docker.containers.run.call_count == 8
 
         # Verify the last call (the agent container) has the expected image
         last_call = mock_remote_docker.containers.run.call_args_list[-1]
