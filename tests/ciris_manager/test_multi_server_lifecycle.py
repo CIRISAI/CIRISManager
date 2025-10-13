@@ -74,11 +74,15 @@ def multi_server_manager(multi_server_config):
         # Configure mock Docker client
         mock_docker_client = Mock()
         mock_docker_client.test_connection = Mock(return_value=True)
-        mock_docker_client.get_server_config = Mock(
-            side_effect=lambda sid: next(
-                s for s in multi_server_config.servers if s.server_id == sid
-            )
-        )
+
+        def mock_get_server_config(sid):
+            for s in multi_server_config.servers:
+                if s.server_id == sid:
+                    return s
+            available = ", ".join([s.server_id for s in multi_server_config.servers])
+            raise ValueError(f"Unknown server '{sid}'. Available servers: {available}")
+
+        mock_docker_client.get_server_config = Mock(side_effect=mock_get_server_config)
         mock_docker_client.get_client = Mock()
         mock_docker_client.servers = {s.server_id: s for s in multi_server_config.servers}
         mock_docker_client.list_servers = Mock(return_value=["main", "scout"])
