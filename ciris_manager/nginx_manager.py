@@ -775,21 +775,22 @@ http {
             if exec_result.output:
                 logger.debug(f"[Remote Deploy] Validation output:\n{exec_result.output.decode()}")
 
-            # Step 3: Copy to final location (use cp instead of mv to avoid "Resource busy" errors)
-            logger.info(f"[Remote Deploy] Step 3/4: Copying config to {final_path}")
-            copy_cmd = f"cp {temp_path} {final_path}"
-            exec_result = container.exec_run(copy_cmd)
+            # Step 3: Write directly to final location using cat
+            # This works even when the file is open, unlike cp/mv
+            logger.info(f"[Remote Deploy] Step 3/4: Writing config to {final_path}")
+            write_final_cmd = f"cat {temp_path} > {final_path}"
+            exec_result = container.exec_run(["sh", "-c", write_final_cmd])
 
             if exec_result.exit_code != 0:
                 error_msg = exec_result.output.decode()
-                logger.error("[Remote Deploy] ✗ Step 3 failed: Copy to final location")
+                logger.error("[Remote Deploy] ✗ Step 3 failed: Write to final location")
                 logger.error(f"[Remote Deploy] Exit code: {exec_result.exit_code}")
                 logger.error(f"[Remote Deploy] Error output:\n{error_msg}")
                 # Clean up temp file
                 container.exec_run(f"rm -f {temp_path}")
                 return False
 
-            logger.info(f"[Remote Deploy] ✓ Step 3 complete: Config copied to {final_path}")
+            logger.info(f"[Remote Deploy] ✓ Step 3 complete: Config written to {final_path}")
 
             # Clean up temp file
             logger.debug(f"[Remote Deploy] Cleaning up {temp_path}")
