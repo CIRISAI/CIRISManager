@@ -287,11 +287,16 @@ class CIRISManager:
         service_token = self._generate_service_token()
         logger.info(f"Generated service token for agent {sanitize_agent_id(agent_id)}")
 
-        # Encrypt token for storage
+        # Generate random admin password to replace default
+        admin_password = self._generate_admin_password()
+        logger.info(f"Generated secure admin password for agent {sanitize_agent_id(agent_id)}")
+
+        # Encrypt both token and password for storage
         from ciris_manager.crypto import get_token_encryption
 
         encryption = get_token_encryption()
         encrypted_token = encryption.encrypt_token(service_token)
+        encrypted_password = encryption.encrypt_token(admin_password)
 
         # Create agent directory using agent_id (no spaces!)
         agent_dir = self.agents_dir / agent_id
@@ -455,6 +460,7 @@ class CIRISManager:
             template=template,
             compose_file=str(compose_path),
             service_token=encrypted_token,  # Store encrypted version
+            admin_password=encrypted_password,  # Store encrypted version
             server_id=target_server_id,
         )
 
@@ -478,6 +484,21 @@ class CIRISManager:
 
         # Wait a moment for container to be fully up
         await asyncio.sleep(2)
+
+        # Change the admin password from default to the secure random one
+        agent_logger.info(f"Securing admin password for agent {sanitize_agent_id(agent_id)}")
+        try:
+            await self._set_agent_admin_password(
+                agent_id, allocated_port, admin_password, target_server_id
+            )
+            agent_logger.info(f"✅ Admin password secured for agent {sanitize_agent_id(agent_id)}")
+        except Exception as e:
+            agent_logger.warning(
+                f"Failed to set admin password for {sanitize_agent_id(agent_id)}: {e}"
+            )
+            agent_logger.warning(
+                "Agent created but still uses default password - this is a security risk"
+            )
 
         # NOW update nginx routing after container is running
         agent_logger.info(f"Updating nginx configuration for agent {sanitize_agent_id(agent_id)}")
@@ -1270,6 +1291,81 @@ echo "✓ Emergency permission fix completed"
         """
         # Generate 32 bytes of random data (256 bits of entropy)
         return secrets.token_urlsafe(32)
+
+    def _generate_admin_password(self) -> str:
+        """
+        Generate a secure random admin password for agent.
+
+        Replaces the default 'ciris_admin_password' with a cryptographically
+        secure random password to prevent unauthorized access.
+
+        Returns:
+            URL-safe base64 encoded password (32 characters)
+        """
+        # Generate 24 bytes of random data (192 bits of entropy)
+        return secrets.token_urlsafe(24)
+
+    async def _set_agent_admin_password(
+        self, agent_id: str, port: int, new_password: str, server_id: str = "main"
+    ) -> None:
+        """
+        Set the agent's admin password via API.
+
+        Args:
+            agent_id: Agent identifier
+            port: Agent API port
+            new_password: New password to set
+            server_id: Server ID where agent is running
+        """
+        import httpx
+
+        # Determine the base URL based on server
+        if server_id == "main":
+            base_url = "localhost"
+        else:
+            server_config = self.docker_client.get_server_config(server_id)
+            base_url = server_config.vpc_ip if server_config.vpc_ip else server_config.hostname
+
+        # Step 1: Login with default admin credentials to get session token
+        login_url = f"http://{base_url}:{port}/v1/auth/login"
+        login_data = {"username": "admin", "password": "ciris_admin_password"}
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            logger.info(f"Logging into agent {sanitize_agent_id(agent_id)} to set password")
+            login_response = await client.post(login_url, json=login_data)
+
+            if login_response.status_code != 200:
+                raise RuntimeError(
+                    f"Login failed: {login_response.status_code} - {login_response.text}"
+                )
+
+            login_result = login_response.json()
+            session_token = login_result.get("access_token")
+            admin_user_id = login_result.get("user_id")
+
+            if not session_token or not admin_user_id:
+                raise RuntimeError("Invalid login response - missing access_token or user_id")
+
+            # Step 2: Change the admin password using session token
+            password_url = f"http://{base_url}:{port}/v1/users/{admin_user_id}/password"
+            password_data = {
+                "current_password": "ciris_admin_password",
+                "new_password": new_password,
+            }
+
+            headers = {
+                "Authorization": f"Bearer {session_token}",
+                "Content-Type": "application/json",
+            }
+
+            password_response = await client.put(password_url, headers=headers, json=password_data)
+
+            if password_response.status_code != 200:
+                raise RuntimeError(
+                    f"Password change failed: {password_response.status_code} - {password_response.text}"
+                )
+
+            logger.info(f"Successfully set admin password for {sanitize_agent_id(agent_id)}")
 
     async def _run_initial_cleanup(self) -> None:
         """Run initial Docker image cleanup on startup."""

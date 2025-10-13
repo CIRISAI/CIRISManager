@@ -28,6 +28,7 @@ class RegisteredAgent:
         metadata: Optional[Dict[str, Any]] = None,
         oauth_status: Optional[str] = None,
         service_token: Optional[str] = None,
+        admin_password: Optional[str] = None,
         current_version: Optional[str] = None,
         last_work_state_at: Optional[str] = None,
         version_transitions: Optional[List[Dict[str, Any]]] = None,
@@ -46,6 +47,7 @@ class RegisteredAgent:
             self.metadata["deployment"] = "CIRIS_DISCORD_PILOT"
         self.oauth_status = oauth_status
         self.service_token = service_token
+        self.admin_password = admin_password  # Encrypted admin password
         self.current_version = current_version
         self.last_work_state_at = last_work_state_at
         self.version_transitions = version_transitions or []
@@ -63,6 +65,7 @@ class RegisteredAgent:
             "metadata": self.metadata,
             "oauth_status": self.oauth_status,
             "service_token": self.service_token,
+            "admin_password": self.admin_password,
             "current_version": self.current_version,
             "last_work_state_at": self.last_work_state_at,
             "version_transitions": self.version_transitions,
@@ -83,6 +86,7 @@ class RegisteredAgent:
             metadata=data.get("metadata", {}),
             oauth_status=data.get("oauth_status"),
             service_token=data.get("service_token"),
+            admin_password=data.get("admin_password"),
             current_version=data.get("current_version"),
             last_work_state_at=data.get("last_work_state_at"),
             version_transitions=data.get("version_transitions", []),
@@ -157,6 +161,7 @@ class AgentRegistry:
         template: str,
         compose_file: str,
         service_token: Optional[str] = None,
+        admin_password: Optional[str] = None,
         server_id: str = "main",
     ) -> RegisteredAgent:
         """
@@ -169,6 +174,7 @@ class AgentRegistry:
             template: Template used to create agent
             compose_file: Path to docker-compose.yml
             service_token: Encrypted service token for authentication
+            admin_password: Encrypted admin password for agent
             server_id: Server hosting the agent (default: "main")
 
         Returns:
@@ -182,10 +188,12 @@ class AgentRegistry:
                 template=template,
                 compose_file=compose_file,
                 service_token=service_token,
+                admin_password=admin_password,
                 server_id=server_id,
             )
 
             agent.service_token = service_token
+            agent.admin_password = admin_password
 
             self.agents[agent_id] = agent
             self._save_metadata()
