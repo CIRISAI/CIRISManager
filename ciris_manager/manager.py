@@ -790,9 +790,10 @@ class CIRISManager:
                 logger.info(f"✅ Fixed permissions: {exec_result.output.decode().strip()}")
             except Exception as e:
                 logger.warning(f"Could not use nginx container for permission fix: {e}")
+                # Use bash image instead of alpine since script requires bash
                 docker_client.containers.run(
-                    "alpine:latest",
-                    command=f"sh -c '{fix_cmd}'",
+                    "bash:latest",
+                    command=["bash", "/home/ciris/shared/fix_agent_permissions.sh", base_path],
                     volumes={
                         "/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"},
                         "/home/ciris": {"bind": "/home/ciris", "mode": "ro"},
