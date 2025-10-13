@@ -28,11 +28,18 @@ class TestManagerAdditional:
             nginx={"config_dir": str(nginx_dir)},
         )
 
-        manager = CIRISManager(config)
+        # Mock Docker dependencies
+        with (
+            patch("ciris_manager.nginx_manager.NginxManager"),
+            patch("ciris_manager.multi_server_docker.MultiServerDockerClient"),
+            patch("ciris_manager.manager.DockerImageCleanup"),
+            patch("ciris_manager.docker_discovery.DockerAgentDiscovery"),
+        ):
+            manager = CIRISManager(config)
 
-        # Just verify that the method exists and is callable
-        assert hasattr(manager, "_start_api_server")
-        assert asyncio.iscoroutinefunction(manager._start_api_server)
+            # Just verify that the method exists and is callable
+            assert hasattr(manager, "_start_api_server")
+            assert asyncio.iscoroutinefunction(manager._start_api_server)
 
     @pytest.mark.asyncio
     async def test_container_management_with_image_pull_disabled(self, tmp_path):
@@ -50,40 +57,47 @@ class TestManagerAdditional:
             },
         )
 
-        manager = CIRISManager(config)
+        # Mock Docker dependencies
+        with (
+            patch("ciris_manager.nginx_manager.NginxManager"),
+            patch("ciris_manager.multi_server_docker.MultiServerDockerClient"),
+            patch("ciris_manager.manager.DockerImageCleanup"),
+            patch("ciris_manager.docker_discovery.DockerAgentDiscovery"),
+        ):
+            manager = CIRISManager(config)
 
-        # Create agent with compose file
-        agent_dir = tmp_path / "agents" / "test"
-        agent_dir.mkdir(parents=True)
-        compose_file = agent_dir / "docker-compose.yml"
-        compose_file.write_text("version: '3.8'\n")
+            # Create agent with compose file
+            agent_dir = tmp_path / "agents" / "test"
+            agent_dir.mkdir(parents=True)
+            compose_file = agent_dir / "docker-compose.yml"
+            compose_file.write_text("version: '3.8'\n")
 
-        manager.agent_registry.register_agent(
-            agent_id="agent-test",
-            name="Test",
-            port=8080,
-            template="test",
-            compose_file=str(compose_file),
-        )
+            manager.agent_registry.register_agent(
+                agent_id="agent-test",
+                name="Test",
+                port=8080,
+                template="test",
+                compose_file=str(compose_file),
+            )
 
-        # Mock _recover_crashed_containers to avoid slow operations
-        with patch.object(
-            manager, "_recover_crashed_containers", new_callable=AsyncMock
-        ) as mock_recover:
-            # Run briefly
-            manager._running = True
-            task = asyncio.create_task(manager.container_management_loop())
-            await asyncio.sleep(0.05)
-            manager._running = False
+            # Mock _recover_crashed_containers to avoid slow operations
+            with patch.object(
+                manager, "_recover_crashed_containers", new_callable=AsyncMock
+            ) as mock_recover:
+                # Run briefly
+                manager._running = True
+                task = asyncio.create_task(manager.container_management_loop())
+                await asyncio.sleep(0.05)
+                manager._running = False
 
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
-            # Verify recovery was called (container loop only does crash recovery now)
-            assert mock_recover.called
+                # Verify recovery was called (container loop only does crash recovery now)
+                assert mock_recover.called
 
     def test_scan_with_invalid_metadata(self, tmp_path):
         """Test scanning with invalid agent metadata."""
@@ -106,6 +120,13 @@ class TestManagerAdditional:
         metadata_file = agents_dir / "metadata.json"
         metadata_file.write_text("invalid json")
 
-        # Should handle gracefully
-        CIRISManager(config)
-        # No exception raised
+        # Mock Docker dependencies
+        with (
+            patch("ciris_manager.nginx_manager.NginxManager"),
+            patch("ciris_manager.multi_server_docker.MultiServerDockerClient"),
+            patch("ciris_manager.manager.DockerImageCleanup"),
+            patch("ciris_manager.docker_discovery.DockerAgentDiscovery"),
+        ):
+            # Should handle gracefully
+            CIRISManager(config)
+            # No exception raised
