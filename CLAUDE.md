@@ -72,6 +72,111 @@ ruff check ciris_manager/ tests/
 mypy ciris_manager/
 ```
 
+### CLI Client Tool
+
+The **CIRISManager CLI client** is a comprehensive command-line tool for managing agents and infrastructure. It is separate from the manager service itself.
+
+**Location:** `ciris_manager_client/` directory (not `ciris_manager/`)
+
+**Entry Point:** `ciris-manager-client` command (installed via pip)
+
+**Authentication:**
+- Token stored in `~/.manager_token` file
+- Or set `CIRIS_MANAGER_TOKEN` environment variable
+- Points to production API by default: `https://agents.ciris.ai`
+
+**Available Commands:**
+
+1. **Agent Management** (`ciris-manager-client agent <command>`)
+   ```bash
+   # List all agents with status and versions
+   ciris-manager-client agent list
+
+   # Get detailed agent information (JSON)
+   ciris-manager-client agent get <agent-id>
+
+   # Create a new agent
+   ciris-manager-client agent create --name myagent --template basic --server scout
+
+   # Start/Stop/Restart agent
+   ciris-manager-client agent start <agent-id>
+   ciris-manager-client agent stop <agent-id>
+   ciris-manager-client agent restart <agent-id>
+
+   # Graceful shutdown
+   ciris-manager-client agent shutdown <agent-id> --message "Maintenance"
+
+   # View logs
+   ciris-manager-client agent logs <agent-id> --lines 50 --follow
+
+   # Check versions
+   ciris-manager-client agent versions
+   ciris-manager-client agent versions --agent-id datum
+   ```
+
+2. **Configuration Management** (`ciris-manager-client config <command>`)
+   ```bash
+   # Get agent configuration
+   ciris-manager-client config get <agent-id>
+
+   # Update configuration
+   ciris-manager-client config update <agent-id> --env KEY=VALUE
+
+   # Export/Import configuration
+   ciris-manager-client config export <agent-id> --output config.json
+   ciris-manager-client config import config.json
+
+   # Backup/Restore all configurations
+   ciris-manager-client config backup --output backup.json
+   ciris-manager-client config restore backup.json
+   ```
+
+3. **Inspection & Validation** (`ciris-manager-client inspect <command>`)
+   ```bash
+   # Inspect specific agent
+   ciris-manager-client inspect agent <agent-id> --check-health
+
+   # Inspect server
+   ciris-manager-client inspect server scout
+
+   # Validate configuration file
+   ciris-manager-client inspect validate config.yml
+
+   # Full system inspection
+   ciris-manager-client inspect system
+   ```
+
+**Output Formats:**
+- `--format table` (default): Pretty-printed tables
+- `--format json`: Machine-readable JSON
+- `--format yaml`: YAML output
+
+**Global Options:**
+- `--api-url`: Override API URL (default: https://agents.ciris.ai)
+- `--token`: Override auth token
+- `--quiet`: Suppress non-essential output
+- `--verbose`: Enable verbose logging
+
+**Example Workflow:**
+```bash
+# Check agent status
+ciris-manager-client agent list
+
+# View specific agent details
+ciris-manager-client agent get scout-remote-test-dahrb9
+
+# Export configuration for backup
+ciris-manager-client config export datum --output datum-backup.json
+
+# Inspect agent health
+ciris-manager-client inspect agent datum --check-health
+
+# View recent logs
+ciris-manager-client agent logs datum --lines 100
+```
+
+**Note:** This client tool (`ciris_manager_client/`) is distinct from the old `ciris_manager/cli_client.py` file, which has been removed. Always use `ciris-manager-client` for command-line operations.
+
 ## Development Best Practices
 
 - Activate venv before running python commands.
