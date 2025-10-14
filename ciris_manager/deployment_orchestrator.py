@@ -3290,7 +3290,24 @@ class DeploymentOrchestrator:
 
             logger.info(f"Recreating container for agent {agent_id} using docker-compose...")
 
+            # First, stop and remove the old container to free up the port
+            logger.info(f"Stopping existing container for agent {agent_id}...")
+            stop_result = await asyncio.create_subprocess_exec(
+                "docker-compose",
+                "-f",
+                str(compose_file),
+                "down",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=str(agent_dir),
+            )
+            await stop_result.communicate()
+
+            if stop_result.returncode != 0:
+                logger.warning("docker-compose down returned non-zero exit code, but continuing...")
+
             # Run docker-compose up -d with --pull always to use the newly pulled image
+            logger.info(f"Starting new container for agent {agent_id}...")
             result = await asyncio.create_subprocess_exec(
                 "docker-compose",
                 "-f",
