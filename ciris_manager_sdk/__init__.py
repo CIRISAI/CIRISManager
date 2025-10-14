@@ -294,6 +294,43 @@ class CIRISManagerClient:
         response = self._request("POST", "/manager/v1/updates/notify", json=payload)
         return response.json()
 
+    def deploy_single_agent(
+        self,
+        agent_id: str,
+        agent_image: str,
+        message: str = "Single agent deployment",
+        strategy: str = "docker",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Deploy a specific version to a single agent.
+
+        Args:
+            agent_id: Target agent ID
+            agent_image: Docker image for the agent (e.g., "ghcr.io/cirisai/ciris-agent:1.3.3")
+            message: Deployment message
+            strategy: Deployment strategy ("manual", "immediate", or "docker")
+                - manual: Consensual deployment (agent decides when to apply)
+                - immediate: API forced shutdown (agent shuts down via API)
+                - docker: Manager forced restart (Docker restart, bypasses agent)
+            metadata: Optional metadata for the deployment
+
+        Returns:
+            Deployment response with deployment_id and status
+        """
+        self._validate_agent_id(agent_id)
+        payload = {
+            "agent_id": agent_id,
+            "agent_image": agent_image,
+            "message": message,
+            "strategy": strategy,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+
+        response = self._request("POST", "/manager/v1/updates/deploy-single", json=payload)
+        return response.json()
+
     # Utility Methods
 
     def ping(self) -> bool:

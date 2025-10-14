@@ -577,6 +577,73 @@ class AgentCommands:
             return EXIT_ERROR
 
     @staticmethod
+    def deploy(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Deploy a specific version to an agent.
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments (agent_id, version, message, strategy)
+
+        Returns:
+            Exit code
+        """
+        try:
+            agent_id = args.agent_id
+            version = args.version
+            message = getattr(args, "message", "CLI deployment")
+            strategy = getattr(args, "strategy", "docker")
+
+            # Construct the full image name
+            if version == "latest":
+                agent_image = "ghcr.io/cirisai/ciris-agent:latest"
+            else:
+                # Remove 'v' prefix if present
+                clean_version = version[1:] if version.startswith("v") else version
+                agent_image = f"ghcr.io/cirisai/ciris-agent:{clean_version}"
+
+            if not ctx.quiet:
+                print(f"Deploying {agent_image} to agent '{agent_id}'...")
+                print(f"Strategy: {strategy}")
+                print(f"Message: {message}")
+
+            result = ctx.client.deploy_single_agent(
+                agent_id=agent_id,
+                agent_image=agent_image,
+                message=message,
+                strategy=strategy,
+                metadata={"source": "cli"},
+            )
+
+            if not ctx.quiet:
+                print("\nDeployment started successfully!")
+                print(f"Deployment ID: {result.get('deployment_id')}")
+                print(f"Status: {result.get('status')}")
+
+            if ctx.verbose:
+                output = formatter.format_output(result, ctx.output_format)
+                print(output)
+
+            return EXIT_SUCCESS
+
+        except AuthenticationError as e:
+            print(f"Authentication error: {e}", file=sys.stderr)
+            return EXIT_AUTH_ERROR
+        except APIError as e:
+            if e.status_code == 404:
+                print(f"Agent '{args.agent_id}' not found", file=sys.stderr)
+                return EXIT_NOT_FOUND
+            print(f"API error: {e}", file=sys.stderr)
+            return EXIT_API_ERROR
+        except Exception as e:
+            print(f"Error deploying to agent: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
     def versions(ctx: CommandContext, args: Namespace) -> int:
         """
         Show agent version information.

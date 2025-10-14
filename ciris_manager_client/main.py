@@ -174,6 +174,20 @@ def setup_agent_parser(subparsers):
     versions_parser = agent_subparsers.add_parser("versions", help="Show version information")
     versions_parser.add_argument("--agent-id", help="Specific agent ID (optional)")
 
+    # agent deploy
+    deploy_parser = agent_subparsers.add_parser("deploy", help="Deploy specific version to agent")
+    deploy_parser.add_argument("agent_id", help="Agent ID")
+    deploy_parser.add_argument(
+        "--version", required=True, help="Version to deploy (e.g., 1.3.3 or latest)"
+    )
+    deploy_parser.add_argument("--message", default="CLI deployment", help="Deployment message")
+    deploy_parser.add_argument(
+        "--strategy",
+        choices=["manual", "immediate", "docker"],
+        default="docker",
+        help="Deployment strategy (manual=consensual, immediate=API shutdown, docker=force restart)",
+    )
+
 
 def setup_config_parser(subparsers):
     """Set up config command subparser."""
