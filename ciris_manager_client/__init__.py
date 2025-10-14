@@ -5,7 +5,7 @@ This package provides a comprehensive command-line interface for managing
 CIRIS agents and infrastructure.
 """
 
-from ciris_manager.cli.main import (
+from ciris_manager_client.main import (
     main,
     CommandContext,
     CLIError,

@@ -9,8 +9,8 @@ import sys
 from argparse import Namespace
 from typing import Dict, Any
 
-from ciris_manager.sdk import APIError, AuthenticationError
-from ciris_manager.cli.protocols import (
+from ciris_manager_sdk import APIError, AuthenticationError
+from ciris_manager_client.protocols import (
     CommandContext,
     EXIT_SUCCESS,
     EXIT_ERROR,
@@ -18,7 +18,7 @@ from ciris_manager.cli.protocols import (
     EXIT_API_ERROR,
     EXIT_NOT_FOUND,
 )
-from ciris_manager.cli.output import formatter
+from ciris_manager_client.output import formatter
 
 
 class AgentCommands:

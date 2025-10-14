@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, cast
 from argparse import Namespace
 from datetime import datetime
 
-from ciris_manager.cli.protocols import (
+from ciris_manager_client.protocols import (
     CommandContext,
     EXIT_SUCCESS,
     EXIT_ERROR,

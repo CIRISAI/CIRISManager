@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Optional, cast
 
-from ciris_manager.sdk import CIRISManagerClient, AuthenticationError, APIError
+from ciris_manager_sdk import CIRISManagerClient, AuthenticationError, APIError
 
 
 # Exit codes
@@ -330,7 +330,7 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
     # Lazy import command modules to avoid circular dependencies
     try:
         if args.command == "agent":
-            from ciris_manager.cli.commands.agent import AgentCommands
+            from ciris_manager_client.commands.agent import AgentCommands
 
             if not args.agent_command:
                 print("Error: No agent subcommand specified", file=sys.stderr)
@@ -344,7 +344,7 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
                 return EXIT_INVALID_ARGS
 
         elif args.command == "config":
-            from ciris_manager.cli.commands.config import ConfigCommands
+            from ciris_manager_client.commands.config import ConfigCommands
 
             if not args.config_command:
                 print("Error: No config subcommand specified", file=sys.stderr)
@@ -358,7 +358,7 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
                 return EXIT_INVALID_ARGS
 
         elif args.command == "inspect":
-            from ciris_manager.cli.commands.inspect import InspectCommands
+            from ciris_manager_client.commands.inspect import InspectCommands
 
             if not args.inspect_command:
                 print("Error: No inspect subcommand specified", file=sys.stderr)

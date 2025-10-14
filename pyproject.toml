@@ -56,8 +56,8 @@ dev = [
 ]
 
 [project.scripts]
-ciris-manager = "ciris_manager.cli:main"
-ciris-cli = "ciris_manager.cli.main:main"
+ciris-manager = "ciris_manager.daemon:main"
+ciris-manager-client = "ciris_manager_client.main:main"
 
 [project.urls]
 Homepage = "https://github.com/CIRISAI/CIRISManager"
@@ -66,7 +66,7 @@ Repository = "https://github.com/CIRISAI/CIRISManager"
 Issues = "https://github.com/CIRISAI/CIRISManager/issues"
 
 [tool.setuptools.packages.find]
-include = ["ciris_manager*"]
+include = ["ciris_manager*", "ciris_manager_sdk*", "ciris_manager_client*"]
 
 [tool.ruff]
 line-length = 100

@@ -6,8 +6,8 @@ Each command module follows the CommandHandler protocol and provides
 static methods for command execution.
 """
 
-from ciris_manager.cli.commands.agent import AgentCommands
-from ciris_manager.cli.commands.inspect import InspectCommands
+from ciris_manager_client.commands.agent import AgentCommands
+from ciris_manager_client.commands.inspect import InspectCommands
 
 __all__ = [
     "AgentCommands",
