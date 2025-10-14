@@ -3295,14 +3295,18 @@ class DeploymentOrchestrator:
 
             # For remote servers, use Docker API
             if server_id != "main":
-                # Get Docker client for remote server
-                if not (hasattr(self, "docker_client_manager") and self.docker_client_manager):
+                # Get Docker client for remote server via manager
+                if not (
+                    self.manager
+                    and hasattr(self.manager, "docker_client")
+                    and self.manager.docker_client
+                ):
                     logger.error(
-                        "docker_client_manager required for remote servers but not available"
+                        "docker_client required for remote servers but not available on manager"
                     )
                     return False
 
-                docker_client = self.docker_client_manager.get_client(server_id)
+                docker_client = self.manager.docker_client.get_client(server_id)
 
                 # Get the old container's configuration before removing it
                 logger.info(f"Getting configuration from existing container {container_name}...")
