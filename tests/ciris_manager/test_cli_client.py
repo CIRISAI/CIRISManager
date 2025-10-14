@@ -462,7 +462,7 @@ class TestCLIErrorHandling:
 
     def test_connection_error(self, capsys):
         """Test handling of connection errors."""
-        from ciris_manager.sdk import CIRISManagerError
+        from ciris_manager_sdk import CIRISManagerError
 
         # Setup mock client to raise exception
         mock_client = Mock()
@@ -481,7 +481,7 @@ class TestCLIErrorHandling:
 
     def test_authentication_error(self, capsys):
         """Test handling of authentication errors."""
-        from ciris_manager.sdk import AuthenticationError
+        from ciris_manager_sdk import AuthenticationError
 
         # Setup mock client to raise exception
         mock_client = Mock()

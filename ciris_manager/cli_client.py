@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 import argparse
 from tabulate import tabulate
 
-from .sdk import CIRISManagerClient, CIRISManagerError, AuthenticationError
+from ciris_manager_sdk import CIRISManagerClient, CIRISManagerError, AuthenticationError
 
 
 def print_json(data: Any) -> None:
