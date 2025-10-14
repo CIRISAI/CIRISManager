@@ -35,6 +35,9 @@ class TestSingleAgentDeployment:
         manager.agent_registry.list_agents = MagicMock(return_value=[])
         manager.agent_registry.save_metadata = MagicMock()
 
+        # Mock docker client manager for multi-server support
+        manager.docker_client = MagicMock()
+
         return manager
 
     @pytest.fixture
@@ -54,6 +57,7 @@ class TestSingleAgentDeployment:
             api_port=8080,
             status="running",
             image="ghcr.io/cirisai/ciris-agent:v1.4.2",
+            server_id="main",
         )
 
     @pytest.fixture
@@ -329,29 +333,29 @@ class TestSingleAgentDeployment:
             api_port=8080,
             status="running",
             image="ghcr.io/cirisai/ciris-agent:v1.4.2",
+            server_id="main",
         )
 
-        # Mock Docker client
-        with patch("docker.from_env") as mock_docker:
-            mock_client = MagicMock()
-            mock_docker.return_value = mock_client
+        # Mock Docker client for multi-server support
+        mock_client = MagicMock()
+        orchestrator.manager.docker_client.get_client.return_value = mock_client
 
-            # Mock container
-            mock_container = MagicMock()
-            mock_container.image.tags = ["ghcr.io/cirisai/ciris-agent:v1.4.2"]
-            mock_client.containers.get.return_value = mock_container
+        # Mock container
+        mock_container = MagicMock()
+        mock_container.image.tags = ["ghcr.io/cirisai/ciris-agent:v1.4.2"]
+        mock_client.containers.get.return_value = mock_container
 
-            # Test same version
-            needs_update = await orchestrator._agent_needs_update(
-                agent, "ghcr.io/cirisai/ciris-agent:v1.4.2"
-            )
-            assert not needs_update
+        # Test same version
+        needs_update = await orchestrator._agent_needs_update(
+            agent, "ghcr.io/cirisai/ciris-agent:v1.4.2"
+        )
+        assert not needs_update
 
-            # Test different version
-            needs_update = await orchestrator._agent_needs_update(
-                agent, "ghcr.io/cirisai/ciris-agent:v1.4.5"
-            )
-            assert needs_update
+        # Test different version
+        needs_update = await orchestrator._agent_needs_update(
+            agent, "ghcr.io/cirisai/ciris-agent:v1.4.5"
+        )
+        assert needs_update
 
     @pytest.mark.asyncio
     async def test_agent_needs_update_docker_error(self, orchestrator):
@@ -363,12 +367,14 @@ class TestSingleAgentDeployment:
             api_port=8080,
             status="running",
             image="ghcr.io/cirisai/ciris-agent:v1.4.2",
+            server_id="main",
         )
 
-        # Mock Docker error
-        with patch("docker.from_env", side_effect=Exception("Docker unavailable")):
-            needs_update = await orchestrator._agent_needs_update(
-                agent, "ghcr.io/cirisai/ciris-agent:v1.4.5"
-            )
-            # Should assume update needed when can't check
-            assert needs_update
+        # Mock Docker error when getting client
+        orchestrator.manager.docker_client.get_client.side_effect = Exception("Docker unavailable")
+
+        needs_update = await orchestrator._agent_needs_update(
+            agent, "ghcr.io/cirisai/ciris-agent:v1.4.5"
+        )
+        # Should assume update needed when can't check
+        assert needs_update

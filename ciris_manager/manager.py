@@ -1067,9 +1067,13 @@ class CIRISManager:
         # Simple implementation: assume any container that stopped in the last 5 minutes
         # might be part of a deployment
         try:
-            import docker
+            # Get agent info to determine which server to check
+            agent_info = self.agent_registry.get_agent(agent_id)
+            server_id = (
+                agent_info.server_id if agent_info and hasattr(agent_info, "server_id") else "main"
+            )
 
-            client = docker.from_env()
+            client = self.docker_client.get_client(server_id)
             container_name = f"ciris-{agent_id}"
 
             container = client.containers.get(container_name)

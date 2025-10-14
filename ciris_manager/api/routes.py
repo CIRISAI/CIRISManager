@@ -687,7 +687,8 @@ def create_routes(manager: Any) -> APIRouter:
             # Use Docker API to check container state
             import docker
 
-            client = docker.from_env()
+            # Get the correct Docker client for this agent's server
+            client = manager.docker_client.get_client(agent.server_id)
 
             try:
                 container = client.containers.get(container_name)
@@ -826,7 +827,8 @@ def create_routes(manager: Any) -> APIRouter:
             # Use Docker API to stop the container
             import docker
 
-            client = docker.from_env()
+            # Get the correct Docker client for this agent's server
+            client = manager.docker_client.get_client(agent.server_id)
 
             try:
                 container = client.containers.get(container_name)
@@ -886,8 +888,16 @@ def create_routes(manager: Any) -> APIRouter:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 try:
                     headers = auth.get_auth_headers(agent_id)
+
+                    # Get the correct URL for this agent's server
+                    server_config = manager.docker_client.get_server_config(agent.server_id)
+                    if server_config.is_local:
+                        agent_url = f"http://localhost:{agent.port}"
+                    else:
+                        agent_url = f"http://{server_config.vpc_ip}:{agent.port}"
+
                     response = await client.post(
-                        f"http://localhost:{agent.port}/v1/system/shutdown",
+                        f"{agent_url}/v1/system/shutdown",
                         headers=headers,
                         json={"reason": reason},
                     )
@@ -936,6 +946,8 @@ def create_routes(manager: Any) -> APIRouter:
         try:
             # Check if agent exists in registry
             agent = manager.agent_registry.get_agent(agent_id)
+            server_id = "main"  # Default to main server
+
             if not agent:
                 # Check if it's a discovered agent
                 from ciris_manager.docker_discovery import DockerAgentDiscovery
@@ -951,13 +963,21 @@ def create_routes(manager: Any) -> APIRouter:
                 if not discovered_agent:
                     raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
 
+                # Use server_id from discovered agent if available
+                if hasattr(discovered_agent, "server_id"):
+                    server_id = discovered_agent.server_id
+            else:
+                # Use server_id from registered agent
+                server_id = agent.server_id
+
             # Get container name
             container_name = f"ciris-agent-{agent_id}"
 
             # Use Docker API to restart the container
             import docker
 
-            client = docker.from_env()
+            # Get the correct Docker client for this agent's server
+            client = manager.docker_client.get_client(server_id)
 
             try:
                 container = client.containers.get(container_name)

@@ -13,7 +13,7 @@ import shutil
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
 import httpx
@@ -65,19 +65,26 @@ class TokenRotationResult:
 class TokenManager:
     """Manages service tokens for CIRIS agents."""
 
-    def __init__(self, registry: AgentRegistry, agents_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        registry: AgentRegistry,
+        agents_dir: Optional[Path] = None,
+        docker_client_manager: Optional[Any] = None,
+    ):
         """
         Initialize token manager.
 
         Args:
             registry: Agent registry instance
             agents_dir: Directory containing agent configurations
+            docker_client_manager: Optional multi-server Docker client manager
         """
         self.registry = registry
         self.encryption = TokenEncryption()
         self.agents_dir = agents_dir or Path("/opt/ciris/agents")
         self.backup_dir = self.agents_dir / "token_backups"
         self.backup_dir.mkdir(exist_ok=True)
+        self.docker_client_manager = docker_client_manager
 
     async def list_tokens(self) -> List[TokenHealth]:
         """
@@ -149,8 +156,21 @@ class TokenManager:
 
         # Test the token by calling the agent's health endpoint
         try:
-            async with AsyncClient(timeout=10.0) as client:
+            # Get the correct URL for this agent's server
+            if self.docker_client_manager:
+                try:
+                    server_config = self.docker_client_manager.get_server_config(agent.server_id)
+                    if server_config.is_local:
+                        url = f"http://localhost:{agent.port}/v1/system/health"
+                    else:
+                        url = f"http://{server_config.vpc_ip}:{agent.port}/v1/system/health"
+                except Exception:
+                    # Fallback to localhost if server config fails
+                    url = f"http://localhost:{agent.port}/v1/system/health"
+            else:
                 url = f"http://localhost:{agent.port}/v1/system/health"
+
+            async with AsyncClient(timeout=10.0) as client:
                 response = await client.get(url, headers=headers)
 
                 if response.status_code == 200:

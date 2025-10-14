@@ -18,6 +18,7 @@ class TestRestartAgent:
         manager = Mock()
         manager.agent_registry = Mock()
         manager.config = Mock()
+        manager.docker_client = Mock()
         return manager
 
     @pytest.fixture
@@ -43,26 +44,26 @@ class TestRestartAgent:
         # Setup mock agent
         mock_agent = Mock()
         mock_agent.agent_id = "test-agent"
+        mock_agent.server_id = "main"
         mock_manager.agent_registry.get_agent.return_value = mock_agent
 
-        with patch("docker.from_env") as mock_docker:
-            # Mock Docker client and container
-            mock_client = MagicMock()
-            mock_container = MagicMock()
-            mock_docker.return_value = mock_client
-            mock_client.containers.get.return_value = mock_container
+        # Mock Docker client and container
+        mock_client = MagicMock()
+        mock_container = MagicMock()
+        mock_manager.docker_client.get_client.return_value = mock_client
+        mock_client.containers.get.return_value = mock_container
 
-            # Make the restart request
-            response = client.post("/manager/v1/agents/test-agent/restart")
+        # Make the restart request
+        response = client.post("/manager/v1/agents/test-agent/restart")
 
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "success"
-            assert data["agent_id"] == "test-agent"
-            assert "restarting" in data["message"].lower()
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["agent_id"] == "test-agent"
+        assert "restarting" in data["message"].lower()
 
-            # Verify Docker restart was called
-            mock_container.restart.assert_called_once_with(timeout=30)
+        # Verify Docker restart was called
+        mock_container.restart.assert_called_once_with(timeout=30)
 
     def test_restart_nonexistent_agent(self, client, mock_manager):
         """Test restarting a non-existent agent."""
@@ -84,77 +85,77 @@ class TestRestartAgent:
         # Setup mock agent
         mock_agent = Mock()
         mock_agent.agent_id = "test-agent"
+        mock_agent.server_id = "main"
         mock_manager.agent_registry.get_agent.return_value = mock_agent
 
-        with patch("docker.from_env") as mock_docker:
-            import docker.errors
+        import docker.errors
 
-            # Mock Docker client that raises NotFound
-            mock_client = MagicMock()
-            mock_docker.return_value = mock_client
-            mock_client.containers.get.side_effect = docker.errors.NotFound("Container not found")
+        # Mock Docker client that raises NotFound
+        mock_client = MagicMock()
+        mock_manager.docker_client.get_client.return_value = mock_client
+        mock_client.containers.get.side_effect = docker.errors.NotFound("Container not found")
 
-            response = client.post("/manager/v1/agents/test-agent/restart")
+        response = client.post("/manager/v1/agents/test-agent/restart")
 
-            assert response.status_code == 404
-            assert "Container" in response.json()["detail"]
+        assert response.status_code == 404
+        assert "Container" in response.json()["detail"]
 
     def test_restart_docker_api_error(self, client, mock_manager):
         """Test handling Docker API errors during restart."""
         # Setup mock agent
         mock_agent = Mock()
         mock_agent.agent_id = "test-agent"
+        mock_agent.server_id = "main"
         mock_manager.agent_registry.get_agent.return_value = mock_agent
 
-        with patch("docker.from_env") as mock_docker:
-            import docker.errors
+        import docker.errors
 
-            # Mock Docker client and container that raises APIError
-            mock_client = MagicMock()
-            mock_container = MagicMock()
-            mock_docker.return_value = mock_client
-            mock_client.containers.get.return_value = mock_container
-            mock_container.restart.side_effect = docker.errors.APIError("Docker daemon error")
+        # Mock Docker client and container that raises APIError
+        mock_client = MagicMock()
+        mock_container = MagicMock()
+        mock_manager.docker_client.get_client.return_value = mock_client
+        mock_client.containers.get.return_value = mock_container
+        mock_container.restart.side_effect = docker.errors.APIError("Docker daemon error")
 
-            response = client.post("/manager/v1/agents/test-agent/restart")
+        response = client.post("/manager/v1/agents/test-agent/restart")
 
-            assert response.status_code == 500
-            assert "Failed to restart container" in response.json()["detail"]
+        assert response.status_code == 500
+        assert "Failed to restart container" in response.json()["detail"]
 
     def test_restart_with_alternate_container_name(self, client, mock_manager):
         """Test restarting with alternate container naming scheme."""
         # Setup mock agent
         mock_agent = Mock()
         mock_agent.agent_id = "test-agent"
+        mock_agent.server_id = "main"
         mock_manager.agent_registry.get_agent.return_value = mock_agent
 
-        with patch("docker.from_env") as mock_docker:
-            import docker.errors
+        import docker.errors
 
-            # Mock Docker client
-            mock_client = MagicMock()
-            mock_container = MagicMock()
-            mock_docker.return_value = mock_client
+        # Mock Docker client
+        mock_client = MagicMock()
+        mock_container = MagicMock()
+        mock_manager.docker_client.get_client.return_value = mock_client
 
-            # First name fails, second succeeds
-            def get_container(name):
-                if name == "ciris-agent-test-agent":
-                    raise docker.errors.NotFound("Not found")
-                elif name == "ciris-test-agent":
-                    return mock_container
+        # First name fails, second succeeds
+        def get_container(name):
+            if name == "ciris-agent-test-agent":
                 raise docker.errors.NotFound("Not found")
+            elif name == "ciris-test-agent":
+                return mock_container
+            raise docker.errors.NotFound("Not found")
 
-            mock_client.containers.get.side_effect = get_container
+        mock_client.containers.get.side_effect = get_container
 
-            response = client.post("/manager/v1/agents/test-agent/restart")
+        response = client.post("/manager/v1/agents/test-agent/restart")
 
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "success"
-            assert data["container"] == "ciris-test-agent"
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["container"] == "ciris-test-agent"
 
-            # Verify restart was called
-            mock_container.restart.assert_called_once_with(timeout=30)
+        # Verify restart was called
+        mock_container.restart.assert_called_once_with(timeout=30)
 
     def test_restart_discovered_agent(self, client, mock_manager):
         """Test restarting a discovered agent (not in registry)."""
@@ -166,24 +167,24 @@ class TestRestartAgent:
             mock_discovery = MockDiscovery.return_value
             mock_agent = Mock()
             mock_agent.agent_id = "discovered-agent"
+            mock_agent.server_id = "main"
             mock_discovery.discover_agents.return_value = [mock_agent]
 
-            with patch("docker.from_env") as mock_docker:
-                # Mock Docker client and container
-                mock_client = MagicMock()
-                mock_container = MagicMock()
-                mock_docker.return_value = mock_client
-                mock_client.containers.get.return_value = mock_container
+            # Mock Docker client and container
+            mock_client = MagicMock()
+            mock_container = MagicMock()
+            mock_manager.docker_client.get_client.return_value = mock_client
+            mock_client.containers.get.return_value = mock_container
 
-                response = client.post("/manager/v1/agents/discovered-agent/restart")
+            response = client.post("/manager/v1/agents/discovered-agent/restart")
 
-                assert response.status_code == 200
-                data = response.json()
-                assert data["status"] == "success"
-                assert data["agent_id"] == "discovered-agent"
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "success"
+            assert data["agent_id"] == "discovered-agent"
 
-                # Verify restart was called
-                mock_container.restart.assert_called_once_with(timeout=30)
+            # Verify restart was called
+            mock_container.restart.assert_called_once_with(timeout=30)
 
 
 if __name__ == "__main__":

@@ -277,6 +277,35 @@ class DeploymentOrchestrator:
         except Exception as e:
             logger.error(f"Failed to validate canary groups: {e}")
 
+    def _get_agent_url(self, agent: AgentInfo) -> str:
+        """
+        Get the correct base URL for an agent's API based on its server.
+
+        Args:
+            agent: Agent information including server_id
+
+        Returns:
+            Base URL for the agent's API (e.g., "http://localhost:8001" or "http://10.2.96.4:8001")
+        """
+        if not self.manager or not hasattr(self.manager, "docker_client"):
+            # Fallback to localhost if manager not available
+            return f"http://localhost:{agent.api_port}"
+
+        try:
+            server_config = self.manager.docker_client.get_server_config(agent.server_id)
+
+            if server_config.is_local:
+                # Local agents accessible via localhost
+                return f"http://localhost:{agent.api_port}"
+            else:
+                # Remote agents accessible via VPC IP
+                return f"http://{server_config.vpc_ip}:{agent.api_port}"
+        except Exception as e:
+            logger.warning(
+                f"Could not determine server config for {agent.agent_id}, using localhost: {e}"
+            )
+            return f"http://localhost:{agent.api_port}"
+
     def _add_event(
         self, deployment_id: str, event_type: str, message: str, details: Optional[dict] = None
     ) -> None:
@@ -453,9 +482,13 @@ class DeploymentOrchestrator:
     async def _agent_needs_update(self, agent: AgentInfo, target_image: str) -> bool:
         """Check if a specific agent needs updating to target image."""
         try:
-            import docker
+            if not self.manager or not hasattr(self.manager, "docker_client"):
+                logger.warning(
+                    f"Cannot check if agent {agent.agent_id} needs update - no docker client"
+                )
+                return True  # Assume update needed
 
-            client = docker.from_env()
+            client = self.manager.docker_client.get_client(agent.server_id)
 
             container = client.containers.get(agent.container_name)
             current_image: str = ""
@@ -1787,7 +1820,8 @@ class DeploymentOrchestrator:
                     auth = get_agent_auth()
                     headers = auth.get_auth_headers(agent.agent_id)
 
-                    health_url = f"http://localhost:{agent.api_port}/v1/system/health"
+                    agent_url = self._get_agent_url(agent)
+                    health_url = f"{agent_url}/v1/system/health"
                     response = await client.get(health_url, headers=headers)
 
                     if response.status_code == 200:
@@ -1881,7 +1915,8 @@ class DeploymentOrchestrator:
                         headers = {}
 
                     async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-                        health_url = f"http://localhost:{agent.api_port}/v1/system/health"
+                        agent_url = self._get_agent_url(agent)
+                        health_url = f"{agent_url}/v1/system/health"
                         response = await client.get(health_url, headers=headers)
 
                         if response.status_code == 200:
@@ -2113,7 +2148,8 @@ class DeploymentOrchestrator:
                         headers = auth.get_auth_headers(agent.agent_id)
 
                         # Check health endpoint (using system/health which is the correct endpoint)
-                        health_url = f"http://localhost:{agent.api_port}/v1/system/health"
+                        agent_url = self._get_agent_url(agent)
+                        health_url = f"{agent_url}/v1/system/health"
                         response = await client.get(health_url, headers=headers)
 
                         if response.status_code == 200:
@@ -2144,7 +2180,8 @@ class DeploymentOrchestrator:
                                     telemetry_checked = False
 
                                     try:
-                                        telemetry_url = f"http://localhost:{agent.api_port}/v1/telemetry/overview"
+                                        agent_url = self._get_agent_url(agent)
+                                        telemetry_url = f"{agent_url}/v1/telemetry/overview"
                                         telemetry_response = await client.get(
                                             telemetry_url, headers=headers, timeout=5.0
                                         )
@@ -2787,8 +2824,10 @@ class DeploymentOrchestrator:
                     deployment_mode = "API forced (immediate)"
                 else:
                     deployment_mode = "consensual (agent decides)"
+
+                agent_url = self._get_agent_url(agent)
                 logger.info(
-                    f"Requesting {deployment_mode} shutdown for agent {agent.agent_id} at http://localhost:{agent.api_port}/v1/system/shutdown"
+                    f"Requesting {deployment_mode} shutdown for agent {agent.agent_id} at {agent_url}/v1/system/shutdown"
                 )
                 audit_deployment_action(
                     deployment_id=deployment_id,
@@ -2797,7 +2836,7 @@ class DeploymentOrchestrator:
                 )
 
                 response = await client.post(
-                    f"http://localhost:{agent.api_port}/v1/system/shutdown",
+                    f"{agent_url}/v1/system/shutdown",
                     json=shutdown_payload,
                     headers=headers,
                     timeout=30.0,
@@ -3060,12 +3099,22 @@ class DeploymentOrchestrator:
             check_interval = 10  # Check every 10 seconds
             elapsed = 0
 
+            # Get agent info to determine which server to check
+            agent_info = None
+            if self.manager and hasattr(self.manager, "agent_registry"):
+                agent_info = self.manager.agent_registry.get_agent(agent_id)
+
             while elapsed < max_wait:
                 # Check if container has stopped
                 try:
                     import docker
 
-                    client = docker.from_env()
+                    if agent_info and self.manager and hasattr(self.manager, "docker_client"):
+                        client = self.manager.docker_client.get_client(agent_info.server_id)
+                    else:
+                        # Fallback to local docker for backward compatibility
+                        client = docker.from_env()
+
                     container = client.containers.get(container_name)
 
                     # Check for all stopped states (consolidated from periodic check)
