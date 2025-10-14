@@ -514,12 +514,12 @@ def create_routes(manager: Any) -> APIRouter:
 
         return {"deployment": deployment, "agents": agent_list, "count": len(agent_list)}
 
-    @router.get("/agents/{agent_name}")
-    async def get_agent(agent_name: str) -> AgentResponse:
-        """Get specific agent by name."""
-        agent = manager.agent_registry.get_agent_by_name(agent_name)
+    @router.get("/agents/{agent_id}")
+    async def get_agent(agent_id: str) -> AgentResponse:
+        """Get specific agent by ID."""
+        agent = manager.agent_registry.get_agent(agent_id)
         if not agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
 
         return AgentResponse(
             agent_id=agent.agent_id,

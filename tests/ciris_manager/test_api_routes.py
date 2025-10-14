@@ -166,9 +166,9 @@ class TestAPIRoutes:
             compose_file="/path/to/scout/docker-compose.yml",
         )
 
-        mock_manager.agent_registry.get_agent_by_name.return_value = agent
+        mock_manager.agent_registry.get_agent.return_value = agent
 
-        response = client.get("/manager/v1/agents/scout")
+        response = client.get("/manager/v1/agents/agent-scout")
         assert response.status_code == 200
         data = response.json()
         assert data["agent_id"] == "agent-scout"
@@ -177,7 +177,7 @@ class TestAPIRoutes:
 
     def test_get_agent_not_found(self, client, mock_manager):
         """Test getting agent that doesn't exist."""
-        mock_manager.agent_registry.get_agent_by_name.return_value = None
+        mock_manager.agent_registry.get_agent.return_value = None
 
         response = client.get("/manager/v1/agents/nonexistent")
         assert response.status_code == 404
@@ -394,14 +394,14 @@ class TestAPIRoutes:
 
         mock_manager.agent_registry.get_agent.return_value = agent
 
-        response = client.delete("/manager/v1/agents/scout")
+        response = client.delete("/manager/v1/agents/agent-scout")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "deleted"
-        assert data["agent_id"] == "scout"
+        assert data["agent_id"] == "agent-scout"
 
         # Verify delete_agent was called
-        mock_manager.delete_agent.assert_called_once_with("scout")
+        mock_manager.delete_agent.assert_called_once_with("agent-scout")
 
     def test_delete_agent_operation_failed(self, client, mock_manager):
         """Test deleting agent when operation fails."""
@@ -416,7 +416,7 @@ class TestAPIRoutes:
         mock_manager.agent_registry.get_agent.return_value = agent
         mock_manager.delete_agent.return_value = False  # Deletion failed
 
-        response = client.delete("/manager/v1/agents/scout")
+        response = client.delete("/manager/v1/agents/agent-scout")
         assert response.status_code == 500
         data = response.json()
         assert "Failed to delete agent" in data["detail"]
