@@ -48,7 +48,7 @@ from ciris_manager.models.backup import (  # noqa: E402
 )
 from ciris_manager.models.deployment import (  # noqa: E402
     DeploymentNotification,
-    DeploymentStatus,
+    DeploymentStatusDetailed,  # New fully-typed version
     DeploymentEvent,
     DeploymentHistory,
     RollbackOption,
@@ -107,6 +107,8 @@ __all__ = [
     "RestoreResult",
     # Deployment models
     "DeploymentNotification",
+    "DeploymentStatus",  # Legacy version from models.py
+    "DeploymentStatusDetailed",  # New fully-typed version
     "DeploymentEvent",
     "DeploymentHistory",
     "RollbackOption",

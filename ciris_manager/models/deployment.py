@@ -106,9 +106,12 @@ class CanaryGroup(BaseModel):
     )
 
 
-class DeploymentStatus(BaseModel):
+class DeploymentStatusDetailed(BaseModel):
     """
-    Current status of a deployment.
+    Detailed deployment status with full type safety.
+
+    This is the new, fully-typed version of deployment status.
+    For backward compatibility, use DeploymentStatus from models.py.
 
     Tracks the progress, state, and results of an active or completed deployment.
     Used for both active deployments and staged deployments awaiting approval.
