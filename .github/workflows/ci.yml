@@ -49,7 +49,7 @@ jobs:
     - name: Run tests
       run: |
         echo "Running tests with python -m pytest..."
-        python -m pytest tests/ -v --cov=ciris_manager --cov-report=term-missing
+        python -m pytest tests/ -n 4 -v --cov=ciris_manager --cov-report=term-missing
 
   # Docker build removed - deployment via git clone instead
 
