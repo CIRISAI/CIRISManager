@@ -2757,8 +2757,10 @@ class DeploymentOrchestrator:
                     # Recreate the container with the new image
                     logger.info(f"Recreating container {agent.container_name} with new image...")
 
-                    # Use the existing proper recreation method
-                    recreated = await self._recreate_agent_container(agent.agent_id)
+                    # Use the existing proper recreation method, passing server_id and new image for remote agents
+                    recreated = await self._recreate_agent_container(
+                        agent.agent_id, agent.server_id, notification.agent_image
+                    )
 
                     if recreated:
                         # Update metadata with new image
@@ -3260,24 +3262,22 @@ class DeploymentOrchestrator:
         logger.warning(f"Timeout waiting for container {container_name} to stop")
         return False
 
-    async def _recreate_agent_container(self, agent_id: str) -> bool:
+    async def _recreate_agent_container(
+        self, agent_id: str, server_id: Optional[str] = "main", new_image: Optional[str] = None
+    ) -> bool:
         """
-        Recreate an agent container using docker-compose.
+        Recreate an agent container using Docker API.
 
         Args:
             agent_id: ID of the agent to recreate
+            server_id: Server where the agent is hosted (default: "main")
+            new_image: New Docker image to use (if None, uses existing image)
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            # Find the agent's docker-compose file
-            agent_dir = Path("/opt/ciris/agents") / agent_id
-            compose_file = agent_dir / "docker-compose.yml"
-
-            if not compose_file.exists():
-                logger.error(f"Docker compose file not found: {compose_file}")
-                return False
+            import docker
 
             # Check if agent has maintenance mode enabled
             if hasattr(self, "agent_registry") and self.agent_registry:
@@ -3288,95 +3288,197 @@ class DeploymentOrchestrator:
                     )
                     return True  # Return True to avoid deployment failure, but skip the operation
 
-            logger.info(f"Recreating container for agent {agent_id} using docker-compose...")
+            logger.info(f"Recreating container for agent {agent_id} on server {server_id}...")
 
-            # First, stop and remove the old container to free up the port
-            logger.info(f"Stopping existing container for agent {agent_id}...")
-            stop_result = await asyncio.create_subprocess_exec(
-                "docker-compose",
-                "-f",
-                str(compose_file),
-                "down",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(agent_dir),
-            )
-            await stop_result.communicate()
+            container_name = f"ciris-{agent_id}"
+            old_config = None
 
-            if stop_result.returncode != 0:
-                logger.warning("docker-compose down returned non-zero exit code, but continuing...")
+            # For remote servers, use Docker API
+            if server_id != "main":
+                # Get Docker client for remote server
+                if not (hasattr(self, "docker_client_manager") and self.docker_client_manager):
+                    logger.error(
+                        "docker_client_manager required for remote servers but not available"
+                    )
+                    return False
 
-            # Run docker-compose up -d with --pull always to use the newly pulled image
-            logger.info(f"Starting new container for agent {agent_id}...")
-            result = await asyncio.create_subprocess_exec(
-                "docker-compose",
-                "-f",
-                str(compose_file),
-                "up",
-                "-d",
-                "--pull",
-                "always",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(agent_dir),
-            )
-            stdout, stderr = await result.communicate()
+                docker_client = self.docker_client_manager.get_client(server_id)
 
-            if result.returncode != 0:
-                logger.error(f"Failed to recreate container: {stderr.decode()}")
-                return False
+                # Get the old container's configuration before removing it
+                logger.info(f"Getting configuration from existing container {container_name}...")
+                try:
+                    old_container = docker_client.containers.get(container_name)
+                    # Store the configuration we need to recreate the container
+                    old_config = {
+                        "image": old_container.image.tags[0]
+                        if old_container.image.tags
+                        else old_container.image.id,
+                        "environment": old_container.attrs.get("Config", {}).get("Env", []),
+                        "volumes": old_container.attrs.get("HostConfig", {}).get("Binds", []),
+                        "ports": old_container.attrs.get("HostConfig", {}).get("PortBindings", {}),
+                        "networks": list(
+                            old_container.attrs.get("NetworkSettings", {})
+                            .get("Networks", {})
+                            .keys()
+                        ),
+                        "restart_policy": old_container.attrs.get("HostConfig", {}).get(
+                            "RestartPolicy", {}
+                        ),
+                        "labels": old_container.attrs.get("Config", {}).get("Labels", {}),
+                    }
+                    logger.info(f"Captured configuration from container {container_name}")
 
-            logger.info(f"Successfully ran docker-compose up for agent {agent_id}")
+                    # Stop and remove the old container
+                    old_container.stop(timeout=10)
+                    logger.info(f"Stopped container {container_name}")
+                    old_container.remove()
+                    logger.info(f"Removed container {container_name}")
+                except docker.errors.NotFound:
+                    logger.warning(f"Container {container_name} not found, cannot capture config")
+                    return False
+                except Exception as e:
+                    logger.error(f"Error getting/removing old container: {e}")
+                    return False
 
-            # Fix permissions on agent directories to ensure container can access them
-            # The init_permissions.sh script may change ownership during container creation
-            logger.info(f"Fixing permissions for agent {agent_id} directories...")
-            helper_script = Path("/usr/local/bin/ciris-fix-permissions")
-            if helper_script.exists():
-                perm_result = await asyncio.create_subprocess_exec(
-                    str(helper_script),
-                    str(agent_dir),
+            # For local server, use docker-compose as before
+            if server_id == "main":
+                # Find the agent's docker-compose file
+                agent_dir = Path("/opt/ciris/agents") / agent_id
+                compose_file = agent_dir / "docker-compose.yml"
+
+                if not compose_file.exists():
+                    logger.error(f"Docker compose file not found: {compose_file}")
+                    return False
+
+                # Run docker-compose up -d with --pull always to use the newly pulled image
+                logger.info(f"Starting new container for agent {agent_id}...")
+                result = await asyncio.create_subprocess_exec(
+                    "docker-compose",
+                    "-f",
+                    str(compose_file),
+                    "up",
+                    "-d",
+                    "--pull",
+                    "always",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    cwd=str(agent_dir),
                 )
-                perm_stdout, perm_stderr = await perm_result.communicate()
+                stdout, stderr = await result.communicate()
 
-                if perm_result.returncode == 0:
-                    logger.info(f"Successfully fixed permissions for agent {agent_id}")
+                if result.returncode != 0:
+                    logger.error(f"Failed to recreate container: {stderr.decode()}")
+                    return False
+
+                logger.info(f"Successfully ran docker-compose up for agent {agent_id}")
+            else:
+                # For remote servers, use Docker API to recreate container
+                logger.info(
+                    f"Remote agent {agent_id}, recreating via Docker API on server {server_id}..."
+                )
+
+                if not old_config:
+                    logger.error("No old config captured, cannot recreate container")
+                    return False
+
+                # Determine which image to use
+                target_image = new_image if new_image else old_config["image"]
+
+                # Pull the new image first
+                logger.info(f"Pulling image {target_image} on remote server {server_id}...")
+                try:
+                    docker_client.images.pull(target_image)
+                    logger.info(f"Pulled image {target_image}")
+                except Exception as e:
+                    logger.warning(f"Failed to pull image: {e}, continuing anyway")
+                    # Don't fail if pull fails - the image might already be there
+
+                # Create new container with updated image but same configuration
+                logger.info(f"Creating new container {container_name} on server {server_id}...")
+                try:
+                    new_container = docker_client.containers.create(
+                        image=target_image,
+                        name=container_name,
+                        environment=old_config["environment"],
+                        volumes=old_config["volumes"],
+                        ports=old_config["ports"],
+                        network=old_config["networks"][0] if old_config["networks"] else None,
+                        restart_policy=old_config["restart_policy"],
+                        labels=old_config["labels"],
+                        detach=True,
+                    )
+                    new_container.start()
+                    logger.info(
+                        f"Successfully created and started container {container_name} on remote server"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to create container via Docker API: {e}")
+                    return False
+
+            # Fix permissions on agent directories (local server only)
+            if server_id == "main":
+                agent_dir = Path("/opt/ciris/agents") / agent_id
+                logger.info(f"Fixing permissions for agent {agent_id} directories...")
+                helper_script = Path("/usr/local/bin/ciris-fix-permissions")
+                if helper_script.exists():
+                    perm_result = await asyncio.create_subprocess_exec(
+                        str(helper_script),
+                        str(agent_dir),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    perm_stdout, perm_stderr = await perm_result.communicate()
+
+                    if perm_result.returncode == 0:
+                        logger.info(f"Successfully fixed permissions for agent {agent_id}")
+                    else:
+                        logger.warning(
+                            f"Permission fix failed for agent {agent_id}: {perm_stderr.decode()}"
+                        )
                 else:
                     logger.warning(
-                        f"Permission fix failed for agent {agent_id}: {perm_stderr.decode()}"
+                        f"Permission helper not found at {helper_script}, skipping permission fix"
                     )
-            else:
-                logger.warning(
-                    f"Permission helper not found at {helper_script}, skipping permission fix"
-                )
 
             # Wait a moment for container to start
             await asyncio.sleep(5)
 
             # Verify container is running
-            container_name = f"ciris-{agent_id}"
-            check_result = await asyncio.create_subprocess_exec(
-                "docker",
-                "inspect",
-                container_name,
-                "--format",
-                "{{.State.Status}}",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            check_stdout, _ = await check_result.communicate()
+            if server_id != "main":
+                # For remote servers, use Docker API to verify
+                try:
+                    new_container = docker_client.containers.get(container_name)
+                    status = new_container.status
+                    logger.info(f"Container {container_name} status: {status}")
+                    return status == "running"
+                except docker.errors.NotFound:
+                    logger.error(f"Container {container_name} not found after recreation")
+                    return False
+                except Exception as e:
+                    logger.warning(f"Error checking container status: {e}")
+                    return False
+            else:
+                # For local server, use docker inspect command
+                check_result = await asyncio.create_subprocess_exec(
+                    "docker",
+                    "inspect",
+                    container_name,
+                    "--format",
+                    "{{.State.Status}}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                check_stdout, _ = await check_result.communicate()
 
-            if check_result.returncode == 0:
-                status = check_stdout.decode().strip()
-                if status == "running":
-                    logger.info(f"Container {container_name} is running")
-                    return True
-                else:
-                    logger.warning(f"Container {container_name} status: {status}")
+                if check_result.returncode == 0:
+                    status = check_stdout.decode().strip()
+                    if status == "running":
+                        logger.info(f"Container {container_name} is running")
+                        return True
+                    else:
+                        logger.warning(f"Container {container_name} status: {status}")
 
-            return False
+                return False
 
         except Exception as e:
             logger.error(f"Error recreating container for agent {agent_id}: {e}")
