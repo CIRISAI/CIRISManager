@@ -10,7 +10,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, cast
 from uuid import uuid4
 import httpx
 import aiofiles  # type: ignore
@@ -1109,7 +1109,7 @@ class DeploymentOrchestrator:
                 logger.info(f"GUI-only deployment - executing immediately: {notification.message}")
                 # Start the deployment immediately for GUI-only updates
                 status = await self.start_deployment(notification, agents)
-                return status.deployment_id
+                return cast(str, status.deployment_id)
 
         # All other deployments (agent updates) are staged for human review
         logger.info(f"Staging deployment for human review: {notification.message}")
@@ -1955,7 +1955,7 @@ class DeploymentOrchestrator:
         if not deployment:
             return False
 
-        return deployment.status == "in_progress"
+        return cast(bool, deployment.status == "in_progress")
 
     async def _run_deployment(
         self,

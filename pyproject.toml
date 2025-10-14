@@ -57,6 +57,7 @@ dev = [
 
 [project.scripts]
 ciris-manager = "ciris_manager.cli:main"
+ciris-cli = "ciris_manager.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/CIRISAI/CIRISManager"

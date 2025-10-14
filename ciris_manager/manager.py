@@ -284,10 +284,26 @@ class CIRISManager:
         if wa_signature and not is_pre_approved:
             logger.info(f"Verifying WA signature for custom template: {template}")
 
-        # Generate agent ID with 4-digit suffix
+        # Generate agent ID with 6-digit suffix - ensure uniqueness across ALL servers
         base_id = name.lower().replace(" ", "-")
-        suffix = self._generate_agent_suffix()
-        agent_id = f"{base_id}-{suffix}"
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            suffix = self._generate_agent_suffix()
+            agent_id = f"{base_id}-{suffix}"
+
+            # Check if this ID already exists in registry
+            if not self.agent_registry.get_agent(agent_id):
+                break  # ID is unique, use it
+
+            logger.warning(
+                f"Agent ID {agent_id} already exists (attempt {attempt + 1}/{max_attempts}), generating new suffix"
+            )
+        else:
+            # Failed to generate unique ID after max attempts
+            raise RuntimeError(
+                f"Failed to generate unique agent ID after {max_attempts} attempts. "
+                "This should be extremely rare - please try again."
+            )
 
         # Allocate port
         allocated_port = self.port_manager.allocate_port(agent_id)
@@ -779,30 +795,12 @@ class CIRISManager:
 
                 logger.debug(f"Created directory {dir_path} with permissions {perms}")
 
-            # Run the shared permission fix script to ensure correct ownership
-            logger.info(f"Running permission fix script for {agent_id} on {server_id}")
-            fix_cmd = f"/home/ciris/shared/fix_agent_permissions.sh {base_path}"
-            try:
-                nginx_container = docker_client.containers.get("ciris-nginx")
-                exec_result = nginx_container.exec_run(f"sh -c '{fix_cmd}'", user="root")
-                if exec_result.exit_code != 0:
-                    raise RuntimeError(f"Permission fix failed: {exec_result.output.decode()}")
-                logger.info(f"✅ Fixed permissions: {exec_result.output.decode().strip()}")
-            except Exception as e:
-                logger.warning(f"Could not use nginx container for permission fix: {e}")
-                # Use bash image instead of alpine since script requires bash
-                docker_client.containers.run(
-                    "bash:latest",
-                    command=["bash", "/home/ciris/shared/fix_agent_permissions.sh", base_path],
-                    volumes={
-                        "/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"},
-                        "/home/ciris": {"bind": "/home/ciris", "mode": "ro"},
-                    },
-                    remove=True,
-                    detach=False,
-                )
-
-            logger.info(f"✅ Created agent directories on {server_id} at {base_path}")
+            # Permissions are already set correctly by the alpine/nginx containers above
+            # The fix_agent_permissions.sh script is only needed for local servers
+            # For remote servers, we've already set ownership to 1000:1000 in each directory creation
+            logger.info(
+                f"✅ Created agent directories on {server_id} at {base_path} with correct permissions"
+            )
 
         except Exception as e:
             logger.error(f"Failed to create agent directories on {server_id}: {e}")
