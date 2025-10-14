@@ -3450,7 +3450,7 @@ class DeploymentOrchestrator:
                     new_container = docker_client.containers.get(container_name)
                     status = new_container.status
                     logger.info(f"Container {container_name} status: {status}")
-                    return status == "running"
+                    return bool(status == "running")
                 except docker.errors.NotFound:
                     logger.error(f"Container {container_name} not found after recreation")
                     return False
