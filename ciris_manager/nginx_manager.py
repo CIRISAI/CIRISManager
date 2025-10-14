@@ -482,18 +482,8 @@ http {
                 if not agent.has_port:
                     continue
 
-                # OAuth routes (login initiation and callbacks)
+                # OAuth callback route
                 server += f"""
-        # {agent.agent_name} OAuth login initiation (with agent_id in path)
-        location ~ ^/v1/auth/oauth/{agent.agent_id}/(.+)/login$ {{
-            proxy_pass http://agent_{agent.agent_id}/v1/auth/oauth/$1/login$is_args$args;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }}
-
         # {agent.agent_name} OAuth callbacks
         location ~ ^/v1/auth/oauth/{agent.agent_id}/(.+)/callback$ {{
             proxy_pass http://agent_{agent.agent_id}/v1/auth/oauth/$1/callback$is_args$args;
