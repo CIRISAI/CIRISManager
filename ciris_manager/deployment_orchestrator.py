@@ -108,6 +108,7 @@ class DeploymentOrchestrator:
                     )
 
                     # Check for in-progress deployments that need recovery or marking as failed
+                    # First check the current deployment if set
                     if self.current_deployment and self.current_deployment in self.deployments:
                         deployment = self.deployments[self.current_deployment]
                         if deployment.status == "in_progress":
@@ -132,6 +133,27 @@ class DeploymentOrchestrator:
                                 deployment.message = "Deployment interrupted by manager restart"
                                 # Clear the current deployment lock to allow new deployments
                                 self.current_deployment = None
+                                self._save_state()
+
+                    # Also scan all deployments for stale in-progress status (where current_deployment was cleared)
+                    stale_threshold = datetime.now(timezone.utc).timestamp() - (
+                        10 * 60
+                    )  # 10 minutes
+                    for deployment_id, deployment in list(self.deployments.items()):
+                        if deployment.status == "in_progress" and deployment.started_at:
+                            started_timestamp = datetime.fromisoformat(
+                                deployment.started_at.replace("Z", "+00:00")
+                            ).timestamp()
+                            if started_timestamp < stale_threshold:
+                                logger.warning(
+                                    f"Found stale in-progress deployment {deployment_id} after restart. "
+                                    f"Started at {deployment.started_at}, marking as failed."
+                                )
+                                deployment.status = "failed"
+                                deployment.completed_at = datetime.now(timezone.utc).isoformat()
+                                deployment.message = (
+                                    "Deployment marked as failed - stale after manager restart"
+                                )
                                 self._save_state()
             except Exception as e:
                 logger.warning(f"Failed to load deployment state: {e}")
