@@ -3176,7 +3176,15 @@ class DeploymentOrchestrator:
                                 )
 
                         # Recreate the container with new image
-                        recreated = await self._recreate_agent_container(agent_id)
+                        # Pass server_id to ensure remote agents use Docker API
+                        server_id = (
+                            agent_info.server_id
+                            if agent_info and hasattr(agent_info, "server_id")
+                            else "main"
+                        )
+                        recreated = await self._recreate_agent_container(
+                            agent_id, server_id=server_id
+                        )
 
                         if recreated:
                             logger.info(
