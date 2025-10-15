@@ -766,7 +766,10 @@ class DeploymentOrchestrator:
             if not self.manager or not self.manager.agent_registry:
                 raise ValueError("Manager or agent_registry not available")
 
-            discovery = DockerAgentDiscovery(self.manager.agent_registry)
+            discovery = DockerAgentDiscovery(
+                self.manager.agent_registry,
+                docker_client_manager=self.manager.docker_client,
+            )
             agents = discovery.discover_agents()
 
             if not deployment.notification:
