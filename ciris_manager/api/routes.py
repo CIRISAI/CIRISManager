@@ -1290,19 +1290,38 @@ def create_routes(manager: Any) -> APIRouter:
             )  # Default to True for backward compatibility
 
             if should_restart:
-                # Recreate container with new config
-                agent_dir = Path("/opt/ciris/agents") / agent_id
-                proc = await asyncio.create_subprocess_exec(
-                    "docker-compose",
-                    "up",
-                    "-d",
-                    cwd=str(agent_dir),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await proc.communicate()
-                if proc.returncode != 0:
-                    raise RuntimeError(f"Failed to recreate container: {stderr.decode()}")
+                # Get agent from registry to check server location
+                agent = manager.agent_registry.get_agent(agent_id)
+                if not agent:
+                    raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+                server_id = agent.server_id if hasattr(agent, "server_id") else "main"
+
+                # Use different recreation strategy for remote vs local agents
+                if server_id != "main":
+                    # Remote server - use Docker API to avoid port conflicts
+                    from ciris_manager.deployment_orchestrator import get_deployment_orchestrator
+
+                    orchestrator = get_deployment_orchestrator()
+                    success = await orchestrator._recreate_agent_container(
+                        agent_id, server_id=server_id, new_image=None
+                    )
+                    if not success:
+                        raise RuntimeError("Failed to recreate remote agent container")
+                else:
+                    # Local server - use docker-compose
+                    agent_dir = Path("/opt/ciris/agents") / agent_id
+                    proc = await asyncio.create_subprocess_exec(
+                        "docker-compose",
+                        "up",
+                        "-d",
+                        cwd=str(agent_dir),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, stderr = await proc.communicate()
+                    if proc.returncode != 0:
+                        raise RuntimeError(f"Failed to recreate container: {stderr.decode()}")
 
                 logger.info(f"Agent {agent_id} config updated and restarted by {user['email']}")
                 return {
