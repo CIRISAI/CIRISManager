@@ -3182,8 +3182,14 @@ class DeploymentOrchestrator:
                             if agent_info and hasattr(agent_info, "server_id")
                             else "main"
                         )
+                        # Pass the new image from notification to actually update the container
+                        new_image = (
+                            notification.agent_image
+                            if notification and notification.agent_image
+                            else None
+                        )
                         recreated = await self._recreate_agent_container(
-                            agent_id, server_id=server_id
+                            agent_id, server_id=server_id, new_image=new_image
                         )
 
                         if recreated:
