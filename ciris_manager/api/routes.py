@@ -593,6 +593,8 @@ def create_routes(manager: Any) -> APIRouter:
                 billing_enabled=agent_request.billing_enabled,
                 billing_api_key=agent_request.billing_api_key,
                 server_id=agent_request.server_id,
+                database_url=agent_request.database_url,
+                database_ssl_cert_path=agent_request.database_ssl_cert_path,
             )
 
             logger.info(f"Agent {result['agent_id']} created by {user['email']}")

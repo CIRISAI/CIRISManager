@@ -138,6 +138,14 @@ class CreateAgentRequest(BaseModel):
     server_id: Optional[str] = Field(
         None, description="Target server ID (defaults to 'main' if not specified)"
     )
+    database_url: Optional[str] = Field(
+        None,
+        description="PostgreSQL database URL (e.g., postgresql://user:pass@host:port/db?sslmode=require)",
+    )
+    database_ssl_cert_path: Optional[str] = Field(
+        None,
+        description="Path to SSL certificate for database connection (e.g., /root/ca-certificate.crt)",
+    )
 
 
 class UpdateNotification(BaseModel):

@@ -40,6 +40,8 @@ class ComposeGenerator:
         oauth_volume: str = "/home/ciris/shared/oauth",
         billing_enabled: bool = False,
         billing_api_key: Optional[str] = None,
+        database_url: Optional[str] = None,
+        database_ssl_cert_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate docker-compose configuration for an agent.
@@ -56,6 +58,8 @@ class ComposeGenerator:
             oauth_volume: Path to shared OAuth configuration
             billing_enabled: Whether to enable paid billing (default: False)
             billing_api_key: Billing API key (required if billing_enabled=True)
+            database_url: PostgreSQL database URL
+            database_ssl_cert_path: Path to SSL certificate for database connection
 
         Returns:
             Docker compose configuration dict
@@ -80,6 +84,12 @@ class ComposeGenerator:
                 base_env["CIRIS_BILLING_API_KEY"] = billing_api_key
         else:
             base_env["CIRIS_BILLING_ENABLED"] = "false"
+
+        # Add database configuration
+        if database_url:
+            base_env["CIRIS_DB_URL"] = database_url
+        if database_ssl_cert_path:
+            base_env["PGSSLROOTCERT"] = database_ssl_cert_path
 
         # Merge with additional environment
         if environment:
@@ -132,16 +142,7 @@ class ComposeGenerator:
                     "entrypoint": ["/init_permissions.sh"],
                     "command": ["python", "main.py", "--template", template],
                     "environment": base_env,
-                    "volumes": [
-                        f"{agent_dir}/data:/app/data",
-                        f"{agent_dir}/data_archive:/app/data_archive",
-                        f"{agent_dir}/logs:/app/logs",
-                        f"{agent_dir}/config:/app/config",
-                        f"{agent_dir}/audit_keys:/app/audit_keys",
-                        f"{agent_dir}/.secrets:/app/.secrets",
-                        f"{agent_dir}/init_permissions.sh:/init_permissions.sh:ro",
-                        f"{oauth_volume}:/home/ciris/shared/oauth:ro",
-                    ],
+                    "volumes": self._build_volumes(agent_dir, oauth_volume, database_ssl_cert_path),
                     "restart": "no",
                     "healthcheck": {
                         "test": ["CMD", "curl", "-f", "http://localhost:8080/v1/system/health"],
@@ -166,6 +167,37 @@ class ComposeGenerator:
         }
 
         return compose_config
+
+    def _build_volumes(
+        self, agent_dir: Path, oauth_volume: str, database_ssl_cert_path: Optional[str] = None
+    ) -> list:
+        """
+        Build volume mount list for agent container.
+
+        Args:
+            agent_dir: Agent's directory path
+            oauth_volume: Path to shared OAuth configuration
+            database_ssl_cert_path: Optional path to SSL certificate for database
+
+        Returns:
+            List of volume mount strings
+        """
+        volumes = [
+            f"{agent_dir}/data:/app/data",
+            f"{agent_dir}/data_archive:/app/data_archive",
+            f"{agent_dir}/logs:/app/logs",
+            f"{agent_dir}/config:/app/config",
+            f"{agent_dir}/audit_keys:/app/audit_keys",
+            f"{agent_dir}/.secrets:/app/.secrets",
+            f"{agent_dir}/init_permissions.sh:/init_permissions.sh:ro",
+            f"{oauth_volume}:/home/ciris/shared/oauth:ro",
+        ]
+
+        # Add database SSL certificate volume mount if provided
+        if database_ssl_cert_path:
+            volumes.append(f"{database_ssl_cert_path}:{database_ssl_cert_path}:ro")
+
+        return volumes
 
     def write_compose_file(self, compose_config: Dict[str, Any], compose_path: Path) -> None:
         """
