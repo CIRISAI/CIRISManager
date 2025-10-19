@@ -61,7 +61,8 @@ class TestRegisteredAgent:
         assert data["template"] == "scout"
         assert data["compose_file"] == "/path/to/compose.yml"
         assert "created_at" in data
-        assert "agent_id" not in data  # Not included in dict
+        # agent_id is included when agent_id contains dashes (to avoid parsing ambiguity)
+        assert data["agent_id"] == "agent-test"
         assert data["server_id"] == "main"  # Default server
 
     def test_server_id_default(self):
