@@ -212,18 +212,32 @@ class AgentRegistry:
                     )  # Use explicit occurrence_id from data (may be None)
                 else:
                     # Parse the stored key (old format or no explicit agent_id in data)
-                    agent_id, occurrence_id_from_key, server_id = self._parse_key(stored_key)
+                    agent_id, occurrence_id_from_key, server_id_from_key = self._parse_key(
+                        stored_key
+                    )
 
                     # Create RegisteredAgent with data from file
                     agent = RegisteredAgent.from_dict(agent_id, agent_data)
 
-                    # For backward compatibility, key-parsed values take precedence
-                    if agent.server_id != server_id:
+                    # For backward compatibility, use key-parsed server_id ONLY if key has explicit server suffix
+                    # Otherwise, prefer server_id from data
+                    parts = stored_key.split("-")
+                    key_has_server_suffix = len(parts) >= 2 and parts[-1] in {
+                        "main",
+                        "scout",
+                        "scout2",
+                    }
+
+                    if key_has_server_suffix and agent.server_id != server_id_from_key:
                         logger.warning(
                             f"Agent {agent_id} server_id mismatch: "
-                            f"key={server_id}, data={agent.server_id}. Using key value."
+                            f"key={server_id_from_key}, data={agent.server_id}. Using key value."
                         )
+                        server_id = server_id_from_key
                         agent.server_id = server_id
+                    else:
+                        # Use server_id from data
+                        server_id = agent.server_id
 
                     # Set occurrence_id from key if not in data
                     occurrence_id = agent.occurrence_id or occurrence_id_from_key
