@@ -1323,30 +1323,57 @@ class CIRISManager:
         except Exception as e:
             logger.error(f"Failed to start API server: {e}")
 
-    async def delete_agent(self, agent_id: str) -> bool:
+    async def delete_agent(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
         """
         Delete an agent and clean up its resources.
 
         Args:
             agent_id: ID of agent to delete
+            occurrence_id: Optional occurrence ID for multi-instance deployments
+            server_id: Optional server ID for multi-server deployments
 
         Returns:
             True if successful
         """
         try:
-            # Get agent info
-            agent_info = self.agent_registry.get_agent(agent_id)
+            # Get agent info with composite key support
+            if occurrence_id or server_id:
+                # Use precise lookup
+                agent_info = self.agent_registry.get_agent(
+                    agent_id, occurrence_id=occurrence_id, server_id=server_id
+                )
+            else:
+                # Try to find the agent - handle case of multiple instances
+                all_instances = self.agent_registry.get_agents_by_agent_id(agent_id)
+                if len(all_instances) == 0:
+                    logger.error(f"Agent {agent_id} not found")
+                    return False
+                elif len(all_instances) == 1:
+                    agent_info = all_instances[0]
+                else:
+                    # Multiple instances exist - need disambiguation
+                    logger.error(
+                        f"Multiple instances of agent {agent_id} exist. "
+                        "Please specify occurrence_id and/or server_id"
+                    )
+                    return False
+
             if not agent_info:
                 logger.error(f"Agent {agent_id} not found")
                 return False
 
             # Determine which server the agent is on
-            server_id = (
+            target_server_id = (
                 agent_info.server_id
                 if hasattr(agent_info, "server_id") and agent_info.server_id
                 else "main"
             )
-            server_config = self.docker_client.get_server_config(server_id)
+            server_config = self.docker_client.get_server_config(target_server_id)
 
             # Get compose path (used by both local and remote)
             compose_path = Path(agent_info.compose_file)
@@ -1363,16 +1390,20 @@ class CIRISManager:
                     await process.communicate()
             else:
                 # Remote server: use Docker API
-                logger.info(f"Stopping agent {agent_id} on remote server {server_id}")
+                logger.info(f"Stopping agent {agent_id} on remote server {target_server_id}")
                 try:
-                    docker_client = self.docker_client.get_client(server_id)
+                    docker_client = self.docker_client.get_client(target_server_id)
                     container_name = f"ciris-{agent_id}"
                     container = docker_client.containers.get(container_name)
                     container.stop(timeout=10)
                     container.remove(v=True)  # Remove volumes
-                    logger.info(f"✅ Stopped and removed container {container_name} on {server_id}")
+                    logger.info(
+                        f"✅ Stopped and removed container {container_name} on {target_server_id}"
+                    )
                 except Exception as e:
-                    logger.warning(f"Failed to stop container on remote server {server_id}: {e}")
+                    logger.warning(
+                        f"Failed to stop container on remote server {target_server_id}: {e}"
+                    )
 
             # Remove nginx routes (no conditional needed)
             logger.info(f"Removing nginx routes for {agent_id}")
@@ -1389,8 +1420,14 @@ class CIRISManager:
             if agent_info.port:
                 self.port_manager.release_port(agent_id)
 
-            # Remove from registry
-            self.agent_registry.unregister_agent(agent_id)
+            # Remove from registry - use composite key for multi-instance support
+            self.agent_registry.unregister_agent(
+                agent_id,
+                occurrence_id=agent_info.occurrence_id
+                if hasattr(agent_info, "occurrence_id")
+                else None,
+                server_id=agent_info.server_id if hasattr(agent_info, "server_id") else None,
+            )
 
             # Don't try to delete the agent directory - it contains root-owned files
             # from the Docker container. The docker-compose down -v should handle cleanup.

@@ -47,12 +47,58 @@ class PortManager:
                 data = json.load(f)
 
             agents = data.get("agents", {})
-            for agent_id, agent_data in agents.items():
+            for key, agent_data in agents.items():
                 if "port" in agent_data:
+                    # Determine if this is a composite key or simple agent_id
+                    if "agent_id" in agent_data:
+                        # Agent has occurrence_id, use agent_id from data
+                        agent_id = agent_data["agent_id"]
+                    elif "server_id" in agent_data:
+                        # This is a composite key format, parse it
+                        # Format is "agent_id-server_id" or "agent_id-occurrence_id-server_id"
+                        agent_id = self._parse_agent_id_from_key(key)
+                    else:
+                        # Simple agent_id (not composite key), use key as-is
+                        agent_id = key
+
                     self.allocated_ports[agent_id] = agent_data["port"]
                     logger.info(f"Loaded port allocation: {agent_id} -> {agent_data['port']}")
         except Exception as e:
             logger.error(f"Failed to load metadata: {e}")
+
+    @staticmethod
+    def _parse_agent_id_from_key(composite_key: str) -> str:
+        """Extract agent_id from composite key.
+
+        Args:
+            composite_key: Composite key in format "agent_id-server_id" or "agent_id-occurrence_id-server_id"
+                         Note: agent_id itself may contain dashes (e.g., "scout1-abc123-main")
+
+        Returns:
+            The agent_id portion of the key
+        """
+        # For backward compatibility with old single-part keys
+        if "-" not in composite_key:
+            return composite_key
+
+        # Split the composite key
+        parts = composite_key.split("-")
+
+        if len(parts) >= 3:
+            # Format could be:
+            # 1. "agent_id-occurrence_id-server_id" where agent_id has no dashes
+            # 2. "agent-with-dashes-server_id" where agent_id has dashes
+            #
+            # Since we can't distinguish these cases without more context, and the most
+            # common case is agents without occurrence_id (format "agent_id-server_id"),
+            # we'll assume the last part is server_id and everything before is agent_id
+            return "-".join(parts[:-1])
+        elif len(parts) == 2:
+            # Format: "simple_agent_id-server_id"
+            return parts[0]
+        else:
+            # Single part - should not happen but return as-is
+            return composite_key
 
     def allocate_port(self, agent_id: str) -> int:
         """

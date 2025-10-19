@@ -2,7 +2,6 @@
 Test deployment field functionality in CIRISManager.
 """
 
-from pathlib import Path
 from ciris_manager.agent_registry import RegisteredAgent, AgentRegistry
 from ciris_manager.models import AgentInfo
 
@@ -43,9 +42,9 @@ def test_models_agent_info_deployment_field():
     assert agent.deployment == "CIRIS_DISCORD_PILOT"  # Default value
 
 
-def test_agent_registry_set_deployment():
+def test_agent_registry_set_deployment(tmp_path):
     """Test setting deployment through registry."""
-    registry = AgentRegistry(Path("/tmp/test"))
+    registry = AgentRegistry(tmp_path / "metadata.json")
 
     # Register an agent
     registry.register_agent(
@@ -65,9 +64,9 @@ def test_agent_registry_set_deployment():
     assert updated_agent.metadata["deployment"] == "NEW_DEPLOYMENT"
 
 
-def test_agent_registry_get_agents_by_deployment():
+def test_agent_registry_get_agents_by_deployment(tmp_path):
     """Test getting agents by deployment."""
-    registry = AgentRegistry(Path("/tmp/test"))
+    registry = AgentRegistry(tmp_path / "metadata.json")
 
     # Register multiple agents
     registry.register_agent("agent1", "Agent 1", 8080, "default", "/compose1.yml")
@@ -92,9 +91,9 @@ def test_agent_registry_get_agents_by_deployment():
     assert len(default_agents) == 0  # All were reassigned
 
 
-def test_agent_registry_nonexistent_agent():
+def test_agent_registry_nonexistent_agent(tmp_path):
     """Test setting deployment for nonexistent agent."""
-    registry = AgentRegistry(Path("/tmp/test"))
+    registry = AgentRegistry(tmp_path / "metadata.json")
 
     result = registry.set_deployment("nonexistent", "DEPLOYMENT")
     assert result is False

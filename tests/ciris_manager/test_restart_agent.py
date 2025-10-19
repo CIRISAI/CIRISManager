@@ -15,10 +15,33 @@ class TestRestartAgent:
     @pytest.fixture
     def mock_manager(self):
         """Create a mock manager instance."""
+        from ciris_manager.agent_registry import RegisteredAgent
+
         manager = Mock()
+
+        # Create mock agent for registry lookups
+        mock_agent = RegisteredAgent(
+            agent_id="test-agent",
+            name="Test Agent",
+            port=8001,
+            template="test",
+            compose_file="/path/to/compose.yml",
+            server_id="main",
+        )
+
         manager.agent_registry = Mock()
+        manager.agent_registry.get_agent = Mock(return_value=mock_agent)
+        manager.agent_registry.get_agents_by_agent_id = Mock(return_value=[mock_agent])
+
         manager.config = Mock()
         manager.docker_client = Mock()
+
+        # Mock get_server_config for multi-server support
+        mock_server_config = Mock()
+        mock_server_config.vpc_ip = "localhost"
+        mock_server_config.hostname = "agents.ciris.ai"
+        manager.docker_client.get_server_config = Mock(return_value=mock_server_config)
+
         return manager
 
     @pytest.fixture
@@ -69,6 +92,7 @@ class TestRestartAgent:
         """Test restarting a non-existent agent."""
         # Agent not in registry
         mock_manager.agent_registry.get_agent.return_value = None
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = []
 
         with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as MockDiscovery:
             # No discovered agents either
@@ -161,6 +185,7 @@ class TestRestartAgent:
         """Test restarting a discovered agent (not in registry)."""
         # Agent not in registry
         mock_manager.agent_registry.get_agent.return_value = None
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = []
 
         with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as MockDiscovery:
             # But found via discovery
