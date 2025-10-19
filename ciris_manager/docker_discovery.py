@@ -179,9 +179,17 @@ class DockerAgentDiscovery:
             adapter_list = env_dict.get("CIRIS_ADAPTER", "api").lower()
             discord_enabled = "discord" in adapter_list
 
+            # Get occurrence_id from environment if present (for multi-instance deployments)
+            occurrence_id = env_dict.get("AGENT_OCCURRENCE_ID")
+
             # Get ALL static configuration from registry - single source of truth
+            # Use composite key lookup with occurrence_id and server_id
             registry_agent = (
-                self.agent_registry.get_agent(agent_id) if self.agent_registry else None
+                self.agent_registry.get_agent(
+                    agent_id, occurrence_id=occurrence_id, server_id=server_id
+                )
+                if self.agent_registry
+                else None
             )
 
             # Registry is the source of truth for port, template, deployment
@@ -244,7 +252,11 @@ class DockerAgentDiscovery:
                     # Update the registry with fresh version info
                     if self.agent_registry and agent_info.version and agent_info.cognitive_state:
                         self.agent_registry.update_agent_state(
-                            agent_id, agent_info.version, agent_info.cognitive_state
+                            agent_id,
+                            agent_info.version,
+                            agent_info.cognitive_state,
+                            occurrence_id=occurrence_id,
+                            server_id=server_id,
                         )
 
             return agent_info

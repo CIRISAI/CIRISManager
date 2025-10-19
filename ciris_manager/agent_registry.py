@@ -34,6 +34,7 @@ class RegisteredAgent:
         version_transitions: Optional[List[Dict[str, Any]]] = None,
         do_not_autostart: Optional[bool] = None,
         server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -53,10 +54,11 @@ class RegisteredAgent:
         self.version_transitions = version_transitions or []
         self.do_not_autostart = do_not_autostart or False
         self.server_id = server_id or "main"  # Default to main server for backward compatibility
+        self.occurrence_id = occurrence_id  # For multi-instance deployments on same database
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
-        return {
+        data = {
             "name": self.name,
             "port": self.port,
             "template": self.template,
@@ -72,6 +74,12 @@ class RegisteredAgent:
             "do_not_autostart": self.do_not_autostart,
             "server_id": self.server_id,
         }
+        # Include occurrence_id and agent_id if occurrence_id is set
+        # (agent_id is needed to avoid ambiguity when parsing composite keys)
+        if self.occurrence_id:
+            data["occurrence_id"] = self.occurrence_id
+            data["agent_id"] = self.agent_id
+        return data
 
     @classmethod
     def from_dict(cls, agent_id: str, data: Dict[str, Any]) -> "RegisteredAgent":
@@ -92,11 +100,18 @@ class RegisteredAgent:
             version_transitions=data.get("version_transitions", []),
             do_not_autostart=data.get("do_not_autostart", False),
             server_id=data.get("server_id", "main"),  # Default to main for backward compatibility
+            occurrence_id=data.get("occurrence_id"),  # For multi-instance deployments
         )
 
 
 class AgentRegistry:
-    """Registry for tracking all managed agents."""
+    """Registry for tracking all managed agents.
+
+    Supports multiple redundant instances of the same agent_id on the same or different servers,
+    using composite key (agent_id, occurrence_id, server_id) for unique identification.
+
+    Key format: "agent_id-occurrence_id-server_id" (e.g., "scout-scout_lb_1-scout")
+    """
 
     def __init__(self, metadata_path: Path):
         """
@@ -106,6 +121,7 @@ class AgentRegistry:
             metadata_path: Path to metadata.json file
         """
         self.metadata_path = metadata_path
+        # Key format: "agent_id-occurrence_id-server_id" for composite key support
         self.agents: Dict[str, RegisteredAgent] = {}
         self._lock = Lock()
 
@@ -115,8 +131,52 @@ class AgentRegistry:
         # Load existing metadata
         self._load_metadata()
 
+    @staticmethod
+    def _make_key(agent_id: str, occurrence_id: Optional[str], server_id: str) -> str:
+        """Create composite key from agent_id, occurrence_id, and server_id.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Occurrence ID for database isolation (optional)
+            server_id: Server identifier
+
+        Returns:
+            Composite key string in format "agent_id-occurrence_id-server_id"
+            or "agent_id-server_id" if no occurrence_id
+        """
+        if occurrence_id:
+            return f"{agent_id}-{occurrence_id}-{server_id}"
+        else:
+            # For backward compatibility with agents without occurrence_id
+            return f"{agent_id}-{server_id}"
+
+    @staticmethod
+    def _parse_key(key: str) -> tuple[str, Optional[str], str]:
+        """Parse composite key back to (agent_id, occurrence_id, server_id).
+
+        Args:
+            key: Composite key string
+
+        Returns:
+            Tuple of (agent_id, occurrence_id, server_id)
+        """
+        parts = key.split("-")
+
+        if len(parts) >= 3:
+            # Format: agent_id-occurrence_id-server_id
+            agent_id = parts[0]
+            server_id = parts[-1]  # Last part is server_id
+            occurrence_id = "-".join(parts[1:-1])  # Middle part(s) are occurrence_id
+            return (agent_id, occurrence_id, server_id)
+        elif len(parts) == 2:
+            # Format: agent_id-server_id (no occurrence_id)
+            return (parts[0], None, parts[1])
+        else:
+            # Backward compatibility: single part is agent_id, default to main server
+            return (key, None, "main")
+
     def _load_metadata(self) -> None:
-        """Load metadata from disk."""
+        """Load metadata from disk with backward compatibility."""
         if not self.metadata_path.exists():
             logger.info(f"No existing metadata at {self.metadata_path}")
             return
@@ -126,9 +186,42 @@ class AgentRegistry:
                 data = json.load(f)
 
             agents_data = data.get("agents", {})
-            for agent_id, agent_data in agents_data.items():
-                self.agents[agent_id] = RegisteredAgent.from_dict(agent_id, agent_data)
-                logger.info(f"Loaded agent: {agent_id}")
+            for stored_key, agent_data in agents_data.items():
+                # For composite keys with occurrence_id, agent_id is stored in data to avoid ambiguity
+                # For backward compatibility, parse the key if agent_id not in data
+                if "agent_id" in agent_data:
+                    agent_id = agent_data["agent_id"]
+                    _, occurrence_id_from_key, server_id = self._parse_key(stored_key)
+                else:
+                    # Parse the stored key (old format or no occurrence_id)
+                    agent_id, occurrence_id_from_key, server_id = self._parse_key(stored_key)
+
+                # Create RegisteredAgent with data from file
+                agent = RegisteredAgent.from_dict(agent_id, agent_data)
+
+                # Ensure server_id matches the key (key takes precedence)
+                if agent.server_id != server_id:
+                    logger.warning(
+                        f"Agent {agent_id} server_id mismatch: "
+                        f"key={server_id}, data={agent.server_id}. Using key value."
+                    )
+                    agent.server_id = server_id
+
+                # Ensure occurrence_id is set correctly
+                occurrence_id = agent.occurrence_id or occurrence_id_from_key
+                if occurrence_id:
+                    agent.occurrence_id = occurrence_id
+
+                # Store using composite key
+                composite_key = self._make_key(agent_id, occurrence_id, server_id)
+                self.agents[composite_key] = agent
+
+                if occurrence_id:
+                    logger.info(
+                        f"Loaded agent: {agent_id} (occurrence: {occurrence_id}) on server {server_id}"
+                    )
+                else:
+                    logger.info(f"Loaded agent: {agent_id} on server {server_id}")
 
         except Exception as e:
             logger.error(f"Failed to load metadata: {e}")
@@ -163,12 +256,13 @@ class AgentRegistry:
         service_token: Optional[str] = None,
         admin_password: Optional[str] = None,
         server_id: str = "main",
+        occurrence_id: Optional[str] = None,
     ) -> RegisteredAgent:
         """
         Register a new agent.
 
         Args:
-            agent_id: Unique agent identifier
+            agent_id: Agent identifier (can be shared across instances)
             name: Human-friendly agent name
             port: Allocated port number
             template: Template used to create agent
@@ -176,6 +270,7 @@ class AgentRegistry:
             service_token: Encrypted service token for authentication
             admin_password: Encrypted admin password for agent
             server_id: Server hosting the agent (default: "main")
+            occurrence_id: Occurrence ID for database isolation (optional, for multi-instance)
 
         Returns:
             Created RegisteredAgent object
@@ -190,37 +285,112 @@ class AgentRegistry:
                 service_token=service_token,
                 admin_password=admin_password,
                 server_id=server_id,
+                occurrence_id=occurrence_id,
             )
 
-            agent.service_token = service_token
-            agent.admin_password = admin_password
-
-            self.agents[agent_id] = agent
+            # Store using composite key
+            composite_key = self._make_key(agent_id, occurrence_id, server_id)
+            self.agents[composite_key] = agent
             self._save_metadata()
 
-            logger.info(f"Registered agent: {agent_id} on port {port} (server: {server_id})")
+            if occurrence_id:
+                logger.info(
+                    f"Registered agent: {agent_id} (occurrence: {occurrence_id}) "
+                    f"on port {port} (server: {server_id})"
+                )
+            else:
+                logger.info(f"Registered agent: {agent_id} on port {port} (server: {server_id})")
+
             return agent
 
-    def unregister_agent(self, agent_id: str) -> Optional[RegisteredAgent]:
+    def unregister_agent(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Optional[RegisteredAgent]:
         """
         Unregister an agent.
 
         Args:
             agent_id: Agent identifier
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
 
         Returns:
             Removed RegisteredAgent or None if not found
         """
         with self._lock:
-            agent = self.agents.pop(agent_id, None)
+            if occurrence_id and server_id:
+                # Precise lookup using composite key
+                composite_key = self._make_key(agent_id, occurrence_id, server_id)
+                agent = self.agents.pop(composite_key, None)
+            elif server_id:
+                # Lookup by agent_id and server_id (no occurrence_id)
+                composite_key = self._make_key(agent_id, None, server_id)
+                agent = self.agents.pop(composite_key, None)
+            else:
+                # Backward compatibility: try direct agent_id lookup
+                agent = self.agents.pop(agent_id, None)
+                # Also try with default server
+                if not agent:
+                    composite_key = self._make_key(agent_id, None, "main")
+                    agent = self.agents.pop(composite_key, None)
+
             if agent:
                 self._save_metadata()
-                logger.info(f"Unregistered agent: {agent_id}")
+                if occurrence_id:
+                    logger.info(
+                        f"Unregistered agent: {agent_id} (occurrence: {occurrence_id}, "
+                        f"server: {server_id})"
+                    )
+                else:
+                    logger.info(f"Unregistered agent: {agent_id}")
             return agent
 
-    def get_agent(self, agent_id: str) -> Optional[RegisteredAgent]:
-        """Get agent by ID."""
-        return self.agents.get(agent_id)
+    def get_agent(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Optional[RegisteredAgent]:
+        """Get agent by ID with optional occurrence_id and server_id for precise lookup.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Occurrence ID (optional)
+            server_id: Server ID (optional)
+
+        Returns:
+            RegisteredAgent or None if not found
+        """
+        if occurrence_id and server_id:
+            # Precise composite key lookup
+            composite_key = self._make_key(agent_id, occurrence_id, server_id)
+            return self.agents.get(composite_key)
+        elif server_id:
+            # Lookup by agent_id and server_id (no occurrence_id)
+            composite_key = self._make_key(agent_id, None, server_id)
+            return self.agents.get(composite_key)
+        else:
+            # Backward compatibility: try direct agent_id lookup first
+            agent = self.agents.get(agent_id)
+            if agent:
+                return agent
+            # Try with default server
+            composite_key = self._make_key(agent_id, None, "main")
+            return self.agents.get(composite_key)
+
+    def get_agents_by_agent_id(self, agent_id: str) -> List[RegisteredAgent]:
+        """Get all agent instances with the same agent_id across all servers/occurrences.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            List of RegisteredAgent instances matching the agent_id
+        """
+        return [agent for agent in self.agents.values() if agent.agent_id == agent_id]
 
     def get_agent_by_name(self, name: str) -> Optional[RegisteredAgent]:
         """Get agent by name."""
@@ -233,17 +403,25 @@ class AgentRegistry:
         """List all registered agents."""
         return list(self.agents.values())
 
-    def update_agent_token(self, agent_id: str, encrypted_token: str) -> bool:
+    def update_agent_token(
+        self,
+        agent_id: str,
+        encrypted_token: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
         """Update the service token for an agent.
 
         Args:
             agent_id: Agent identifier
             encrypted_token: New encrypted service token
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
 
         Returns:
             True if successful, False if agent not found
         """
-        agent = self.agents.get(agent_id)
+        agent = self.get_agent(agent_id, occurrence_id, server_id)
         if not agent:
             logger.error(f"Agent {agent_id} not found for token update")
             return False
@@ -253,17 +431,25 @@ class AgentRegistry:
         logger.info(f"Updated service token for agent {agent_id}")
         return True
 
-    def set_canary_group(self, agent_id: str, group: str) -> bool:
+    def set_canary_group(
+        self,
+        agent_id: str,
+        group: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
         """Set the canary deployment group for an agent.
 
         Args:
             agent_id: Agent identifier
             group: Canary group ('explorer', 'early_adopter', 'general', or None)
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
 
         Returns:
             True if successful, False if agent not found
         """
-        agent = self.agents.get(agent_id)
+        agent = self.get_agent(agent_id, occurrence_id, server_id)
         if not agent:
             return False
 
@@ -280,17 +466,25 @@ class AgentRegistry:
         logger.info(f"Set canary group for {agent_id} to {group}")
         return True
 
-    def set_deployment(self, agent_id: str, deployment: str) -> bool:
+    def set_deployment(
+        self,
+        agent_id: str,
+        deployment: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
         """Set the deployment identifier for an agent.
 
         Args:
             agent_id: Agent identifier
             deployment: Deployment identifier (e.g., 'CIRIS_DISCORD_PILOT')
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
 
         Returns:
             True if successful, False if agent not found
         """
-        agent = self.agents.get(agent_id)
+        agent = self.get_agent(agent_id, occurrence_id, server_id)
         if not agent:
             logger.error(f"Agent {agent_id} not found for deployment update")
             return False
@@ -303,17 +497,25 @@ class AgentRegistry:
         logger.info(f"Set deployment for {agent_id} to {deployment}")
         return True
 
-    def set_do_not_autostart(self, agent_id: str, do_not_autostart: bool) -> bool:
+    def set_do_not_autostart(
+        self,
+        agent_id: str,
+        do_not_autostart: bool,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
         """Set the do_not_autostart flag for an agent.
 
         Args:
             agent_id: Agent identifier
             do_not_autostart: Whether to prevent automatic restart of this agent
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
 
         Returns:
             True if successful, False if agent not found
         """
-        agent = self.agents.get(agent_id)
+        agent = self.get_agent(agent_id, occurrence_id, server_id)
         if not agent:
             logger.warning(f"Agent {agent_id} not found when setting do_not_autostart flag")
             return False
@@ -367,7 +569,14 @@ class AgentRegistry:
         """Get mapping of agent IDs to allocated ports."""
         return {agent_id: agent.port for agent_id, agent in self.agents.items()}
 
-    def update_agent_state(self, agent_id: str, version: str, cognitive_state: str) -> bool:
+    def update_agent_state(
+        self,
+        agent_id: str,
+        version: str,
+        cognitive_state: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
         """
         Update agent version and cognitive state tracking.
 
@@ -375,15 +584,17 @@ class AgentRegistry:
             agent_id: Agent identifier
             version: Current agent version
             cognitive_state: Current cognitive state (WAKEUP, WORK, etc.)
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
 
         Returns:
             True if updated successfully
         """
         with self._lock:
-            if agent_id not in self.agents:
+            agent = self.get_agent(agent_id, occurrence_id, server_id)
+            if not agent:
                 return False
 
-            agent = self.agents[agent_id]
             now = datetime.now(timezone.utc).isoformat()
 
             # Check for version change

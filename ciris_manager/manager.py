@@ -291,23 +291,31 @@ class CIRISManager:
             logger.info(f"Verifying WA signature for custom template: {template}")
 
         # Generate agent ID with 6-digit suffix - ensure uniqueness across ALL servers
+        # Note: Same agent_id CAN exist multiple times if occurrence_id differs (for load balancing)
         base_id = name.lower().replace(" ", "-")
         max_attempts = 10
         for attempt in range(max_attempts):
             suffix = self._generate_agent_suffix()
             agent_id = f"{base_id}-{suffix}"
 
-            # Check if this ID already exists in registry
-            if not self.agent_registry.get_agent(agent_id):
-                break  # ID is unique, use it
+            # Check if this exact combination (agent_id, occurrence_id, server_id) exists
+            # If occurrence_id is provided, allow same agent_id with different occurrence_id
+            existing = self.agent_registry.get_agent(
+                agent_id, occurrence_id=agent_occurrence_id, server_id=target_server_id
+            )
+
+            if not existing:
+                break  # This combination is unique, use it
 
             logger.warning(
-                f"Agent ID {agent_id} already exists (attempt {attempt + 1}/{max_attempts}), generating new suffix"
+                f"Agent combination {agent_id} + occurrence_id={agent_occurrence_id} + "
+                f"server={target_server_id} already exists (attempt {attempt + 1}/{max_attempts}), "
+                "generating new suffix"
             )
         else:
-            # Failed to generate unique ID after max attempts
+            # Failed to generate unique combination after max attempts
             raise RuntimeError(
-                f"Failed to generate unique agent ID after {max_attempts} attempts. "
+                f"Failed to generate unique agent ID combination after {max_attempts} attempts. "
                 "This should be extremely rare - please try again."
             )
 
@@ -496,6 +504,7 @@ class CIRISManager:
             service_token=encrypted_token,  # Store encrypted version
             admin_password=encrypted_password,  # Store encrypted version
             server_id=target_server_id,
+            occurrence_id=agent_occurrence_id,  # For multi-instance database isolation
         )
 
         # Start the agent FIRST so Docker discovery can find it

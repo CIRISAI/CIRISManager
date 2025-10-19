@@ -125,6 +125,61 @@ def create_routes(manager: Any) -> APIRouter:
         # Production uses real auth
         auth_dependency = Depends(get_current_user)
 
+    # Helper function for resolving agent lookups with composite keys
+    def resolve_agent(
+        agent_id: str, occurrence_id: Optional[str] = None, server_id: Optional[str] = None
+    ):
+        """
+        Resolve an agent lookup with composite key support.
+
+        Handles cases where multiple instances have the same agent_id but different occurrence_ids.
+
+        Args:
+            agent_id: The agent ID to look up
+            occurrence_id: Optional occurrence ID for disambiguation
+            server_id: Optional server ID for disambiguation
+
+        Returns:
+            RegisteredAgent if found uniquely
+
+        Raises:
+            HTTPException: If agent not found or multiple instances exist without disambiguation
+        """
+        if occurrence_id or server_id:
+            # Precise lookup with composite key
+            agent = manager.agent_registry.get_agent(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
+            if not agent:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Agent '{agent_id}' with occurrence_id='{occurrence_id}' and server_id='{server_id}' not found",
+                )
+            return agent
+        else:
+            # No disambiguation provided - check if there are multiple instances
+            all_instances = manager.agent_registry.get_agents_by_agent_id(agent_id)
+
+            if len(all_instances) == 0:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+            elif len(all_instances) == 1:
+                # Only one instance - unambiguous
+                return all_instances[0]
+            else:
+                # Multiple instances exist - need disambiguation
+                instance_details = [
+                    f"  - occurrence_id={a.occurrence_id or 'none'}, server_id={a.server_id}"
+                    for a in all_instances
+                ]
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Multiple instances of agent '{agent_id}' exist. "
+                        f"Please specify occurrence_id and/or server_id query parameters:\n"
+                        + "\n".join(instance_details)
+                    ),
+                )
+
     # Special auth for deployment endpoints
     async def deployment_auth(authorization: Optional[str] = Header(None)) -> Dict[str, str]:
         """Verify deployment token for CD operations and identify the source."""
@@ -479,14 +534,28 @@ def create_routes(manager: Any) -> APIRouter:
 
     @router.post("/agents/{agent_id}/deployment")
     async def set_agent_deployment(
-        agent_id: str, request: Dict[str, Any], _user: Dict[str, str] = auth_dependency
+        agent_id: str,
+        request: Dict[str, Any],
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        _user: Dict[str, str] = auth_dependency,
     ) -> Dict[str, Any]:
-        """Set the deployment identifier for an agent."""
+        """
+        Set the deployment identifier for an agent.
+
+        Supports composite keys for multi-instance deployments.
+        """
         deployment = request.get("deployment")
         if not deployment:
             raise HTTPException(status_code=400, detail="Deployment field is required")
 
-        if not manager.agent_registry.set_deployment(agent_id, deployment):
+        # Resolve agent to ensure it exists
+        _ = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+
+        # Update deployment using composite key
+        if not manager.agent_registry.set_deployment(
+            agent_id, deployment, occurrence_id=occurrence_id, server_id=server_id
+        ):
             raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
         return {"status": "success", "agent_id": agent_id, "deployment": deployment}
@@ -515,11 +584,22 @@ def create_routes(manager: Any) -> APIRouter:
         return {"deployment": deployment, "agents": agent_list, "count": len(agent_list)}
 
     @router.get("/agents/{agent_id}")
-    async def get_agent(agent_id: str) -> AgentResponse:
-        """Get specific agent by ID."""
-        agent = manager.agent_registry.get_agent(agent_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+    async def get_agent(
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> AgentResponse:
+        """
+        Get specific agent by ID.
+
+        Supports composite keys for multi-instance deployments:
+        - occurrence_id: Optional occurrence ID for disambiguation
+        - server_id: Optional server ID for disambiguation
+
+        If multiple instances exist with the same agent_id, you must specify
+        occurrence_id and/or server_id to disambiguate.
+        """
+        agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
         return AgentResponse(
             agent_id=agent.agent_id,
@@ -621,7 +701,12 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=500, detail="Failed to create agent")
 
     @router.delete("/agents/{agent_id}")
-    async def delete_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+    async def delete_agent(
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        user: dict = auth_dependency,
+    ) -> Dict[str, str]:
         """
         Delete an agent and clean up all resources.
 
@@ -631,30 +716,39 @@ def create_routes(manager: Any) -> APIRouter:
         - Free the allocated port
         - Remove agent from registry
         - Clean up agent directory
+
+        Supports composite keys for multi-instance deployments.
         """
         # Check if agent exists in registry
-        agent = manager.agent_registry.get_agent(agent_id)
-        if not agent:
-            # Check if it's a discovered agent (not managed by CIRISManager)
-            from ciris_manager.docker_discovery import DockerAgentDiscovery
+        try:
+            _ = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+        except HTTPException as e:
+            if e.status_code == 404:
+                # Check if it's a discovered agent (not managed by CIRISManager)
+                from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            discovery = DockerAgentDiscovery(
-                manager.agent_registry, docker_client_manager=manager.docker_client
-            )
-            discovered_agents = discovery.discover_agents()
-
-            discovered_agent = next((a for a in discovered_agents if a.agent_id == agent_id), None)
-            if discovered_agent:
-                # This is a discovered agent not managed by CIRISManager
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Agent '{agent_id}' was not created by CIRISManager. "
-                        "Please stop it manually using docker-compose."
-                    ),
+                discovery = DockerAgentDiscovery(
+                    manager.agent_registry, docker_client_manager=manager.docker_client
                 )
+                discovered_agents = discovery.discover_agents()
+
+                discovered_agent = next(
+                    (a for a in discovered_agents if a.agent_id == agent_id), None
+                )
+                if discovered_agent:
+                    # This is a discovered agent not managed by CIRISManager
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Agent '{agent_id}' was not created by CIRISManager. "
+                            "Please stop it manually using docker-compose."
+                        ),
+                    )
+                else:
+                    raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
             else:
-                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+                # Re-raise other exceptions (e.g., multiple instances without disambiguation)
+                raise
 
         # Perform deletion for Manager-created agents
         success = await manager.delete_agent(agent_id)
@@ -673,16 +767,21 @@ def create_routes(manager: Any) -> APIRouter:
             )
 
     @router.post("/agents/{agent_id}/start")
-    async def start_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+    async def start_agent(
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        user: dict = auth_dependency,
+    ) -> Dict[str, str]:
         """
         Start a stopped agent container using Docker.
         If the image has changed, recreate the container with the new image.
+
+        Supports composite keys for multi-instance deployments.
         """
         try:
             # Check if agent exists in registry
-            agent = manager.agent_registry.get_agent(agent_id)
-            if not agent:
-                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
             # Get container name
             container_name = f"ciris-agent-{agent_id}"
@@ -814,15 +913,20 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=500, detail=f"Failed to start agent: {str(e)}")
 
     @router.post("/agents/{agent_id}/stop")
-    async def stop_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+    async def stop_agent(
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        user: dict = auth_dependency,
+    ) -> Dict[str, str]:
         """
         Force stop an agent container immediately using Docker.
+
+        Supports composite keys for multi-instance deployments.
         """
         try:
             # Check if agent exists in registry
-            agent = manager.agent_registry.get_agent(agent_id)
-            if not agent:
-                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
             # Get container name
             container_name = f"ciris-agent-{agent_id}"
@@ -868,17 +972,21 @@ def create_routes(manager: Any) -> APIRouter:
 
     @router.post("/agents/{agent_id}/shutdown")
     async def request_shutdown_agent(
-        agent_id: str, request: Dict[str, str], user: dict = auth_dependency
+        agent_id: str,
+        request: Dict[str, str],
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        user: dict = auth_dependency,
     ) -> Dict[str, str]:
         """
         Request a graceful shutdown of an agent with a reason.
         This sends a shutdown request to the agent's API.
+
+        Supports composite keys for multi-instance deployments.
         """
         try:
             # Check if agent exists and get its port
-            agent = manager.agent_registry.get_agent(agent_id)
-            if not agent:
-                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
             reason = request.get("reason", "Operator requested shutdown")
 
@@ -939,17 +1047,32 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=500, detail=f"Failed to request shutdown: {str(e)}")
 
     @router.post("/agents/{agent_id}/restart")
-    async def restart_agent(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+    async def restart_agent(
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id_param: Optional[str] = None,
+        user: dict = auth_dependency,
+    ) -> Dict[str, str]:
         """
         Restart an agent container using Docker.
 
         This will perform a docker restart on the container,
         which is faster than stop/start and preserves the container state.
+
+        Supports composite keys for multi-instance deployments.
         """
         try:
             # Check if agent exists in registry
-            agent = manager.agent_registry.get_agent(agent_id)
-            server_id = "main"  # Default to main server
+            try:
+                agent = resolve_agent(
+                    agent_id, occurrence_id=occurrence_id, server_id=server_id_param
+                )
+                server_id = agent.server_id
+            except HTTPException as e:
+                if e.status_code != 404:
+                    raise
+                agent = None
+                server_id = "main"  # Default to main server
 
             if not agent:
                 # Check if it's a discovered agent
@@ -1026,7 +1149,11 @@ def create_routes(manager: Any) -> APIRouter:
 
     @router.post("/agents/{agent_id}/maintenance")
     async def set_agent_maintenance(
-        agent_id: str, request: Dict[str, bool], user: dict = auth_dependency
+        agent_id: str,
+        request: Dict[str, bool],
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        user: dict = auth_dependency,
     ) -> Dict[str, Any]:
         """
         Set maintenance mode for an agent to prevent automatic restart.
@@ -1035,6 +1162,8 @@ def create_routes(manager: Any) -> APIRouter:
         automatically restart the agent if it crashes or stops.
 
         Body should contain: {"do_not_autostart": true/false}
+
+        Supports composite keys for multi-instance deployments.
         """
         try:
             do_not_autostart = request.get("do_not_autostart", False)
@@ -1045,8 +1174,13 @@ def create_routes(manager: Any) -> APIRouter:
                     status_code=400, detail="do_not_autostart must be a boolean value"
                 )
 
-            # Update the agent registry
-            success = manager.agent_registry.set_do_not_autostart(agent_id, do_not_autostart)
+            # Resolve agent to ensure it exists
+            _ = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+
+            # Update the agent registry using composite key
+            success = manager.agent_registry.set_do_not_autostart(
+                agent_id, do_not_autostart, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             if not success:
                 raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
@@ -1068,12 +1202,19 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=500, detail=f"Failed to set maintenance mode: {str(e)}")
 
     @router.get("/agents/{agent_id}/maintenance")
-    async def get_agent_maintenance(agent_id: str, user: dict = auth_dependency) -> Dict[str, Any]:
-        """Get maintenance mode status for an agent."""
+    async def get_agent_maintenance(
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        user: dict = auth_dependency,
+    ) -> Dict[str, Any]:
+        """
+        Get maintenance mode status for an agent.
+
+        Supports composite keys for multi-instance deployments.
+        """
         try:
-            agent = manager.agent_registry.get_agent(agent_id)
-            if not agent:
-                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
             do_not_autostart = hasattr(agent, "do_not_autostart") and agent.do_not_autostart
 
@@ -1294,7 +1435,13 @@ def create_routes(manager: Any) -> APIRouter:
 
             if should_restart:
                 # Get agent from registry to check server location
-                agent = manager.agent_registry.get_agent(agent_id)
+                # Note: For this endpoint, agent_id is path param and we need to use the same lookup
+                # The config file is already validated to exist, so we can safely get the agent
+                try:
+                    agent = manager.agent_registry.get_agent(agent_id)
+                except Exception:
+                    agent = None
+
                 if not agent:
                     raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
 
@@ -1348,16 +1495,21 @@ def create_routes(manager: Any) -> APIRouter:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.get("/agents/{agent_id}/oauth/verify")
-    async def verify_agent_oauth(agent_id: str, user: dict = auth_dependency) -> Dict[str, Any]:
+    async def verify_agent_oauth(
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        user: dict = auth_dependency,
+    ) -> Dict[str, Any]:
         """
         Verify OAuth configuration for an agent.
 
         Checks if OAuth is properly configured and working.
+
+        Supports composite keys for multi-instance deployments.
         """
         # Get agent from registry
-        agent = manager.agent_registry.get_agent(agent_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
         # For now, we check if the agent has OAuth status
         # In a full implementation, this would actually test the OAuth flow
@@ -1377,16 +1529,21 @@ def create_routes(manager: Any) -> APIRouter:
         }
 
     @router.post("/agents/{agent_id}/oauth/complete")
-    async def mark_oauth_complete(agent_id: str, user: dict = auth_dependency) -> Dict[str, str]:
+    async def mark_oauth_complete(
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        user: dict = auth_dependency,
+    ) -> Dict[str, str]:
         """
         Mark OAuth as configured for an agent.
 
         Called after admin has registered callback URLs in provider dashboards.
+
+        Supports composite keys for multi-instance deployments.
         """
         # Get agent from registry
-        agent = manager.agent_registry.get_agent(agent_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
         # Update OAuth status
         agent.oauth_status = "configured"

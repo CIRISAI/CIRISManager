@@ -179,9 +179,10 @@ class TestAgentRegistry:
         assert agent.compose_file == "/etc/agents/scout/docker-compose.yml"
         assert agent.server_id == "main"  # Default server
 
-        # Verify in registry
-        assert "agent-scout" in registry.agents
-        assert registry.agents["agent-scout"] == agent
+        # Verify in registry (now uses composite key)
+        composite_key = "agent-scout-main"  # agent_id-server_id format
+        assert composite_key in registry.agents
+        assert registry.agents[composite_key] == agent
 
         # Verify metadata saved
         assert registry.metadata_path.exists()
@@ -200,9 +201,10 @@ class TestAgentRegistry:
         assert agent.agent_id == "agent-scout"
         assert agent.server_id == "scout"
 
-        # Verify in registry
-        assert "agent-scout" in registry.agents
-        assert registry.agents["agent-scout"].server_id == "scout"
+        # Verify in registry (now uses composite key)
+        composite_key = "agent-scout-scout"  # agent_id-server_id format
+        assert composite_key in registry.agents
+        assert registry.agents[composite_key].server_id == "scout"
 
     def test_unregister_agent(self, registry):
         """Test agent unregistration."""
@@ -315,9 +317,9 @@ class TestAgentRegistry:
             compose_file="/etc/agents/sage/docker-compose.yml",
         )
 
-        # Get ports
+        # Get ports (now uses composite keys)
         ports = registry.get_allocated_ports()
-        assert ports == {"agent-scout": 8081, "agent-sage": 8082}
+        assert ports == {"agent-scout-main": 8081, "agent-sage-main": 8082}
 
     def test_persistence(self, temp_metadata_path):
         """Test metadata persistence across instances."""
@@ -360,9 +362,12 @@ class TestAgentRegistry:
         assert data["version"] == "1.0"
         assert "updated_at" in data
         assert "agents" in data
-        assert "agent-scout" in data["agents"]
 
-        agent_data = data["agents"]["agent-scout"]
+        # Now uses composite key format
+        composite_key = "agent-scout-main"
+        assert composite_key in data["agents"]
+
+        agent_data = data["agents"][composite_key]
         assert agent_data["name"] == "Scout"
         assert agent_data["port"] == 8081
         assert agent_data["template"] == "scout"
@@ -409,3 +414,370 @@ class TestAgentRegistry:
         with open(registry.metadata_path, "r") as f:
             data = json.load(f)
             assert len(data["agents"]) == 5
+
+    def test_occurrence_id_initialization(self):
+        """Test RegisteredAgent initialization with occurrence_id."""
+        agent = RegisteredAgent(
+            agent_id="scout-abc123",
+            name="Scout",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        assert agent.occurrence_id == "scout_lb_1"
+        assert agent.agent_id == "scout-abc123"
+        assert agent.server_id == "main"
+
+    def test_occurrence_id_in_to_dict(self):
+        """Test occurrence_id is included in dict."""
+        agent = RegisteredAgent(
+            agent_id="scout-abc123",
+            name="Scout",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+        )
+
+        data = agent.to_dict()
+        assert data["occurrence_id"] == "scout_lb_1"
+
+    def test_occurrence_id_from_dict(self):
+        """Test creating AgentInfo from dict with occurrence_id."""
+        data = {
+            "name": "Scout",
+            "port": 8080,
+            "template": "scout",
+            "compose_file": "/path/to/compose.yml",
+            "occurrence_id": "scout_lb_1",
+        }
+
+        agent = RegisteredAgent.from_dict("scout-abc123", data)
+        assert agent.occurrence_id == "scout_lb_1"
+
+
+class TestAgentRegistryCompositeKeys:
+    """Test cases for AgentRegistry composite key functionality."""
+
+    @pytest.fixture
+    def temp_metadata_path(self):
+        """Create temporary metadata file path."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            temp_path = Path(f.name)
+        yield temp_path
+        # Cleanup
+        if temp_path.exists():
+            temp_path.unlink()
+
+    @pytest.fixture
+    def registry(self, temp_metadata_path):
+        """Create AgentRegistry instance."""
+        return AgentRegistry(temp_metadata_path)
+
+    def test_composite_key_make_key(self, registry):
+        """Test _make_key helper for composite keys."""
+        # With occurrence_id
+        key = registry._make_key("scout-abc123", "scout_lb_1", "main")
+        assert key == "scout-abc123-scout_lb_1-main"
+
+        # Without occurrence_id (backward compatibility)
+        key = registry._make_key("scout-abc123", None, "main")
+        assert key == "scout-abc123-main"
+
+    def test_composite_key_parse_key(self, registry):
+        """Test _parse_key helper for composite keys.
+
+        Note: _parse_key has ambiguity with agent_ids containing dashes.
+        It works correctly in _load_metadata() where metadata provides context.
+        """
+        # With occurrence_id - works when occurrence_id doesn't look like server_id
+        agent_id, occurrence_id, server_id = registry._parse_key("scout-scout_lb_1-main")
+        assert agent_id == "scout"
+        assert occurrence_id == "scout_lb_1"
+        assert server_id == "main"
+
+        # Simple case: no dashes in agent_id
+        agent_id, occurrence_id, server_id = registry._parse_key("datum-main")
+        assert agent_id == "datum"
+        assert occurrence_id is None
+        assert server_id == "main"
+
+        # Old format (single part, no server_id)
+        agent_id, occurrence_id, server_id = registry._parse_key("datum")
+        assert agent_id == "datum"
+        assert occurrence_id is None
+        assert server_id == "main"
+
+    def test_register_agent_with_occurrence_id(self, registry):
+        """Test registering agent with occurrence_id."""
+        agent = registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 1",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        assert agent.occurrence_id == "scout_lb_1"
+        assert agent.agent_id == "scout-abc123"
+
+        # Verify stored with composite key
+        composite_key = "scout-abc123-scout_lb_1-main"
+        assert composite_key in registry.agents
+        assert registry.agents[composite_key] == agent
+
+    def test_register_multiple_instances_same_agent_id(self, registry):
+        """Test registering multiple instances with same agent_id but different occurrence_ids."""
+        # Register first instance
+        agent1 = registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 1",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose1.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        # Register second instance with same agent_id but different occurrence_id
+        agent2 = registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 2",
+            port=8081,
+            template="scout",
+            compose_file="/path/to/compose2.yml",
+            occurrence_id="scout_lb_2",
+            server_id="main",
+        )
+
+        # Register third instance on different server
+        agent3 = registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 3",
+            port=8082,
+            template="scout",
+            compose_file="/path/to/compose3.yml",
+            occurrence_id="scout_lb_3",
+            server_id="scout",
+        )
+
+        # Verify all registered
+        assert len(registry.agents) == 3
+        assert agent1.occurrence_id == "scout_lb_1"
+        assert agent2.occurrence_id == "scout_lb_2"
+        assert agent3.occurrence_id == "scout_lb_3"
+
+    def test_get_agent_with_composite_key(self, registry):
+        """Test getting agent by composite key."""
+        # Register instances
+        registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 1",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 2",
+            port=8081,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_2",
+            server_id="main",
+        )
+
+        # Get by full composite key
+        agent1 = registry.get_agent("scout-abc123", occurrence_id="scout_lb_1", server_id="main")
+        assert agent1 is not None
+        assert agent1.occurrence_id == "scout_lb_1"
+        assert agent1.port == 8080
+
+        # Get by different composite key
+        agent2 = registry.get_agent("scout-abc123", occurrence_id="scout_lb_2", server_id="main")
+        assert agent2 is not None
+        assert agent2.occurrence_id == "scout_lb_2"
+        assert agent2.port == 8081
+
+        # Get non-existent composite key
+        agent3 = registry.get_agent("scout-abc123", occurrence_id="scout_lb_99", server_id="main")
+        assert agent3 is None
+
+    def test_get_agents_by_agent_id(self, registry):
+        """Test getting all instances with the same agent_id."""
+        # Register multiple instances
+        agent1 = registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 1",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        agent2 = registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 2",
+            port=8081,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_2",
+            server_id="main",
+        )
+
+        # Register different agent
+        agent3 = registry.register_agent(
+            agent_id="sage-xyz789",
+            name="Sage",
+            port=8082,
+            template="sage",
+            compose_file="/path/to/compose.yml",
+        )
+
+        # Get all scout instances
+        scout_instances = registry.get_agents_by_agent_id("scout-abc123")
+        assert len(scout_instances) == 2
+        assert agent1 in scout_instances
+        assert agent2 in scout_instances
+        assert agent3 not in scout_instances
+
+        # Get sage instances (only one)
+        sage_instances = registry.get_agents_by_agent_id("sage-xyz789")
+        assert len(sage_instances) == 1
+        assert agent3 in sage_instances
+
+    def test_unregister_agent_with_composite_key(self, registry):
+        """Test unregistering agent with composite key."""
+        # Register instances
+        registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 1",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 2",
+            port=8081,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_2",
+            server_id="main",
+        )
+
+        # Unregister first instance
+        removed = registry.unregister_agent(
+            "scout-abc123", occurrence_id="scout_lb_1", server_id="main"
+        )
+        assert removed is not None
+        assert removed.occurrence_id == "scout_lb_1"
+
+        # Verify only second instance remains
+        remaining = registry.get_agents_by_agent_id("scout-abc123")
+        assert len(remaining) == 1
+        assert remaining[0].occurrence_id == "scout_lb_2"
+
+    def test_update_agent_state_with_composite_key(self, registry):
+        """Test updating agent state with composite key."""
+        # Register instance
+        registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 1",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        # Update state
+        success = registry.update_agent_state(
+            "scout-abc123",
+            version="1.2.0",
+            cognitive_state="WORK",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        assert success is True
+
+        # Verify state updated (version is in current_version, not metadata)
+        agent = registry.get_agent("scout-abc123", occurrence_id="scout_lb_1", server_id="main")
+        assert agent.current_version == "1.2.0"
+        # Cognitive state is not stored in metadata, just tracked via version_transitions
+        assert len(agent.version_transitions) > 0
+
+    def test_set_deployment_with_composite_key(self, registry):
+        """Test setting deployment with composite key."""
+        # Register instance
+        registry.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 1",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        # Set deployment
+        success = registry.set_deployment(
+            "scout-abc123",
+            "CIRIS_DISCORD_PILOT",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        assert success is True
+
+        # Verify deployment set
+        agent = registry.get_agent("scout-abc123", occurrence_id="scout_lb_1", server_id="main")
+        assert agent.metadata.get("deployment") == "CIRIS_DISCORD_PILOT"
+
+    def test_composite_key_persistence(self, temp_metadata_path):
+        """Test composite keys persist across registry instances."""
+        # Create and register with occurrence_id
+        registry1 = AgentRegistry(temp_metadata_path)
+        agent1 = registry1.register_agent(
+            agent_id="scout-abc123",
+            name="Scout LB 1",
+            port=8080,
+            template="scout",
+            compose_file="/path/to/compose.yml",
+            occurrence_id="scout_lb_1",
+            server_id="main",
+        )
+
+        # Verify it was registered correctly
+        assert agent1 is not None
+        assert agent1.occurrence_id == "scout_lb_1"
+
+        # Verify metadata file exists and has content
+        assert temp_metadata_path.exists()
+        with open(temp_metadata_path, "r") as f:
+            content = f.read()
+            assert len(content) > 0, "Metadata file is empty"
+
+        # Create new instance
+        registry2 = AgentRegistry(temp_metadata_path)
+
+        # Should have loaded composite key data
+        agent = registry2.get_agent("scout-abc123", occurrence_id="scout_lb_1", server_id="main")
+        assert (
+            agent is not None
+        ), f"Agent not found. Registry has {len(registry2.agents)} agents: {list(registry2.agents.keys())}"
+        assert agent.occurrence_id == "scout_lb_1"
+        assert agent.port == 8080
