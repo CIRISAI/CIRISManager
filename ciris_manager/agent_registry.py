@@ -190,22 +190,28 @@ class AgentRegistry:
                 # For composite keys with occurrence_id, agent_id is stored in data to avoid ambiguity
                 # For backward compatibility, parse the key if agent_id not in data
                 if "agent_id" in agent_data:
+                    # Use explicit agent_id and server_id from data
                     agent_id = agent_data["agent_id"]
-                    _, occurrence_id_from_key, server_id = self._parse_key(stored_key)
+                    # Only parse occurrence_id from key (data values take precedence)
+                    _, occurrence_id_from_key, _ = self._parse_key(stored_key)
+
+                    # Create agent with data from file (includes correct server_id)
+                    agent = RegisteredAgent.from_dict(agent_id, agent_data)
+                    server_id = agent.server_id  # Use explicit server_id from data
                 else:
                     # Parse the stored key (old format or no occurrence_id)
                     agent_id, occurrence_id_from_key, server_id = self._parse_key(stored_key)
 
-                # Create RegisteredAgent with data from file
-                agent = RegisteredAgent.from_dict(agent_id, agent_data)
+                    # Create RegisteredAgent with data from file
+                    agent = RegisteredAgent.from_dict(agent_id, agent_data)
 
-                # Ensure server_id matches the key (key takes precedence)
-                if agent.server_id != server_id:
-                    logger.warning(
-                        f"Agent {agent_id} server_id mismatch: "
-                        f"key={server_id}, data={agent.server_id}. Using key value."
-                    )
-                    agent.server_id = server_id
+                    # For backward compatibility, key-parsed server_id takes precedence
+                    if agent.server_id != server_id:
+                        logger.warning(
+                            f"Agent {agent_id} server_id mismatch: "
+                            f"key={server_id}, data={agent.server_id}. Using key value."
+                        )
+                        agent.server_id = server_id
 
                 # Ensure occurrence_id is set correctly
                 occurrence_id = agent.occurrence_id or occurrence_id_from_key
