@@ -74,11 +74,16 @@ class RegisteredAgent:
             "do_not_autostart": self.do_not_autostart,
             "server_id": self.server_id,
         }
-        # Include occurrence_id and agent_id if occurrence_id is set
-        # (agent_id is needed to avoid ambiguity when parsing composite keys)
+        # Include occurrence_id if set
         if self.occurrence_id:
             data["occurrence_id"] = self.occurrence_id
+
+        # Include agent_id explicitly if:
+        # 1. occurrence_id is set (needed to avoid parsing ambiguity), OR
+        # 2. agent_id contains dashes (needed to avoid parsing ambiguity with composite keys)
+        if self.occurrence_id or "-" in self.agent_id:
             data["agent_id"] = self.agent_id
+
         return data
 
     @classmethod
