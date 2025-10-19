@@ -2907,7 +2907,9 @@ class DeploymentOrchestrator:
                         logger.info(
                             f"Container {agent.container_name} stopped, recreating with new image..."
                         )
-                        recreated = await self._recreate_agent_container(agent.agent_id)
+                        recreated = await self._recreate_agent_container(
+                            agent.agent_id, agent.server_id, notification.agent_image
+                        )
 
                         if recreated:
                             # Remove from pending and in-progress
@@ -3038,7 +3040,9 @@ class DeploymentOrchestrator:
 
                 # Recreate container with new image
                 logger.info(f"Recreating stopped agent {agent.agent_id} with new image...")
-                recreated = await self._recreate_agent_container(agent.agent_id)
+                recreated = await self._recreate_agent_container(
+                    agent.agent_id, agent.server_id, notification.agent_image
+                )
 
                 if recreated:
                     # Remove from pending and in-progress
@@ -3557,7 +3561,13 @@ class DeploymentOrchestrator:
                 if status_result.returncode != 0:
                     # Container doesn't exist - try to recreate it
                     logger.info(f"Container {container_name} not found, attempting recreation")
-                    recreated = await self._recreate_agent_container(agent_id)
+                    # Get server_id from registry
+                    server_id = "main"  # default
+                    if hasattr(self, "agent_registry") and self.agent_registry:
+                        agent_info = self.agent_registry.get_agent(agent_id)
+                        if agent_info and hasattr(agent_info, "server_id"):
+                            server_id = agent_info.server_id
+                    recreated = await self._recreate_agent_container(agent_id, server_id)
                     if recreated:
                         deployment.agents_updated += 1
                         deployment.agents_pending_restart.remove(agent_id)
@@ -3575,7 +3585,13 @@ class DeploymentOrchestrator:
                     if status in ["exited", "dead", "removing", "removed"]:
                         # Container is stopped, recreate it
                         logger.info(f"Container {container_name} is stopped, recreating")
-                        recreated = await self._recreate_agent_container(agent_id)
+                        # Get server_id from registry
+                        server_id = "main"  # default
+                        if hasattr(self, "agent_registry") and self.agent_registry:
+                            agent_info = self.agent_registry.get_agent(agent_id)
+                            if agent_info and hasattr(agent_info, "server_id"):
+                                server_id = agent_info.server_id
+                        recreated = await self._recreate_agent_container(agent_id, server_id)
                         if recreated:
                             deployment.agents_updated += 1
                             deployment.agents_pending_restart.remove(agent_id)

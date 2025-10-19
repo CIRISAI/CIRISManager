@@ -663,7 +663,9 @@ class TestDeploymentOrchestrator:
                 orchestrator._wait_for_container_stop.assert_called_once_with(
                     "ciris-test-agent", timeout=60
                 )
-                orchestrator._recreate_agent_container.assert_called_once_with("test-agent")
+                orchestrator._recreate_agent_container.assert_called_once_with(
+                    "test-agent", "main", "ghcr.io/cirisai/ciris-agent:v2.0"
+                )
 
                 assert response.agent_id == "test-agent"
                 assert response.decision == "accept"
