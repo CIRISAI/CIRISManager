@@ -257,7 +257,9 @@ class TestPasswordEncryptionStorage:
         with open(metadata_path) as f:
             data = json.load(f)
 
-        stored_password = data["agents"]["test-agent"]["admin_password"]
+        # Use composite key to access agent data (agent_id-occurrence_id-server_id)
+        composite_key = registry._make_key("test-agent", None, "main")
+        stored_password = data["agents"][composite_key]["admin_password"]
         assert stored_password == encrypted_password
         assert stored_password != plain_password
 
@@ -294,12 +296,13 @@ class TestBackwardCompatibility:
         """Test that registry can load old agents without admin_password field."""
         metadata_path = tmp_path / "metadata.json"
 
-        # Create metadata file with agent that has no admin_password
+        # Create metadata file with agent that has no admin_password (using composite key format)
         metadata = {
             "version": "1.0",
             "updated_at": "2024-01-01T00:00:00Z",
             "agents": {
-                "old-agent": {
+                "old-agent-None-main": {  # Use composite key format
+                    "agent_id": "old-agent",
                     "name": "Old Agent",
                     "port": 8080,
                     "template": "test",
@@ -307,6 +310,7 @@ class TestBackwardCompatibility:
                     "created_at": "2024-01-01T00:00:00Z",
                     "metadata": {},
                     "service_token": "encrypted-token",
+                    "server_id": "main",
                     # No admin_password field
                 }
             },
@@ -317,8 +321,11 @@ class TestBackwardCompatibility:
 
         # Should load without error
         registry = AgentRegistry(metadata_path)
-        agent = registry.get_agent("old-agent")
+        # Use get_agents_by_agent_id to handle composite keys
+        agents = registry.get_agents_by_agent_id("old-agent")
 
+        assert len(agents) == 1
+        agent = agents[0]
         assert agent is not None
         assert agent.admin_password is None  # Should gracefully handle missing field
 

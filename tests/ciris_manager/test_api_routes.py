@@ -166,7 +166,8 @@ class TestAPIRoutes:
             compose_file="/path/to/scout/docker-compose.yml",
         )
 
-        mock_manager.agent_registry.get_agent.return_value = agent
+        # Mock get_agents_by_agent_id for resolve_agent logic
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = [agent]
 
         response = client.get("/manager/v1/agents/agent-scout")
         assert response.status_code == 200
@@ -177,7 +178,8 @@ class TestAPIRoutes:
 
     def test_get_agent_not_found(self, client, mock_manager):
         """Test getting agent that doesn't exist."""
-        mock_manager.agent_registry.get_agent.return_value = None
+        # Mock get_agents_by_agent_id returning empty list for resolve_agent logic
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = []
 
         response = client.get("/manager/v1/agents/nonexistent")
         assert response.status_code == 404
@@ -219,6 +221,9 @@ class TestAPIRoutes:
             billing_enabled=False,
             billing_api_key=None,
             server_id=None,
+            database_url=None,
+            database_ssl_cert_path=None,
+            agent_occurrence_id=None,
         )
 
     def test_create_agent_with_billing_enabled(self, client, mock_manager):
@@ -257,6 +262,9 @@ class TestAPIRoutes:
             billing_enabled=True,
             billing_api_key="test-billing-key-abc123",
             server_id=None,
+            database_url=None,
+            database_ssl_cert_path=None,
+            agent_occurrence_id=None,
         )
 
     def test_create_agent_with_billing_disabled(self, client, mock_manager):
@@ -292,6 +300,9 @@ class TestAPIRoutes:
             billing_enabled=False,
             billing_api_key=None,
             server_id=None,
+            database_url=None,
+            database_ssl_cert_path=None,
+            agent_occurrence_id=None,
         )
 
     def test_create_agent_billing_defaults_to_false(self, client, mock_manager):
@@ -348,6 +359,9 @@ class TestAPIRoutes:
             billing_enabled=False,
             billing_api_key=None,
             server_id=None,
+            database_url=None,
+            database_ssl_cert_path=None,
+            agent_occurrence_id=None,
         )
 
     def test_create_agent_invalid_template(self, client, mock_manager):
@@ -392,7 +406,8 @@ class TestAPIRoutes:
             compose_file="/path/to/scout/docker-compose.yml",
         )
 
-        mock_manager.agent_registry.get_agent.return_value = agent
+        # Mock get_agents_by_agent_id for resolve_agent logic
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = [agent]
 
         response = client.delete("/manager/v1/agents/agent-scout")
         assert response.status_code == 200
@@ -413,7 +428,8 @@ class TestAPIRoutes:
             compose_file="/path/to/scout/docker-compose.yml",
         )
 
-        mock_manager.agent_registry.get_agent.return_value = agent
+        # Mock get_agents_by_agent_id for resolve_agent logic
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = [agent]
         mock_manager.delete_agent.return_value = False  # Deletion failed
 
         response = client.delete("/manager/v1/agents/agent-scout")
@@ -423,7 +439,8 @@ class TestAPIRoutes:
 
     def test_delete_agent_not_found(self, client, mock_manager):
         """Test deleting non-existent agent."""
-        mock_manager.agent_registry.get_agent.return_value = None
+        # Mock get_agents_by_agent_id returning empty list for resolve_agent logic
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = []
 
         response = client.delete("/manager/v1/agents/nonexistent")
         assert response.status_code == 404
@@ -433,8 +450,8 @@ class TestAPIRoutes:
     @patch("ciris_manager.docker_discovery.DockerAgentDiscovery")
     def test_delete_discovered_agent_not_managed(self, mock_discovery_class, client, mock_manager):
         """Test deleting a discovered agent that wasn't created by CIRISManager."""
-        # Agent not in registry
-        mock_manager.agent_registry.get_agent.return_value = None
+        # Agent not in registry - mock get_agents_by_agent_id returning empty list
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = []
 
         # But agent exists in Docker discovery
 

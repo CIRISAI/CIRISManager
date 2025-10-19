@@ -119,7 +119,10 @@ class TestMultiServerAgentCreation:
             assert result["status"] == "starting"
 
             # Verify agent was registered with correct server_id
-            agent_info = multi_server_manager.agent_registry.get_agent(result["agent_id"])
+            # Use get_agents_by_agent_id to handle composite keys
+            agents = multi_server_manager.agent_registry.get_agents_by_agent_id(result["agent_id"])
+            assert len(agents) == 1
+            agent_info = agents[0]
             assert agent_info.server_id == "main"
 
     @pytest.mark.asyncio
@@ -153,7 +156,10 @@ class TestMultiServerAgentCreation:
             assert result["agent_id"].startswith("scout-agent-")
 
             # Verify agent was registered with scout server_id
-            agent_info = multi_server_manager.agent_registry.get_agent(result["agent_id"])
+            # Use get_agents_by_agent_id to handle composite keys
+            agents = multi_server_manager.agent_registry.get_agents_by_agent_id(result["agent_id"])
+            assert len(agents) == 1
+            agent_info = agents[0]
             assert agent_info.server_id == "scout"
 
             # Verify Docker API was called multiple times:

@@ -16,13 +16,29 @@ class TestEnhancedSettings:
     @pytest.fixture
     def mock_manager(self):
         """Create a mock manager instance."""
+        from ciris_manager.agent_registry import RegisteredAgent
+
         manager = Mock()
         manager.config = Mock()
         manager.config.manager = Mock()
         manager.config.manager.templates_directory = "/tmp/test_templates"
         manager.template_verifier = Mock()
         manager.template_verifier.list_pre_approved_templates = Mock(return_value={})
+
+        # Create mock agent for registry lookups
+        mock_agent = RegisteredAgent(
+            agent_id="test-agent",
+            name="Test Agent",
+            port=8001,
+            template="test",
+            compose_file="/path/to/compose.yml",
+            server_id="main",
+        )
+
         manager.agent_registry = Mock()
+        manager.agent_registry.get_agent = Mock(return_value=mock_agent)
+        manager.agent_registry.get_agents_by_agent_id = Mock(return_value=[mock_agent])
+
         manager.create_agent = AsyncMock(
             return_value={
                 "agent_id": "test-agent",
