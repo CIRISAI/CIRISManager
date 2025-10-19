@@ -146,6 +146,10 @@ class CreateAgentRequest(BaseModel):
         None,
         description="Path to SSL certificate for database connection (e.g., /root/ca-certificate.crt)",
     )
+    agent_occurrence_id: Optional[str] = Field(
+        None,
+        description="Unique occurrence ID for this agent instance (enables multiple agents on same database)",
+    )
 
 
 class UpdateNotification(BaseModel):

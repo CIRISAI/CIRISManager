@@ -216,6 +216,7 @@ class CIRISManager:
         server_id: Optional[str] = None,
         database_url: Optional[str] = None,
         database_ssl_cert_path: Optional[str] = None,
+        agent_occurrence_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a new agent.
@@ -232,6 +233,7 @@ class CIRISManager:
             server_id: Target server ID (defaults to 'main')
             database_url: PostgreSQL database URL with SSL mode
             database_ssl_cert_path: Path to SSL certificate file for database
+            agent_occurrence_id: Unique occurrence ID for database isolation (enables multiple agents on same DB)
 
         Returns:
             Agent creation result
@@ -403,6 +405,7 @@ class CIRISManager:
             billing_api_key=billing_api_key,
             database_url=database_url,
             database_ssl_cert_path=database_ssl_cert_path,
+            agent_occurrence_id=agent_occurrence_id,
         )
 
         # Write compose file

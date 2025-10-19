@@ -157,6 +157,7 @@ class CIRISManagerClient:
         billing_api_key: Optional[str] = None,
         database_url: Optional[str] = None,
         database_ssl_cert_path: Optional[str] = None,
+        agent_occurrence_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a new agent.
@@ -173,6 +174,7 @@ class CIRISManagerClient:
             billing_api_key: Billing API key (required if billing_enabled=True)
             database_url: PostgreSQL database URL
             database_ssl_cert_path: Path to SSL certificate for database
+            agent_occurrence_id: Unique occurrence ID for database isolation (enables multiple agents on same DB)
 
         Returns:
             Created agent details
@@ -196,6 +198,8 @@ class CIRISManagerClient:
             payload["database_url"] = database_url
         if database_ssl_cert_path:
             payload["database_ssl_cert_path"] = database_ssl_cert_path
+        if agent_occurrence_id:
+            payload["agent_occurrence_id"] = agent_occurrence_id
 
         response = self._request("POST", "/manager/v1/agents", json=payload)
         return response.json()

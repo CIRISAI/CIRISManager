@@ -595,6 +595,7 @@ def create_routes(manager: Any) -> APIRouter:
                 server_id=agent_request.server_id,
                 database_url=agent_request.database_url,
                 database_ssl_cert_path=agent_request.database_ssl_cert_path,
+                agent_occurrence_id=agent_request.agent_occurrence_id,
             )
 
             logger.info(f"Agent {result['agent_id']} created by {user['email']}")

@@ -42,6 +42,7 @@ class ComposeGenerator:
         billing_api_key: Optional[str] = None,
         database_url: Optional[str] = None,
         database_ssl_cert_path: Optional[str] = None,
+        agent_occurrence_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate docker-compose configuration for an agent.
@@ -60,6 +61,7 @@ class ComposeGenerator:
             billing_api_key: Billing API key (required if billing_enabled=True)
             database_url: PostgreSQL database URL
             database_ssl_cert_path: Path to SSL certificate for database connection
+            agent_occurrence_id: Unique occurrence ID for database isolation
 
         Returns:
             Docker compose configuration dict
@@ -90,6 +92,8 @@ class ComposeGenerator:
             base_env["CIRIS_DB_URL"] = database_url
         if database_ssl_cert_path:
             base_env["PGSSLROOTCERT"] = database_ssl_cert_path
+        if agent_occurrence_id:
+            base_env["AGENT_OCCURRENCE_ID"] = agent_occurrence_id
 
         # Merge with additional environment
         if environment:
