@@ -411,7 +411,20 @@ class AgentRegistry:
                 return agent
             # Try with default server
             composite_key = self._make_key(agent_id, None, "main")
-            return self.agents.get(composite_key)
+            agent = self.agents.get(composite_key)
+            if agent:
+                return agent
+            # Last resort: search for any agent with matching agent_id across all servers
+            # This handles cases where caller doesn't know the server_id
+            matches = self.get_agents_by_agent_id(agent_id)
+            if matches:
+                if len(matches) > 1:
+                    logger.warning(
+                        f"Multiple agents found with agent_id={agent_id}. "
+                        f"Returning first match. Use server_id parameter for precise lookup."
+                    )
+                return matches[0]
+            return None
 
     def get_agents_by_agent_id(self, agent_id: str) -> List[RegisteredAgent]:
         """Get all agent instances with the same agent_id across all servers/occurrences.
