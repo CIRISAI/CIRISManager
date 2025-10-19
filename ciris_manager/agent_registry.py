@@ -191,21 +191,23 @@ class AgentRegistry:
                 # For backward compatibility, parse the key if agent_id not in data
                 if "agent_id" in agent_data:
                     # Use explicit agent_id and server_id from data
+                    # When agent_id is explicitly stored, trust the data completely
                     agent_id = agent_data["agent_id"]
-                    # Only parse occurrence_id from key (data values take precedence)
-                    _, occurrence_id_from_key, _ = self._parse_key(stored_key)
 
-                    # Create agent with data from file (includes correct server_id)
+                    # Create agent with data from file (includes correct server_id and occurrence_id)
                     agent = RegisteredAgent.from_dict(agent_id, agent_data)
                     server_id = agent.server_id  # Use explicit server_id from data
+                    occurrence_id = (
+                        agent.occurrence_id
+                    )  # Use explicit occurrence_id from data (may be None)
                 else:
-                    # Parse the stored key (old format or no occurrence_id)
+                    # Parse the stored key (old format or no explicit agent_id in data)
                     agent_id, occurrence_id_from_key, server_id = self._parse_key(stored_key)
 
                     # Create RegisteredAgent with data from file
                     agent = RegisteredAgent.from_dict(agent_id, agent_data)
 
-                    # For backward compatibility, key-parsed server_id takes precedence
+                    # For backward compatibility, key-parsed values take precedence
                     if agent.server_id != server_id:
                         logger.warning(
                             f"Agent {agent_id} server_id mismatch: "
@@ -213,10 +215,10 @@ class AgentRegistry:
                         )
                         agent.server_id = server_id
 
-                # Ensure occurrence_id is set correctly
-                occurrence_id = agent.occurrence_id or occurrence_id_from_key
-                if occurrence_id:
-                    agent.occurrence_id = occurrence_id
+                    # Set occurrence_id from key if not in data
+                    occurrence_id = agent.occurrence_id or occurrence_id_from_key
+                    if occurrence_id:
+                        agent.occurrence_id = occurrence_id
 
                 # Store using composite key
                 composite_key = self._make_key(agent_id, occurrence_id, server_id)
