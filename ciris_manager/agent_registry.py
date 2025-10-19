@@ -161,18 +161,23 @@ class AgentRegistry:
             Tuple of (agent_id, occurrence_id, server_id)
         """
         parts = key.split("-")
+        known_servers = {"main", "scout", "scout2"}  # Known server IDs
 
-        if len(parts) >= 3:
-            # Format: agent_id-occurrence_id-server_id
-            agent_id = parts[0]
-            server_id = parts[-1]  # Last part is server_id
-            occurrence_id = "-".join(parts[1:-1])  # Middle part(s) are occurrence_id
-            return (agent_id, occurrence_id, server_id)
-        elif len(parts) == 2:
-            # Format: agent_id-server_id (no occurrence_id)
-            return (parts[0], None, parts[1])
+        # Check if last part is a known server ID
+        if len(parts) >= 2 and parts[-1] in known_servers:
+            # Composite key format: agent_id-[occurrence_id]-server_id
+            server_id = parts[-1]
+            if len(parts) == 2:
+                # Format: agent_id-server_id (no occurrence_id)
+                return (parts[0], None, server_id)
+            else:
+                # Format: agent_id-occurrence_id-server_id
+                agent_id = parts[0]
+                occurrence_id = "-".join(parts[1:-1])  # Middle part(s) are occurrence_id
+                return (agent_id, occurrence_id, server_id)
         else:
-            # Backward compatibility: single part is agent_id, default to main server
+            # Backward compatibility: key doesn't end with server_id
+            # Treat entire key as agent_id, default to main server
             return (key, None, "main")
 
     def _load_metadata(self) -> None:
