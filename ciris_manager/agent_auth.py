@@ -14,14 +14,16 @@ logger = logging.getLogger(__name__)
 class AgentAuth:
     """Manages authentication for agent API calls."""
 
-    def __init__(self, agent_registry=None):
+    def __init__(self, agent_registry=None, docker_client_manager=None):
         """
         Initialize agent auth handler.
 
         Args:
             agent_registry: Optional agent registry instance to avoid circular imports
+            docker_client_manager: Optional MultiServerDockerClient for remote server support
         """
         self.agent_registry = agent_registry
+        self.docker_client_manager = docker_client_manager
         self._encryption = None
         # Cache for auth format preferences: agent_id -> "service" or "raw"
         self._auth_format_cache = {}
@@ -30,12 +32,19 @@ class AgentAuth:
         # Circuit breaker threshold - stop trying after this many failures
         self.circuit_breaker_threshold = 10
 
-    def get_auth_headers(self, agent_id: str) -> Dict[str, str]:
+    def get_auth_headers(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, str]:
         """
         Get authentication headers for an agent.
 
         Args:
             agent_id: The agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Dictionary with Authorization header
@@ -44,7 +53,9 @@ class AgentAuth:
             ValueError: If no service token exists for the agent
         """
         # Try to get service token
-        service_token = self._get_service_token(agent_id)
+        service_token = self._get_service_token(
+            agent_id, occurrence_id=occurrence_id, server_id=server_id
+        )
 
         if service_token:
             # Use cached format preference if available
@@ -66,12 +77,19 @@ class AgentAuth:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-    def _get_service_token(self, agent_id: str) -> Optional[str]:
+    def _get_service_token(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Optional[str]:
         """
         Get decrypted service token for an agent.
 
         Args:
             agent_id: The agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Decrypted service token or None
@@ -85,7 +103,9 @@ class AgentAuth:
             else:
                 registry = self.agent_registry
 
-            registry_agent = registry.get_agent(agent_id)
+            registry_agent = registry.get_agent(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             if not registry_agent:
                 logger.debug(f"Agent {agent_id} not found in registry")
@@ -138,7 +158,12 @@ class AgentAuth:
             logger.error(f"Failed to verify token for {agent_id}: {e}")
             return False
 
-    def detect_auth_format(self, agent_id: str) -> Optional[str]:
+    def detect_auth_format(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Optional[str]:
         """
         Detect which authentication format an agent prefers and cache it.
 
@@ -147,6 +172,8 @@ class AgentAuth:
 
         Args:
             agent_id: The agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             "service" if agent prefers service: prefix, "raw" if raw token, None if neither works
@@ -155,7 +182,9 @@ class AgentAuth:
         if self._should_skip_auth_attempt(agent_id):
             return None
         # Get the agent's port and token
-        service_token = self._get_service_token(agent_id)
+        service_token = self._get_service_token(
+            agent_id, occurrence_id=occurrence_id, server_id=server_id
+        )
         if not service_token:
             logger.warning(f"No service token for {agent_id} - cannot detect auth format")
             return None
@@ -165,13 +194,26 @@ class AgentAuth:
             logger.warning(f"No registry available - cannot detect auth format for {agent_id}")
             return None
 
-        registry_agent = self.agent_registry.get_agent(agent_id)
+        registry_agent = self.agent_registry.get_agent(
+            agent_id, occurrence_id=occurrence_id, server_id=server_id
+        )
         if not registry_agent or not hasattr(registry_agent, "port"):
             logger.warning(f"Agent {agent_id} not found in registry or missing port")
             return None
 
         port = registry_agent.port
-        url = f"http://localhost:{port}/v1/agent/status"
+
+        # Determine base URL based on server location
+        if not server_id or server_id == "main" or not self.docker_client_manager:
+            # Local server - use localhost
+            base_url = "localhost"
+        else:
+            # Remote server - get VPC IP from server config
+            server_config = self.docker_client_manager.get_server_config(server_id)
+            base_url = server_config.vpc_ip if server_config.vpc_ip else server_config.hostname
+
+        url = f"http://{base_url}:{port}/v1/agent/status"
+        logger.info(f"Testing auth format for {agent_id} at {url} (server_id={server_id})")
 
         try:
             import httpx
@@ -181,26 +223,30 @@ class AgentAuth:
             try:
                 with httpx.Client(timeout=2.0) as client:
                     response = client.get(url, headers=headers_service)
+                    logger.info(
+                        f"Service prefix test for {agent_id}: status={response.status_code}"
+                    )
                     if response.status_code == 200:
                         logger.info(f"Agent {agent_id} accepts service: prefix format")
                         self._auth_format_cache[agent_id] = "service"
                         self._record_auth_success(agent_id)
                         return "service"
             except Exception as e:
-                logger.debug(f"Service prefix test failed for {agent_id}: {e}")
+                logger.info(f"Service prefix test failed for {agent_id}: {e}")
 
             # Test raw token format
             headers_raw = {"Authorization": f"Bearer {service_token}"}
             try:
                 with httpx.Client(timeout=2.0) as client:
                     response = client.get(url, headers=headers_raw)
+                    logger.info(f"Raw token test for {agent_id}: status={response.status_code}")
                     if response.status_code == 200:
                         logger.info(f"Agent {agent_id} accepts raw token format")
                         self._auth_format_cache[agent_id] = "raw"
                         self._record_auth_success(agent_id)
                         return "raw"
             except Exception as e:
-                logger.debug(f"Raw token test failed for {agent_id}: {e}")
+                logger.info(f"Raw token test failed for {agent_id}: {e}")
 
             # Both formats failed - record failure and trigger backoff
             logger.warning(f"Neither auth format works for {agent_id}")
@@ -366,17 +412,18 @@ class AgentAuth:
 _default_auth = None
 
 
-def get_agent_auth(agent_registry=None) -> AgentAuth:
+def get_agent_auth(agent_registry=None, docker_client_manager=None) -> AgentAuth:
     """
     Get the default agent auth instance.
 
     Args:
         agent_registry: Optional agent registry to use
+        docker_client_manager: Optional MultiServerDockerClient for remote server support
 
     Returns:
         AgentAuth instance
     """
     global _default_auth
-    if _default_auth is None or agent_registry:
-        _default_auth = AgentAuth(agent_registry)
+    if _default_auth is None or agent_registry or docker_client_manager:
+        _default_auth = AgentAuth(agent_registry, docker_client_manager)
     return _default_auth

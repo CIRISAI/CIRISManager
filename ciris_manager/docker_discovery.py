@@ -239,7 +239,9 @@ class DockerAgentDiscovery:
 
             # Query version info if agent is running
             if agent_info.is_running and agent_info.has_port and agent_info.api_port:
-                version_info = self._query_agent_version(agent_id, agent_info.api_port, server_id)
+                version_info = self._query_agent_version(
+                    agent_id, agent_info.api_port, occurrence_id=occurrence_id, server_id=server_id
+                )
                 if version_info:
                     agent_info.version = version_info.get("version")
                     agent_info.codename = version_info.get("codename")
@@ -266,7 +268,11 @@ class DockerAgentDiscovery:
             return None
 
     def _query_agent_version(
-        self, agent_id: str, port: int, server_id: str = "main"
+        self,
+        agent_id: str,
+        port: int,
+        occurrence_id: Optional[str] = None,
+        server_id: str = "main",
     ) -> Optional[Dict[str, str]]:
         """Query agent's /v1/agent/status endpoint for version information."""
         try:
@@ -275,7 +281,7 @@ class DockerAgentDiscovery:
             from ciris_manager.agent_auth import get_agent_auth
 
             # Get authentication headers
-            auth = get_agent_auth(self.agent_registry)
+            auth = get_agent_auth(self.agent_registry, self.docker_client_manager)
 
             # Check if we should skip auth attempts due to backoff
             if hasattr(auth, "_should_skip_auth_attempt") and auth._should_skip_auth_attempt(
@@ -285,7 +291,9 @@ class DockerAgentDiscovery:
                 return None
 
             try:
-                headers = auth.get_auth_headers(agent_id)
+                headers = auth.get_auth_headers(
+                    agent_id, occurrence_id=occurrence_id, server_id=server_id
+                )
             except ValueError as e:
                 logger.warning(f"Cannot authenticate with agent {agent_id}: {e}")
                 return None
@@ -326,10 +334,14 @@ class DockerAgentDiscovery:
                 elif response.status_code == 401:
                     # Authentication failed - try to detect correct auth format
                     logger.info(f"Auth failed for {agent_id}, attempting format detection...")
-                    detected_format = auth.detect_auth_format(agent_id)
+                    detected_format = auth.detect_auth_format(
+                        agent_id, occurrence_id=occurrence_id, server_id=server_id
+                    )
                     if detected_format:
                         # Try again with detected format
-                        headers = auth.get_auth_headers(agent_id)
+                        headers = auth.get_auth_headers(
+                            agent_id, occurrence_id=occurrence_id, server_id=server_id
+                        )
                         response = client.get(url, headers=headers)
                         if response.status_code == 200:
                             # Record successful authentication
