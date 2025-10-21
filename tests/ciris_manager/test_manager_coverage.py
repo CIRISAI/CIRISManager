@@ -47,6 +47,7 @@ class TestManagerCoverage:
         mock_agent_main.agent_name = "Test Agent"
         mock_agent_main.api_port = 8081
         mock_agent_main.has_port = True
+        mock_agent_main.server_id = "main"  # Set server_id directly on agent object
         mock_discovery.discover_agents = Mock(return_value=[mock_agent_main])
 
         with (
@@ -169,12 +170,14 @@ class TestManagerCoverage:
         mock_main_agent.agent_name = "Main Agent"
         mock_main_agent.api_port = 8080
         mock_main_agent.has_port = True
+        mock_main_agent.server_id = "main"  # Set server_id directly on agent object
 
         mock_scout_agent = Mock()
         mock_scout_agent.agent_id = "scout-agent"
         mock_scout_agent.agent_name = "Scout Agent"
         mock_scout_agent.api_port = 8000
         mock_scout_agent.has_port = True
+        mock_scout_agent.server_id = "scout"  # Set server_id directly on agent object
 
         mock_discovery.discover_agents = Mock(return_value=[mock_main_agent, mock_scout_agent])
 
