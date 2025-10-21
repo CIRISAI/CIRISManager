@@ -596,13 +596,10 @@ class CIRISManager:
             # Group agents by server_id
             agents_by_server: Dict[str, list] = {}
             for agent in all_agents:
-                # Get server_id from agent registry
-                agent_info = self.agent_registry.get_agent(agent.agent_id)
-                server_id = (
-                    agent_info.server_id
-                    if agent_info and hasattr(agent_info, "server_id")
-                    else "main"
-                )
+                # Get server_id directly from discovered agent object
+                # This is already set by DockerAgentDiscovery and avoids ambiguity
+                # when multiple agents share the same agent_id (multi-occurrence deployments)
+                server_id = agent.server_id if hasattr(agent, "server_id") else "main"
 
                 if server_id not in agents_by_server:
                     agents_by_server[server_id] = []

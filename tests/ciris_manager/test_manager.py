@@ -948,3 +948,150 @@ class TestCIRISManager:
 
         # Verify recovery was called
         manager._recover_crashed_containers.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_multi_occurrence_nginx_grouping(self, manager):
+        """Test that multi-occurrence agents with same agent_id are correctly grouped by server_id."""
+        # This test validates the fix for multi-occurrence agents where multiple agents
+        # share the same agent_id but have different occurrence_ids and server_ids.
+        # The bug was that get_agent(agent_id) returned ambiguous results, causing
+        # agents to be incorrectly grouped under the wrong server.
+
+        from ciris_manager.models import AgentInfo
+
+        # Create three mock agents with the SAME agent_id but different server_ids
+        agent_id = "scout-remote-test-dahrb9"
+
+        mock_discovered_agents = [
+            AgentInfo(
+                agent_id=agent_id,
+                agent_name="Scout Remote Test (default)",
+                container_name=f"ciris-{agent_id}-default",
+                api_port=8000,
+                status="running",
+                server_id="main",  # This agent runs on main
+            ),
+            AgentInfo(
+                agent_id=agent_id,
+                agent_name="Scout Remote Test (001)",
+                container_name=f"ciris-{agent_id}-001",
+                api_port=8001,
+                status="running",
+                server_id="scout",  # This agent runs on scout
+            ),
+            AgentInfo(
+                agent_id=agent_id,
+                agent_name="Scout Remote Test (002)",
+                container_name=f"ciris-{agent_id}-002",
+                api_port=8002,
+                status="running",
+                server_id="scout2",  # This agent runs on scout2
+            ),
+        ]
+
+        # Mock Docker discovery to return all three agents
+        with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as mock_discovery_class:
+            mock_discovery = Mock()
+            mock_discovery.discover_agents = Mock(return_value=mock_discovered_agents)
+            mock_discovery_class.return_value = mock_discovery
+
+            # Mock nginx managers to track which agents are sent to which server
+            grouped_agents = {}
+
+            # Track local server (main) calls via update_config
+            # Replace manager.nginx_managers dict with mocked instances
+            mock_main_nginx = Mock()
+
+            def track_main_update(agents):
+                grouped_agents["main"] = list(agents)
+                return True  # Simulate successful update
+
+            mock_main_nginx.update_config = Mock(side_effect=track_main_update)
+
+            # Mock additional servers (scout, scout2)
+            from ciris_manager.config.settings import ServerConfig
+
+            mock_scout_nginx = Mock()
+            mock_scout2_nginx = Mock()
+
+            def track_scout_config(agents):
+                grouped_agents["scout"] = list(agents)
+                return "scout config"
+
+            def track_scout2_config(agents):
+                grouped_agents["scout2"] = list(agents)
+                return "scout2 config"
+
+            mock_scout_nginx.generate_config = Mock(side_effect=track_scout_config)
+            mock_scout_nginx.deploy_remote_config = Mock(return_value=True)
+
+            mock_scout2_nginx.generate_config = Mock(side_effect=track_scout2_config)
+            mock_scout2_nginx.deploy_remote_config = Mock(return_value=True)
+
+            # Replace the nginx_managers dict
+            manager.nginx_managers = {
+                "main": mock_main_nginx,
+                "scout": mock_scout_nginx,
+                "scout2": mock_scout2_nginx,
+            }
+
+            # Add scout and scout2 to config.servers
+            scout_server = ServerConfig(
+                server_id="scout",
+                hostname="scoutapi.ciris.ai",
+                is_local=False,
+                public_ip="1.2.3.4",
+                vpc_ip="10.0.0.1",
+            )
+            scout2_server = ServerConfig(
+                server_id="scout2",
+                hostname="scoutapi2.ciris.ai",
+                is_local=False,
+                public_ip="5.6.7.8",
+                vpc_ip="10.0.0.2",
+            )
+            manager.config.servers.append(scout_server)
+            manager.config.servers.append(scout2_server)
+
+            # Mock get_server_config to return the correct server for each server_id
+            def mock_get_server_config(server_id):
+                for server in manager.config.servers:
+                    if server.server_id == server_id:
+                        return server
+                raise ValueError(f"Server {server_id} not found")
+
+            manager.docker_client.get_server_config = Mock(side_effect=mock_get_server_config)
+
+            # Call update_nginx_config - this should group agents by their server_id attribute
+            result = await manager.update_nginx_config()
+
+            # Verify success
+            assert result is True
+
+            # Verify agents were grouped correctly by server_id
+            # Each server should receive only its own agent(s)
+            assert "main" in grouped_agents
+            assert len(grouped_agents["main"]) == 1
+            assert grouped_agents["main"][0].server_id == "main"
+            assert grouped_agents["main"][0].api_port == 8000
+
+            assert "scout" in grouped_agents
+            assert len(grouped_agents["scout"]) == 1
+            assert grouped_agents["scout"][0].server_id == "scout"
+            assert grouped_agents["scout"][0].api_port == 8001
+
+            assert "scout2" in grouped_agents
+            assert len(grouped_agents["scout2"]) == 1
+            assert grouped_agents["scout2"][0].server_id == "scout2"
+            assert grouped_agents["scout2"][0].api_port == 8002
+
+            # Verify no agent appears on multiple servers (proper grouping)
+            all_server_ids = set()
+            for server_agents in grouped_agents.values():
+                for agent in server_agents:
+                    assert (
+                        agent.server_id not in all_server_ids
+                    ), f"Agent with server_id={agent.server_id} appears on multiple servers!"
+                    all_server_ids.add(agent.server_id)
+
+            assert len(all_server_ids) == 3  # Each agent on exactly one server
