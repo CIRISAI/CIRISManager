@@ -42,6 +42,8 @@ class TestCanaryGroupHealth:
         agent.agent_name = "Test Agent"  # Changed from 'name' to 'agent_name'
         agent.api_port = 8080
         agent.is_running = True
+        agent.occurrence_id = None  # Add occurrence_id for multi-instance support
+        agent.server_id = "main"  # Add server_id for multi-server support
         return agent
 
     @pytest.mark.asyncio
@@ -289,12 +291,16 @@ class TestCanaryGroupHealth:
         agent1.agent_name = "Agent 1"  # Changed from 'name' to 'agent_name'
         agent1.api_port = 8081
         agent1.is_running = True
+        agent1.occurrence_id = None  # Add occurrence_id for multi-instance support
+        agent1.server_id = "main"  # Add server_id for multi-server support
 
         agent2 = Mock(spec=AgentInfo)
         agent2.agent_id = "agent-2"
         agent2.agent_name = "Agent 2"  # Changed from 'name' to 'agent_name'
         agent2.api_port = 8082
         agent2.is_running = True
+        agent2.occurrence_id = None  # Add occurrence_id for multi-instance support
+        agent2.server_id = "main"  # Add server_id for multi-server support
 
         # Register agents with service tokens
         orchestrator.manager.agent_registry.register_agent(
