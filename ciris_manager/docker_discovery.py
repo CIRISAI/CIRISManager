@@ -230,6 +230,7 @@ class DockerAgentDiscovery:
                 template=template,
                 deployment=deployment,
                 server_id=server_id,
+                occurrence_id=occurrence_id,  # Multi-instance agent identifier
                 deployment_type=deployment_type,
                 created_at=None,
                 health="healthy" if container.status == "running" else "unhealthy",

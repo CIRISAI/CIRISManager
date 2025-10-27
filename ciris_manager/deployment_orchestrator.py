@@ -1843,7 +1843,11 @@ class DeploymentOrchestrator:
                     from ciris_manager.agent_auth import get_agent_auth
 
                     auth = get_agent_auth()
-                    headers = auth.get_auth_headers(agent.agent_id)
+                    headers = auth.get_auth_headers(
+                        agent.agent_id,
+                        occurrence_id=agent.occurrence_id,
+                        server_id=agent.server_id,
+                    )
 
                     agent_url = self._get_agent_url(agent)
                     health_url = f"{agent_url}/v1/system/health"
@@ -1934,7 +1938,11 @@ class DeploymentOrchestrator:
                     # Get current version from agent's health endpoint
                     auth = get_agent_auth()
                     try:
-                        headers = auth.get_auth_headers(agent.agent_id)
+                        headers = auth.get_auth_headers(
+                            agent.agent_id,
+                            occurrence_id=agent.occurrence_id,
+                            server_id=agent.server_id,
+                        )
                     except Exception:
                         # If auth fails, use empty headers for testing
                         headers = {}
@@ -2170,7 +2178,11 @@ class DeploymentOrchestrator:
                         from ciris_manager.agent_auth import get_agent_auth
 
                         auth = get_agent_auth()
-                        headers = auth.get_auth_headers(agent.agent_id)
+                        headers = auth.get_auth_headers(
+                            agent.agent_id,
+                            occurrence_id=agent.occurrence_id,
+                            server_id=agent.server_id,
+                        )
 
                         # Check health endpoint (using system/health which is the correct endpoint)
                         agent_url = self._get_agent_url(agent)
@@ -2827,7 +2839,11 @@ class DeploymentOrchestrator:
 
                 auth = get_agent_auth(self.manager.agent_registry if self.manager else None)
                 try:
-                    headers = auth.get_auth_headers(agent.agent_id)
+                    headers = auth.get_auth_headers(
+                        agent.agent_id,
+                        occurrence_id=agent.occurrence_id,
+                        server_id=agent.server_id,
+                    )
                 except ValueError as e:
                     logger.error(f"Failed to authenticate with agent {agent.agent_id}: {e}")
                     return AgentUpdateResponse(

@@ -44,6 +44,9 @@ class AgentInfo(BaseModel):
         "CIRIS_DISCORD_PILOT", description="Deployment identifier (e.g., CIRIS_DISCORD_PILOT)"
     )
     server_id: Optional[str] = Field("main", description="Server ID where agent is deployed")
+    occurrence_id: Optional[str] = Field(
+        None, description="Occurrence ID for multi-instance agents (e.g., '002')"
+    )
     deployment_type: Optional[str] = Field(
         None,
         description="Deployment type: API_ONLY for remote servers, FULL for main server with GUI",
