@@ -204,6 +204,9 @@ class AgentCommands:
             if hasattr(args, "billing_api_key") and args.billing_api_key:
                 create_args["billing_api_key"] = args.billing_api_key
 
+            if hasattr(args, "occurrence_id") and args.occurrence_id:
+                create_args["agent_occurrence_id"] = args.occurrence_id
+
             if not ctx.quiet:
                 print(f"Creating agent '{args.name}'...")
 

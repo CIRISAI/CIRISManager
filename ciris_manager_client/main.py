@@ -132,6 +132,9 @@ def setup_agent_parser(subparsers):
     create_parser.add_argument("--template", default="basic", help="Template to use")
     create_parser.add_argument("--server", help="Target server ID")
     create_parser.add_argument(
+        "--occurrence-id", help="Occurrence ID for multi-instance agents (e.g., '002', '003')"
+    )
+    create_parser.add_argument(
         "--env", action="append", help="Environment variable (KEY=VALUE)", metavar="KEY=VALUE"
     )
     create_parser.add_argument("--env-file", help="JSON file with environment variables")
