@@ -289,6 +289,7 @@ class AgentRegistry:
         admin_password: Optional[str] = None,
         server_id: str = "main",
         occurrence_id: Optional[str] = None,
+        custom_environment: Optional[Dict[str, str]] = None,
     ) -> RegisteredAgent:
         """
         Register a new agent.
@@ -303,17 +304,24 @@ class AgentRegistry:
             admin_password: Encrypted admin password for agent
             server_id: Server hosting the agent (default: "main")
             occurrence_id: Occurrence ID for database isolation (optional, for multi-instance)
+            custom_environment: Custom environment variables passed during creation (optional)
 
         Returns:
             Created RegisteredAgent object
         """
         with self._lock:
+            # Store custom environment in metadata
+            metadata = {}
+            if custom_environment:
+                metadata["custom_environment"] = custom_environment
+
             agent = RegisteredAgent(
                 agent_id=agent_id,
                 name=name,
                 port=port,
                 template=template,
                 compose_file=compose_file,
+                metadata=metadata,
                 service_token=service_token,
                 admin_password=admin_password,
                 server_id=server_id,

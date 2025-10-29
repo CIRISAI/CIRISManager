@@ -520,6 +520,7 @@ class CIRISManager:
             admin_password=encrypted_password,  # Store encrypted version
             server_id=target_server_id,
             occurrence_id=agent_occurrence_id,  # For multi-instance database isolation
+            custom_environment=environment,  # Store custom env vars for tracking
         )
 
         # Start the agent FIRST so Docker discovery can find it
