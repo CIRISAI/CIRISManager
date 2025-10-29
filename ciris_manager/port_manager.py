@@ -7,6 +7,7 @@ Handles dynamic port allocation and tracking for agent containers.
 import json
 import logging
 import socket
+import threading
 from pathlib import Path
 from typing import Dict, Set, Optional
 
@@ -30,6 +31,9 @@ class PortManager:
         self.start_port = start_port
         self.end_port = end_port
         self.metadata_path = metadata_path
+
+        # Thread safety
+        self._lock = threading.Lock()
 
         # Port tracking
         self.allocated_ports: Dict[str, int] = {}  # agent_id -> port
@@ -114,27 +118,28 @@ class PortManager:
         Raises:
             ValueError: If no ports available in range
         """
-        # Check if already allocated
-        if agent_id in self.allocated_ports:
-            return self.allocated_ports[agent_id]
+        with self._lock:
+            # Check if already allocated
+            if agent_id in self.allocated_ports:
+                return self.allocated_ports[agent_id]
 
-        # Find next available port
-        used_ports = set(self.allocated_ports.values()) | self.reserved_ports
+            # Find next available port
+            used_ports = set(self.allocated_ports.values()) | self.reserved_ports
 
-        for port in range(self.start_port, self.end_port + 1):
-            if port not in used_ports:
-                # Check if port is actually available on the system
-                if self._is_port_in_use(port):
-                    logger.warning(
-                        f"Port {port} is marked as available but is in use on system, skipping"
-                    )
-                    continue
+            for port in range(self.start_port, self.end_port + 1):
+                if port not in used_ports:
+                    # Check if port is actually available on the system
+                    if self._is_port_in_use(port):
+                        logger.warning(
+                            f"Port {port} is marked as available but is in use on system, skipping"
+                        )
+                        continue
 
-                self.allocated_ports[agent_id] = port
-                logger.info(f"Allocated port {port} to agent {agent_id}")
-                return port
+                    self.allocated_ports[agent_id] = port
+                    logger.info(f"Allocated port {port} to agent {agent_id}")
+                    return port
 
-        raise ValueError(f"No available ports in range {self.start_port}-{self.end_port}")
+            raise ValueError(f"No available ports in range {self.start_port}-{self.end_port}")
 
     def release_port(self, agent_id: str) -> Optional[int]:
         """
@@ -146,12 +151,13 @@ class PortManager:
         Returns:
             Released port number, or None if not allocated
         """
-        if agent_id in self.allocated_ports:
-            port = self.allocated_ports[agent_id]
-            del self.allocated_ports[agent_id]
-            logger.info(f"Released port {port} from agent {agent_id}")
-            return port
-        return None
+        with self._lock:
+            if agent_id in self.allocated_ports:
+                port = self.allocated_ports[agent_id]
+                del self.allocated_ports[agent_id]
+                logger.info(f"Released port {port} from agent {agent_id}")
+                return port
+            return None
 
     def get_port(self, agent_id: str) -> Optional[int]:
         """Get allocated port for an agent."""
