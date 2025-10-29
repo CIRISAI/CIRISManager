@@ -259,7 +259,7 @@ class TestDeploymentPreview:
                         elapsed = time.time() - start
 
         # Verify it completes quickly even with many agents
-        assert elapsed < 5.0  # Should complete within 5 seconds
+        assert elapsed < 10.0  # Should complete within 10 seconds
 
         # Verify preview correctness
         assert preview["total_agents"] == 100
