@@ -2299,9 +2299,13 @@ def create_routes(manager: Any) -> APIRouter:
         )
 
         # Start deployment for just this agent
-        deployment_status = await deployment_orchestrator.start_single_agent_deployment(
-            notification, target_agent
-        )
+        try:
+            deployment_status = await deployment_orchestrator.start_single_agent_deployment(
+                notification, target_agent
+            )
+        except ValueError as e:
+            # Deployment already in progress
+            raise HTTPException(status_code=409, detail=str(e))
 
         logger.info(
             f"Single agent deployment {deployment_status.deployment_id} started for {agent_id} "
