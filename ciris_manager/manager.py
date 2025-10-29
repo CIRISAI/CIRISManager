@@ -290,34 +290,49 @@ class CIRISManager:
         if wa_signature and not is_pre_approved:
             logger.info(f"Verifying WA signature for custom template: {template}")
 
-        # Generate agent ID with 6-digit suffix - ensure uniqueness across ALL servers
-        # Note: Same agent_id CAN exist multiple times if occurrence_id differs (for load balancing)
+        # Generate agent ID based on whether occurrence_id is provided
         base_id = name.lower().replace(" ", "-")
-        max_attempts = 10
-        for attempt in range(max_attempts):
-            suffix = self._generate_agent_suffix()
-            agent_id = f"{base_id}-{suffix}"
+
+        if agent_occurrence_id:
+            # Multi-occurrence agent: use base_id without suffix
+            # The occurrence_id makes this unique
+            agent_id = base_id
 
             # Check if this exact combination (agent_id, occurrence_id, server_id) exists
-            # If occurrence_id is provided, allow same agent_id with different occurrence_id
             existing = self.agent_registry.get_agent(
                 agent_id, occurrence_id=agent_occurrence_id, server_id=target_server_id
             )
 
-            if not existing:
-                break  # This combination is unique, use it
-
-            logger.warning(
-                f"Agent combination {agent_id} + occurrence_id={agent_occurrence_id} + "
-                f"server={target_server_id} already exists (attempt {attempt + 1}/{max_attempts}), "
-                "generating new suffix"
-            )
+            if existing:
+                raise ValueError(
+                    f"Agent {agent_id} with occurrence_id={agent_occurrence_id} on "
+                    f"server={target_server_id} already exists"
+                )
         else:
-            # Failed to generate unique combination after max attempts
-            raise RuntimeError(
-                f"Failed to generate unique agent ID combination after {max_attempts} attempts. "
-                "This should be extremely rare - please try again."
-            )
+            # Single-occurrence agent: use suffix for uniqueness
+            max_attempts = 10
+            for attempt in range(max_attempts):
+                suffix = self._generate_agent_suffix()
+                agent_id = f"{base_id}-{suffix}"
+
+                # Check if this agent_id exists (no occurrence_id)
+                existing = self.agent_registry.get_agent(
+                    agent_id, occurrence_id=None, server_id=target_server_id
+                )
+
+                if not existing:
+                    break  # This agent_id is unique, use it
+
+                logger.warning(
+                    f"Agent {agent_id} on server={target_server_id} already exists "
+                    f"(attempt {attempt + 1}/{max_attempts}), generating new suffix"
+                )
+            else:
+                # Failed to generate unique ID after max attempts
+                raise RuntimeError(
+                    f"Failed to generate unique agent ID after {max_attempts} attempts. "
+                    "This should be extremely rare - please try again."
+                )
 
         # Allocate port
         allocated_port = self.port_manager.allocate_port(agent_id)
