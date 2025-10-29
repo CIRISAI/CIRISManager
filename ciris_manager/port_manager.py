@@ -6,6 +6,7 @@ Handles dynamic port allocation and tracking for agent containers.
 
 import json
 import logging
+import socket
 from pathlib import Path
 from typing import Dict, Set, Optional
 
@@ -122,6 +123,13 @@ class PortManager:
 
         for port in range(self.start_port, self.end_port + 1):
             if port not in used_ports:
+                # Check if port is actually available on the system
+                if self._is_port_in_use(port):
+                    logger.warning(
+                        f"Port {port} is marked as available but is in use on system, skipping"
+                    )
+                    continue
+
                 self.allocated_ports[agent_id] = port
                 logger.info(f"Allocated port {port} to agent {agent_id}")
                 return port
@@ -156,6 +164,25 @@ class PortManager:
         if port < self.start_port or port > self.end_port:
             return False
         return port not in self.allocated_ports.values()
+
+    def _is_port_in_use(self, port: int, host: str = "0.0.0.0") -> bool:
+        """
+        Check if a port is actually in use on the system.
+
+        Args:
+            port: Port number to check
+            host: Host to check (default: 0.0.0.0 for all interfaces)
+
+        Returns:
+            True if port is in use, False if available
+        """
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind((host, port))
+                return False  # Port is available
+            except OSError:
+                return True  # Port is in use
 
     def get_allocated_ports(self) -> Dict[str, int]:
         """Get all current port allocations."""
