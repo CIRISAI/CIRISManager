@@ -376,6 +376,8 @@ class DeploymentOrchestrator:
             if notification.agent_image:
                 try:
                     # Get Docker client for the agent's server
+                    if not self.manager:
+                        raise RuntimeError("Manager not initialized")
                     docker_client = self.manager.docker_client.get_client(agent.server_id)
                     docker_client.images.pull(notification.agent_image)
                     logger.info(
