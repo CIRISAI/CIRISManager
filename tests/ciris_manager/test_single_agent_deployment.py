@@ -5,7 +5,7 @@ Tests the ability to deploy specific versions to individual agents for testing.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -292,7 +292,7 @@ class TestSingleAgentDeployment:
                 assert "Version incompatible" in status.message
 
     @pytest.mark.asyncio
-    async def test_agent_needs_update_check(self, orchestrator):
+    async def test_agent_needs_update_check(self, orchestrator, mock_manager):
         """Test checking if agent needs update."""
         agent = AgentInfo(
             agent_id="test",
@@ -304,14 +304,14 @@ class TestSingleAgentDeployment:
             server_id="main",
         )
 
-        # Mock Docker client for multi-server support
-        mock_client = MagicMock()
-        orchestrator.manager.docker_client.get_client.return_value = mock_client
+        # Get the main server's Docker client from centralized fixture
+        main_client = mock_manager.docker_client._clients["main"]
 
-        # Mock container
+        # Mock container with v1.4.2 image
+        # Note: Need to override the side_effect, not just return_value
         mock_container = MagicMock()
         mock_container.image.tags = ["ghcr.io/cirisai/ciris-agent:v1.4.2"]
-        mock_client.containers.get.return_value = mock_container
+        main_client.containers.get = Mock(return_value=mock_container)
 
         # Test same version
         needs_update = await orchestrator._agent_needs_update(
