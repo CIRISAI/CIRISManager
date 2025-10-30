@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
 from ciris_manager.models import (
     UpdateNotification,
     AgentInfo,
@@ -21,31 +20,7 @@ from ciris_manager.models import (
 class TestSingleAgentDeployment:
     """Test single-agent deployment functionality."""
 
-    @pytest.fixture
-    def mock_manager(self):
-        """Create mock manager with required components."""
-        manager = MagicMock()
-        manager.config = MagicMock()
-        manager.config.deployment = MagicMock()
-        manager.config.deployment.canary_wait_minutes = 5
-        manager.config.deployment.work_stability_minutes = 1
-
-        # Mock agent registry
-        manager.agent_registry = MagicMock()
-        manager.agent_registry.list_agents = MagicMock(return_value=[])
-        manager.agent_registry.save_metadata = MagicMock()
-
-        # Mock docker client manager for multi-server support
-        manager.docker_client = MagicMock()
-
-        return manager
-
-    @pytest.fixture
-    def orchestrator(self, mock_manager):
-        """Create deployment orchestrator instance."""
-        orchestrator = DeploymentOrchestrator(mock_manager)
-        orchestrator._deployments = {}
-        return orchestrator
+    # Use centralized fixtures from conftest.py for mock_manager and orchestrator
 
     @pytest.fixture
     def test_agent(self):
@@ -76,94 +51,87 @@ class TestSingleAgentDeployment:
 
     @pytest.mark.asyncio
     async def test_single_agent_deployment_success(
-        self, orchestrator, test_agent, update_notification
+        self, orchestrator, test_agent, update_notification, mock_manager
     ):
         """Test successful single-agent deployment."""
-        # Mock image pull
-        with patch.object(orchestrator, "_pull_images", new_callable=AsyncMock) as mock_pull:
-            mock_pull.return_value = {"success": True}
+        # Mock agent needs update check
+        with patch.object(
+            orchestrator, "_agent_needs_update", new_callable=AsyncMock
+        ) as mock_needs:
+            mock_needs.return_value = True
 
-            # Mock agent needs update check
-            with patch.object(
-                orchestrator, "_agent_needs_update", new_callable=AsyncMock
-            ) as mock_needs:
-                mock_needs.return_value = True
+            # Mock save state
+            with patch.object(orchestrator, "_save_state", new_callable=AsyncMock):
+                # Mock background task execution
+                with patch("asyncio.create_task") as mock_create_task:
+                    mock_task = MagicMock()
+                    mock_create_task.return_value = mock_task
 
-                # Mock save state
-                with patch.object(orchestrator, "_save_state", new_callable=AsyncMock):
-                    # Mock background task execution
-                    with patch("asyncio.create_task") as mock_create_task:
-                        mock_task = MagicMock()
-                        mock_create_task.return_value = mock_task
+                    # Start deployment
+                    status = await orchestrator.start_single_agent_deployment(
+                        update_notification, test_agent
+                    )
 
-                        # Start deployment
-                        status = await orchestrator.start_single_agent_deployment(
-                            update_notification, test_agent
-                        )
+                    # Verify deployment was created
+                    assert status.deployment_id is not None
+                    assert status.agents_total == 1
+                    assert status.status == "in_progress"
+                    assert "test-agent" in status.message
+                    assert status.canary_phase is None  # No canary for single agent
 
-                        # Verify deployment was created
-                        assert status.deployment_id is not None
-                        assert status.agents_total == 1
-                        assert status.status == "in_progress"
-                        assert "test-agent" in status.message
-                        assert status.canary_phase is None  # No canary for single agent
+                    # Verify image was pulled on correct server
+                    docker_client = mock_manager.docker_client._clients["main"]
+                    docker_client.images.pull.assert_called_once_with(
+                        "ghcr.io/cirisai/ciris-agent:v1.4.5"
+                    )
 
-                        # Verify image was pulled
-                        mock_pull.assert_called_once()
+                    # Verify update check
+                    mock_needs.assert_called_once_with(
+                        test_agent, "ghcr.io/cirisai/ciris-agent:v1.4.5"
+                    )
 
-                        # Verify update check
-                        mock_needs.assert_called_once_with(
-                            test_agent, "ghcr.io/cirisai/ciris-agent:v1.4.5"
-                        )
-
-                        # Verify background task was created
-                        mock_create_task.assert_called_once()
+                    # Verify background task was created
+                    mock_create_task.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_single_agent_deployment_already_updated(
         self, orchestrator, test_agent, update_notification
     ):
         """Test deployment when agent already has target version."""
-        # Mock image pull
-        with patch.object(orchestrator, "_pull_images", new_callable=AsyncMock) as mock_pull:
-            mock_pull.return_value = {"success": True}
-
-            # Mock agent doesn't need update
-            with patch.object(
-                orchestrator, "_agent_needs_update", new_callable=AsyncMock
-            ) as mock_needs:
-                mock_needs.return_value = False
-
-                # Start deployment
-                status = await orchestrator.start_single_agent_deployment(
-                    update_notification, test_agent
-                )
-
-                # Verify deployment completed immediately
-                assert status.status == "completed"
-                assert "already running target version" in status.message
-                assert status.agents_updated == 0
-                assert status.completed_at is not None
-
-    @pytest.mark.asyncio
-    async def test_single_agent_deployment_image_pull_failure(
-        self, orchestrator, test_agent, update_notification
-    ):
-        """Test deployment failure when image pull fails."""
-        # Mock image pull failure
-        with patch.object(orchestrator, "_pull_images", new_callable=AsyncMock) as mock_pull:
-            mock_pull.return_value = {"success": False, "error": "Registry unreachable"}
+        # Mock agent doesn't need update
+        with patch.object(
+            orchestrator, "_agent_needs_update", new_callable=AsyncMock
+        ) as mock_needs:
+            mock_needs.return_value = False
 
             # Start deployment
             status = await orchestrator.start_single_agent_deployment(
                 update_notification, test_agent
             )
 
-            # Verify deployment failed
-            assert status.status == "failed"
-            assert "Failed to pull image" in status.message
-            assert status.agents_failed == 1
+            # Verify deployment completed immediately
+            assert status.status == "completed"
+            assert "already running target version" in status.message
+            assert status.agents_updated == 0
             assert status.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_single_agent_deployment_image_pull_failure(
+        self, orchestrator, test_agent, update_notification, mock_manager
+    ):
+        """Test deployment failure when image pull fails."""
+        # Mock image pull to raise an exception
+        docker_client = mock_manager.docker_client._clients["main"]
+        docker_client.images.pull.side_effect = Exception("Registry unreachable")
+
+        # Start deployment
+        status = await orchestrator.start_single_agent_deployment(update_notification, test_agent)
+
+        # Verify deployment failed
+        assert status.status == "failed"
+        assert "Failed to pull image" in status.message
+        assert status.agents_failed == 1
+        assert status.completed_at is not None
 
     @pytest.mark.asyncio
     async def test_single_agent_deployment_concurrent_prevention(
