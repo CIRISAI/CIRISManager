@@ -3362,7 +3362,27 @@ class DeploymentOrchestrator:
 
             logger.info(f"Recreating container for agent {agent_id} on server {server_id}...")
 
-            container_name = f"ciris-{agent_id}"
+            # Discover the agent to get the actual container name
+            # (important for multi-occurrence agents which have suffixes like -002)
+            container_name = f"ciris-{agent_id}"  # Default fallback
+            if self.manager and hasattr(self.manager, "docker_discovery"):
+                try:
+                    discovered_agents = self.manager.docker_discovery.discover_agents()
+                    for discovered_agent in discovered_agents:
+                        if (
+                            discovered_agent.agent_id == agent_id
+                            and discovered_agent.server_id == server_id
+                        ):
+                            container_name = discovered_agent.container_name
+                            logger.info(
+                                f"Found actual container name from discovery: {container_name}"
+                            )
+                            break
+                except Exception as e:
+                    logger.warning(
+                        f"Could not discover container name for {agent_id}, using default: {e}"
+                    )
+
             old_config = None
 
             # For remote servers, use Docker API
