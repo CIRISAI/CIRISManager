@@ -525,7 +525,15 @@ class DeploymentOrchestrator:
 
             client = self.manager.docker_client.get_client(agent.server_id)
 
+            # Get container - this will raise if container doesn't exist
             container = client.containers.get(agent.container_name)
+
+            # Check if container is actually running
+            container.reload()  # Refresh container state
+            if container.status != "running":
+                logger.info(f"Container {agent.container_name} is {container.status}, needs update")
+                return True
+
             current_image: str = ""
             if container.image and container.image.tags:
                 current_image = container.image.tags[0]
@@ -543,7 +551,11 @@ class DeploymentOrchestrator:
 
             target = target_image.split(":")[-1] if ":" in target_image else "latest"
 
-            return bool(current != target)
+            needs_update = bool(current != target)
+            logger.info(
+                f"Image check for {agent.agent_id}: current={current}, target={target}, needs_update={needs_update}"
+            )
+            return needs_update
 
         except Exception as e:
             logger.warning(f"Could not check if agent {agent.agent_id} needs update: {e}")

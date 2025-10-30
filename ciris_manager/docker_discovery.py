@@ -55,9 +55,10 @@ class DockerAgentDiscovery:
         """Discover agents from local Docker daemon (legacy mode)."""
         agents = []
         try:
-            # Find all containers with CIRIS agent characteristics
-            containers = self.client.containers.list(all=True)
-            logger.debug(f"Found {len(containers)} total containers")
+            # Find all running containers with CIRIS agent characteristics
+            # Only list running containers to avoid stale/stopped container data
+            containers = self.client.containers.list(all=False)
+            logger.debug(f"Found {len(containers)} running containers")
 
             for container in containers:
                 # Check if this is a CIRIS agent by looking at environment variables
