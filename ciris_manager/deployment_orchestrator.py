@@ -3362,26 +3362,42 @@ class DeploymentOrchestrator:
 
             logger.info(f"Recreating container for agent {agent_id} on server {server_id}...")
 
-            # Discover the agent to get the actual container name
+            # Find the actual container name by listing containers on the target server
             # (important for multi-occurrence agents which have suffixes like -002)
             container_name = f"ciris-{agent_id}"  # Default fallback
-            if self.manager and hasattr(self.manager, "docker_discovery"):
-                try:
-                    discovered_agents = self.manager.docker_discovery.discover_agents()
-                    for discovered_agent in discovered_agents:
-                        if (
-                            discovered_agent.agent_id == agent_id
-                            and discovered_agent.server_id == server_id
-                        ):
-                            container_name = discovered_agent.container_name
+
+            try:
+                # Get Docker client for the server
+                if server_id == "main":
+                    import docker as docker_lib
+
+                    docker_client_for_search = docker_lib.from_env()
+                else:
+                    if self.manager and hasattr(self.manager, "docker_client"):
+                        docker_client_for_search = self.manager.docker_client.get_client(server_id)
+                    else:
+                        raise RuntimeError(f"Cannot get Docker client for server {server_id}")
+
+                # List containers that match the agent_id pattern
+                containers = docker_client_for_search.containers.list(all=False)
+                for container in containers:
+                    # Check if this container belongs to our agent
+                    env_vars = container.attrs.get("Config", {}).get("Env", [])
+                    for env in env_vars:
+                        if env.startswith(f"CIRIS_AGENT_ID={agent_id}"):
+                            # Found it! Use the actual container name
+                            container_name = container.name
                             logger.info(
-                                f"Found actual container name from discovery: {container_name}"
+                                f"Found actual container name for {agent_id} on {server_id}: {container_name}"
                             )
                             break
-                except Exception as e:
-                    logger.warning(
-                        f"Could not discover container name for {agent_id}, using default: {e}"
-                    )
+                    if container_name != f"ciris-{agent_id}":
+                        break  # Found it, stop searching
+
+            except Exception as e:
+                logger.warning(
+                    f"Could not find container for {agent_id} on {server_id}, using default name: {e}"
+                )
 
             old_config = None
 
