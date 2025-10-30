@@ -190,6 +190,14 @@ def setup_agent_parser(subparsers):
         default="docker",
         help="Deployment strategy (manual=consensual, immediate=API shutdown, docker=force restart)",
     )
+    deploy_parser.add_argument(
+        "--occurrence-id",
+        help="Occurrence ID for multi-instance agents (e.g., '003', '002')",
+    )
+    deploy_parser.add_argument(
+        "--server-id",
+        help="Server ID for multi-server agents (e.g., 'main', 'scout', 'scout2')",
+    )
 
 
 def setup_config_parser(subparsers):
@@ -266,6 +274,29 @@ def setup_inspect_parser(subparsers):
     inspect_subparsers.add_parser("system", help="Full system inspection")
 
 
+def setup_deployment_parser(subparsers):
+    """Set up deployment command subparser."""
+    deployment_parser = subparsers.add_parser(
+        "deployment",
+        help="Deployment management",
+        description="Manage CD deployments and rollouts",
+    )
+    deployment_subparsers = deployment_parser.add_subparsers(
+        dest="deployment_command", help="Deployment commands"
+    )
+
+    # deployment status
+    status_parser = deployment_subparsers.add_parser("status", help="Get deployment status")
+    status_parser.add_argument("--deployment-id", help="Specific deployment ID (optional)")
+
+    # deployment cancel
+    cancel_parser = deployment_subparsers.add_parser("cancel", help="Cancel a deployment")
+    cancel_parser.add_argument("deployment_id", help="Deployment ID to cancel")
+    cancel_parser.add_argument(
+        "--reason", default="Cancelled via CLI", help="Reason for cancellation"
+    )
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser."""
     parser = argparse.ArgumentParser(
@@ -329,6 +360,7 @@ Token File:
     setup_agent_parser(subparsers)
     setup_config_parser(subparsers)
     setup_inspect_parser(subparsers)
+    setup_deployment_parser(subparsers)
 
     return parser
 
@@ -386,6 +418,22 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
                 return cast(int, handler(ctx, args))
             else:
                 print(f"Error: Unknown inspect command: {args.inspect_command}", file=sys.stderr)
+                return EXIT_INVALID_ARGS
+
+        elif args.command == "deployment":
+            from ciris_manager_client.commands.deployment import DeploymentCommands
+
+            if not args.deployment_command:
+                print("Error: No deployment subcommand specified", file=sys.stderr)
+                return EXIT_INVALID_ARGS
+
+            handler = getattr(DeploymentCommands, args.deployment_command.replace("-", "_"), None)
+            if handler:
+                return cast(int, handler(ctx, args))
+            else:
+                print(
+                    f"Error: Unknown deployment command: {args.deployment_command}", file=sys.stderr
+                )
                 return EXIT_INVALID_ARGS
 
         else:

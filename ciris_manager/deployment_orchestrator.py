@@ -369,25 +369,36 @@ class DeploymentOrchestrator:
 
             deployment_id = str(uuid4())
 
-            # Pull the new image first
-            logger.info(f"Pulling image {notification.agent_image} for single agent deployment")
-            pull_results = await self._pull_images(notification)
-
-            if not pull_results["success"]:
-                return DeploymentStatus(
-                    deployment_id=deployment_id,
-                    notification=notification,
-                    agents_total=1,
-                    agents_updated=0,
-                    agents_deferred=0,
-                    agents_failed=1,
-                    started_at=datetime.now(timezone.utc).isoformat(),
-                    staged_at=None,
-                    completed_at=datetime.now(timezone.utc).isoformat(),
-                    status="failed",
-                    message=f"Failed to pull image: {pull_results.get('error', 'Unknown error')}",
-                    canary_phase=None,
-                )
+            # Pull the new image on the target agent's server
+            logger.info(
+                f"Pulling image {notification.agent_image} for single agent deployment on server {agent.server_id}"
+            )
+            if notification.agent_image:
+                try:
+                    # Get Docker client for the agent's server
+                    docker_client = self.manager.docker_client.get_client(agent.server_id)
+                    docker_client.images.pull(notification.agent_image)
+                    logger.info(
+                        f"Successfully pulled {notification.agent_image} on server {agent.server_id}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to pull image {notification.agent_image} on server {agent.server_id}: {e}"
+                    )
+                    return DeploymentStatus(
+                        deployment_id=deployment_id,
+                        notification=notification,
+                        agents_total=1,
+                        agents_updated=0,
+                        agents_deferred=0,
+                        agents_failed=1,
+                        started_at=datetime.now(timezone.utc).isoformat(),
+                        staged_at=None,
+                        completed_at=datetime.now(timezone.utc).isoformat(),
+                        status="failed",
+                        message=f"Failed to pull image on server {agent.server_id}: {str(e)}",
+                        canary_phase=None,
+                    )
 
             # Check if agent actually needs updating
             if not notification.agent_image:

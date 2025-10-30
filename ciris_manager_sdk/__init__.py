@@ -313,6 +313,8 @@ class CIRISManagerClient:
         message: str = "Single agent deployment",
         strategy: str = "docker",
         metadata: Optional[Dict[str, Any]] = None,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Deploy a specific version to a single agent.
@@ -326,6 +328,8 @@ class CIRISManagerClient:
                 - immediate: API forced shutdown (agent shuts down via API)
                 - docker: Manager forced restart (Docker restart, bypasses agent)
             metadata: Optional metadata for the deployment
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Deployment response with deployment_id and status
@@ -339,8 +343,45 @@ class CIRISManagerClient:
         }
         if metadata:
             payload["metadata"] = metadata
+        if occurrence_id:
+            payload["occurrence_id"] = occurrence_id
+        if server_id:
+            payload["server_id"] = server_id
 
         response = self._request("POST", "/manager/v1/updates/deploy-single", json=payload)
+        return response.json()
+
+    def cancel_deployment(
+        self, deployment_id: str, reason: str = "Cancelled via SDK"
+    ) -> Dict[str, Any]:
+        """
+        Cancel a stuck or failed deployment.
+
+        Args:
+            deployment_id: ID of the deployment to cancel
+            reason: Reason for cancellation
+
+        Returns:
+            Cancellation response with status
+        """
+        payload = {"deployment_id": deployment_id, "reason": reason}
+        response = self._request("POST", "/manager/v1/updates/cancel", json=payload)
+        return response.json()
+
+    def get_deployment_status(self, deployment_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get deployment status.
+
+        Args:
+            deployment_id: Optional deployment ID. If not provided, returns current/latest deployment.
+
+        Returns:
+            Deployment status information
+        """
+        endpoint = "/manager/v1/updates/status"
+        if deployment_id:
+            endpoint = f"{endpoint}?deployment_id={quote(deployment_id, safe='')}"
+        response = self._request("GET", endpoint)
         return response.json()
 
     # Utility Methods

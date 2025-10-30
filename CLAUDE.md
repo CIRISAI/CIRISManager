@@ -18,6 +18,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Why These Matter
 Every architectural decision should reduce complexity, not add it. If you can't explain a feature in one sentence, it's too complex. See `docs/NGINX_ARCHITECTURE_LESSONS.md` for detailed examples.
 
+### **CRITICAL: Always Use ciris-manager-client**
+**ALL agent operations MUST go through `ciris-manager-client`**. This is non-negotiable.
+
+- **NEVER use docker commands directly** (no `docker restart`, `docker-compose up`, etc.)
+- **NEVER use curl/httpx to call manager API directly**
+- **NEVER use SSH to manually manipulate containers**
+
+**If ciris-manager-client doesn't support an operation you need:**
+1. Add the feature to the SDK (`ciris_manager_sdk/`)
+2. Add the command to the client (`ciris_manager_client/commands/`)
+3. Then use it
+
+**This ensures:**
+- All operations are audited
+- Deployment orchestration is respected
+- State remains consistent
+- We have a single source of truth for operations
+
+**Examples of CORRECT usage:**
+```bash
+# Deploy agent
+ciris-manager-client agent deploy datum --version 1.5.1 --strategy docker
+
+# List agents
+ciris-manager-client agent list
+
+# Check deployment status
+ciris-manager-client deployment status
+```
+
+**Examples of INCORRECT usage:**
+```bash
+# ❌ WRONG - bypasses manager
+docker restart ciris-datum
+
+# ❌ WRONG - bypasses client
+curl http://localhost:8888/manager/v1/agents
+
+# ❌ WRONG - manual container manipulation
+cd /opt/ciris/agents/datum && docker-compose up -d
+```
+
 ## Essential Commands
 
 ### Development Setup
@@ -364,6 +406,21 @@ ssh -i ~/.ssh/ciris_deploy root@207.148.14.113
 # - Hosts agent containers managed remotely by main CIRISManager
 # - Docker API exposed on VPC IP:2376 with TLS
 # - Cloudflare routes scoutapi.ciris.ai traffic directly here (not via main)
+```
+
+**Scout2 Server:**
+```bash
+ssh -i ~/.ssh/ciris_deploy root@104.207.141.1
+
+# Second independent container host for additional agent capacity
+# Public IP: 104.207.141.1
+# User: root
+# Key: ~/.ssh/ciris_deploy
+
+# Architecture:
+# - Additional agent hosting capacity
+# - Managed remotely by main CIRISManager
+# - Docker API exposed for remote management
 ```
 
 ### Agent API Authentication

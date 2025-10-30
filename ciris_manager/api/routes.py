@@ -2260,13 +2260,18 @@ def create_routes(manager: Any) -> APIRouter:
         message = request.get("message", "Single agent test deployment")
         strategy = request.get("strategy", "immediate")
         metadata = request.get("metadata", {})
+        occurrence_id = request.get("occurrence_id")
+        server_id = request.get("server_id")
 
         if not agent_id:
             raise HTTPException(status_code=400, detail="agent_id is required")
         if not agent_image:
             raise HTTPException(status_code=400, detail="agent_image is required")
 
-        # Get the specific agent
+        # Validate the agent exists using composite key resolution
+        resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+
+        # Get the discovered agent info
         from ciris_manager.docker_discovery import DockerAgentDiscovery
 
         discovery = DockerAgentDiscovery(
@@ -2274,7 +2279,17 @@ def create_routes(manager: Any) -> APIRouter:
         )
         agents = discovery.discover_agents()
 
-        target_agent = next((a for a in agents if a.agent_id == agent_id), None)
+        # Match by agent_id, occurrence_id, and server_id
+        target_agent = next(
+            (
+                a
+                for a in agents
+                if a.agent_id == agent_id
+                and (occurrence_id is None or a.occurrence_id == occurrence_id)
+                and (server_id is None or a.server_id == server_id)
+            ),
+            None,
+        )
         if not target_agent:
             raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 

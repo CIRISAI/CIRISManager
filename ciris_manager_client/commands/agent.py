@@ -610,12 +610,17 @@ class AgentCommands:
                 print(f"Strategy: {strategy}")
                 print(f"Message: {message}")
 
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
+
             result = ctx.client.deploy_single_agent(
                 agent_id=agent_id,
                 agent_image=agent_image,
                 message=message,
                 strategy=strategy,
                 metadata={"source": "cli"},
+                occurrence_id=occurrence_id,
+                server_id=server_id,
             )
 
             if not ctx.quiet:
