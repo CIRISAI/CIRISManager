@@ -311,6 +311,8 @@ class TestSingleAgentDeployment:
         # Note: Need to override the side_effect, not just return_value
         mock_container = MagicMock()
         mock_container.image.tags = ["ghcr.io/cirisai/ciris-agent:v1.4.2"]
+        mock_container.status = "running"
+        mock_container.reload = Mock()  # Mock the reload() method
         main_client.containers.get = Mock(return_value=mock_container)
 
         # Test same version
