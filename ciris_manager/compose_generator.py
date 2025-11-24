@@ -69,6 +69,7 @@ class ComposeGenerator:
         # Base environment
         base_env = {
             "CIRIS_AGENT_ID": agent_id,
+            "CIRIS_MANAGED": "true",
             "CIRIS_TEMPLATE": template,
             "CIRIS_API_HOST": "0.0.0.0",
             "CIRIS_API_PORT": "8080",
