@@ -3474,6 +3474,38 @@ class DeploymentOrchestrator:
                     logger.error(f"Docker compose file not found: {compose_file}")
                     return False
 
+                # If new_image is provided, update the docker-compose.yml with the new image tag
+                if new_image:
+                    try:
+                        import yaml
+
+                        with open(compose_file, "r") as f:
+                            compose_config = yaml.safe_load(f)
+
+                        # Update the image for the agent service
+                        if "services" in compose_config:
+                            for service_name, service_config in compose_config["services"].items():
+                                if "image" in service_config:
+                                    old_image = service_config["image"]
+                                    service_config["image"] = new_image
+                                    logger.info(
+                                        f"Updated docker-compose.yml image: {old_image} -> {new_image}"
+                                    )
+
+                        # Write the updated compose file
+                        with open(compose_file, "w") as f:
+                            yaml.dump(
+                                compose_config,
+                                f,
+                                default_flow_style=False,
+                                sort_keys=False,
+                                width=120,
+                            )
+                        logger.info(f"Saved updated docker-compose.yml for agent {agent_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to update docker-compose.yml with new image: {e}")
+                        return False
+
                 # Run docker-compose up -d with --pull always to use the newly pulled image
                 logger.info(f"Starting new container for agent {agent_id}...")
                 result = await asyncio.create_subprocess_exec(
