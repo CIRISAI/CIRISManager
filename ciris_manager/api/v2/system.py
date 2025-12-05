@@ -30,7 +30,9 @@ async def health_check() -> SystemHealth:
 
         client = docker.from_env()
         docker_available = True
-        agents_count = len([c for c in client.containers.list() if "ciris-agent" in c.name])
+        agents_count = len(
+            [c for c in client.containers.list() if c.name and "ciris-agent" in c.name]
+        )
     except Exception:
         docker_available = False
         agents_count = 0
@@ -128,7 +130,7 @@ async def system_metrics(_user: Dict[str, str] = Depends(get_current_user)) -> D
 
         client = docker.from_env()
         for container in client.containers.list(all=True):
-            if "ciris-agent" in container.name:
+            if container.name and "ciris-agent" in container.name:
                 if container.status == "running":
                     metrics["agents"]["running"] += 1
                 else:

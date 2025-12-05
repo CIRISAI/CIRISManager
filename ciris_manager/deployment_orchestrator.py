@@ -3398,7 +3398,8 @@ class DeploymentOrchestrator:
                     for env in env_vars:
                         if env.startswith(f"CIRIS_AGENT_ID={agent_id}"):
                             # Found it! Use the actual container name
-                            container_name = container.name
+                            if container.name:
+                                container_name = container.name
                             logger.info(
                                 f"Found actual container name for {agent_id} on {server_id}: {container_name}"
                             )

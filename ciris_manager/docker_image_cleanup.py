@@ -41,7 +41,8 @@ class DockerImageCleanup:
             for container in containers:
                 # Add both image ID and tags
                 if container.image:
-                    running_images.add(container.image.id)
+                    if container.image.id:
+                        running_images.add(container.image.id)
                     for tag in container.image.tags:
                         running_images.add(tag)
 
