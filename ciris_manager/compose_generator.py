@@ -43,6 +43,7 @@ class ComposeGenerator:
         database_url: Optional[str] = None,
         database_ssl_cert_path: Optional[str] = None,
         agent_occurrence_id: Optional[str] = None,
+        oauth_callback_hostname: str = "agents.ciris.ai",
     ) -> Dict[str, Any]:
         """
         Generate docker-compose configuration for an agent.
@@ -62,6 +63,7 @@ class ComposeGenerator:
             database_url: PostgreSQL database URL
             database_ssl_cert_path: Path to SSL certificate for database connection
             agent_occurrence_id: Unique occurrence ID for database isolation
+            oauth_callback_hostname: Hostname for OAuth callbacks (default: agents.ciris.ai)
 
         Returns:
             Docker compose configuration dict
@@ -73,8 +75,8 @@ class ComposeGenerator:
             "CIRIS_TEMPLATE": template,
             "CIRIS_API_HOST": "0.0.0.0",
             "CIRIS_API_PORT": "8080",
-            # OAuth configuration for agent authentication
-            "OAUTH_CALLBACK_BASE_URL": "https://agents.ciris.ai",
+            # OAuth configuration for agent authentication - use server hostname
+            "OAUTH_CALLBACK_BASE_URL": f"https://{oauth_callback_hostname}",
         }
 
         if use_mock_llm:

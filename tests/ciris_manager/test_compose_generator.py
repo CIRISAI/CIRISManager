@@ -335,3 +335,31 @@ class TestComposeGenerator:
         assert env["CIRIS_BILLING_ENABLED"] == "true"
         # But no API key should be present
         assert "CIRIS_BILLING_API_KEY" not in env
+
+    def test_generate_compose_custom_oauth_hostname(self, generator, temp_agent_dir):
+        """Test compose generation with custom OAuth callback hostname."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            oauth_callback_hostname="scoutapilb.ciris.ai",
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        assert env["OAUTH_CALLBACK_BASE_URL"] == "https://scoutapilb.ciris.ai"
+
+    def test_generate_compose_default_oauth_hostname(self, generator, temp_agent_dir):
+        """Test compose generation with default OAuth callback hostname."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            # No oauth_callback_hostname specified - should use default
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        assert env["OAUTH_CALLBACK_BASE_URL"] == "https://agents.ciris.ai"

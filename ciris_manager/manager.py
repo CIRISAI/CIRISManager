@@ -429,6 +429,7 @@ class CIRISManager:
             database_url=database_url,
             database_ssl_cert_path=database_ssl_cert_path,
             agent_occurrence_id=agent_occurrence_id,
+            oauth_callback_hostname=server_config.hostname,
         )
 
         # Write compose file
