@@ -368,7 +368,9 @@ class CIRISManagerClient:
         response = self._request("POST", "/manager/v1/updates/cancel", json=payload)
         return response.json()
 
-    def get_deployment_status(self, deployment_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_deployment_status(
+        self, deployment_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Get deployment status.
 
@@ -376,12 +378,23 @@ class CIRISManagerClient:
             deployment_id: Optional deployment ID. If not provided, returns current/latest deployment.
 
         Returns:
-            Deployment status information
+            Deployment status information, or None if no active deployment
         """
         endpoint = "/manager/v1/updates/status"
         if deployment_id:
             endpoint = f"{endpoint}?deployment_id={quote(deployment_id, safe='')}"
         response = self._request("GET", endpoint)
+        result = response.json()
+        return result if result is not None else None
+
+    def get_pending_deployments(self) -> Dict[str, Any]:
+        """
+        Get all pending/staged deployments.
+
+        Returns:
+            Dict with 'deployments' list, 'latest_tag' info, and 'total_pending' count
+        """
+        response = self._request("GET", "/manager/v1/updates/pending/all")
         return response.json()
 
     # Utility Methods

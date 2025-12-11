@@ -37,45 +37,64 @@ class DeploymentCommands:
         try:
             deployment_id = getattr(args, "deployment_id", None)
 
-            if not ctx.quiet:
-                if deployment_id:
+            if deployment_id:
+                # Specific deployment requested
+                if not ctx.quiet:
                     print(f"Fetching status for deployment {deployment_id}...")
-                else:
-                    print("Fetching current deployment status...")
-
-            status = ctx.client.get_deployment_status(deployment_id)
-
-            # Format output
-            if ctx.output_format == "json":
-                import json
-
-                print(json.dumps(status, indent=2))
-            elif ctx.output_format == "yaml":
-                import yaml
-
-                print(yaml.dump(status, default_flow_style=False))
+                status = ctx.client.get_deployment_status(deployment_id)
+                if not status:
+                    print(f"Deployment {deployment_id} not found", file=sys.stderr)
+                    return EXIT_NOT_FOUND
+                return DeploymentCommands._print_deployment_status(ctx, status)
             else:
+                # Show all pending deployments
+                if not ctx.quiet:
+                    print("Fetching deployment status...")
+
+                pending = ctx.client.get_pending_deployments()
+
+                # Format output
+                if ctx.output_format == "json":
+                    import json
+
+                    print(json.dumps(pending, indent=2))
+                    return EXIT_SUCCESS
+                elif ctx.output_format == "yaml":
+                    import yaml
+
+                    print(yaml.dump(pending, default_flow_style=False))
+                    return EXIT_SUCCESS
+
                 # Table format
-                print("\n=== Deployment Status ===")
-                print(f"Deployment ID: {status.get('deployment_id', 'N/A')}")
-                print(f"Status: {status.get('status', 'N/A')}")
-                print(f"Strategy: {status.get('strategy', 'N/A')}")
-                print(f"Message: {status.get('message', 'N/A')}")
-                print("\nProgress:")
-                print(f"  Total Agents: {status.get('agents_total', 0)}")
-                print(f"  Updated: {status.get('agents_updated', 0)}")
-                print(f"  Failed: {status.get('agents_failed', 0)}")
-                print(f"  Pending: {status.get('agents_pending', 0)}")
+                deployments = pending.get("deployments", [])
+                total = pending.get("total_pending", 0)
+                latest_tag = pending.get("latest_tag", {})
 
-                if status.get("current_phase"):
-                    print(f"\nCurrent Phase: {status['current_phase']}")
+                if total == 0:
+                    print("\n=== Deployment Status ===")
+                    print("No pending deployments")
+                    if latest_tag.get("local_image_id"):
+                        print(f"\nCurrent 'latest' image: {latest_tag['local_image_id']}")
+                    return EXIT_SUCCESS
 
-                if status.get("staged_at"):
-                    print(f"\nStaged At: {status['staged_at']}")
-                if status.get("updated_at"):
-                    print(f"Updated At: {status['updated_at']}")
+                print(f"\n=== Pending Deployments ({total}) ===\n")
 
-            return EXIT_SUCCESS
+                for dep in deployments:
+                    print(f"Deployment ID: {dep.get('deployment_id', 'N/A')}")
+                    print(f"  Version: {dep.get('version', 'N/A')}")
+                    print(f"  Status: {dep.get('status', 'N/A')}")
+                    print(f"  Strategy: {dep.get('strategy', 'N/A')}")
+                    print(f"  Staged At: {dep.get('staged_at', 'N/A')}")
+                    print(f"  Affected Agents: {dep.get('affected_agents', 0)}")
+                    print(f"  Message: {dep.get('message', 'N/A')}")
+                    if dep.get("commit_sha"):
+                        print(f"  Commit: {dep['commit_sha'][:8]}")
+                    print()
+
+                if latest_tag.get("local_image_id"):
+                    print(f"Current 'latest' image: {latest_tag['local_image_id']}")
+
+                return EXIT_SUCCESS
 
         except AuthenticationError as e:
             print(f"Authentication error: {e}", file=sys.stderr)
@@ -90,6 +109,39 @@ class DeploymentCommands:
 
                 traceback.print_exc()
             return EXIT_ERROR
+
+    @staticmethod
+    def _print_deployment_status(ctx: CommandContext, status: dict) -> int:
+        """Print a single deployment status."""
+        if ctx.output_format == "json":
+            import json
+
+            print(json.dumps(status, indent=2))
+        elif ctx.output_format == "yaml":
+            import yaml
+
+            print(yaml.dump(status, default_flow_style=False))
+        else:
+            print("\n=== Deployment Status ===")
+            print(f"Deployment ID: {status.get('deployment_id', 'N/A')}")
+            print(f"Status: {status.get('status', 'N/A')}")
+            print(f"Strategy: {status.get('strategy', 'N/A')}")
+            print(f"Message: {status.get('message', 'N/A')}")
+            print("\nProgress:")
+            print(f"  Total Agents: {status.get('agents_total', 0)}")
+            print(f"  Updated: {status.get('agents_updated', 0)}")
+            print(f"  Failed: {status.get('agents_failed', 0)}")
+            print(f"  Pending: {status.get('agents_pending', 0)}")
+
+            if status.get("current_phase"):
+                print(f"\nCurrent Phase: {status['current_phase']}")
+
+            if status.get("staged_at"):
+                print(f"\nStaged At: {status['staged_at']}")
+            if status.get("updated_at"):
+                print(f"Updated At: {status['updated_at']}")
+
+        return EXIT_SUCCESS
 
     @staticmethod
     def cancel(ctx: CommandContext, args: Namespace) -> int:
