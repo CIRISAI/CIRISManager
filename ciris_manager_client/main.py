@@ -11,7 +11,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Optional, cast
+from typing import Any, Dict, Optional, cast
 
 from ciris_manager_sdk import CIRISManagerClient, AuthenticationError, APIError
 
@@ -78,17 +78,35 @@ def load_token() -> Optional[str]:
 
     Tries in order:
     1. CIRIS_MANAGER_TOKEN environment variable
-    2. ~/.manager_token file
+    2. ~/.config/ciris-manager/token.json (device flow token)
+    3. ~/.manager_token file (legacy)
 
     Returns:
         Token string if found, None otherwise
     """
+    import json
+    from datetime import datetime
+
     # Try environment variable first
     token = os.environ.get("CIRIS_MANAGER_TOKEN")
     if token:
         return token
 
-    # Try token file
+    # Try device flow token file
+    device_token_file = Path.home() / ".config" / "ciris-manager" / "token.json"
+    if device_token_file.exists():
+        try:
+            with open(device_token_file) as f:
+                data: Dict[str, Any] = json.load(f)
+            # Check expiry
+            expires_at = datetime.fromisoformat(data["expires_at"])
+            if datetime.utcnow() < expires_at:
+                token_value = data.get("token")
+                return cast(Optional[str], token_value)
+        except Exception:
+            pass
+
+    # Try legacy token file
     token_file = Path.home() / ".manager_token"
     if token_file.exists():
         try:
@@ -297,6 +315,29 @@ def setup_deployment_parser(subparsers):
     )
 
 
+def setup_auth_parser(subparsers):
+    """Set up auth command subparser."""
+    auth_parser = subparsers.add_parser(
+        "auth",
+        help="Authentication management",
+        description="Manage CLI authentication with CIRIS Manager",
+    )
+    auth_subparsers = auth_parser.add_subparsers(dest="auth_command", help="Auth commands")
+
+    # auth login
+    login_parser = auth_subparsers.add_parser("login", help="Login with Google OAuth")
+    login_parser.add_argument("email", nargs="?", help="Your @ciris.ai email address")
+
+    # auth logout
+    auth_subparsers.add_parser("logout", help="Remove saved credentials")
+
+    # auth status
+    auth_subparsers.add_parser("status", help="Show authentication status")
+
+    # auth token
+    auth_subparsers.add_parser("token", help="Print current token (for scripting)")
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser."""
     parser = argparse.ArgumentParser(
@@ -361,6 +402,7 @@ Token File:
     setup_config_parser(subparsers)
     setup_inspect_parser(subparsers)
     setup_deployment_parser(subparsers)
+    setup_auth_parser(subparsers)
 
     return parser
 
@@ -436,6 +478,19 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
                 )
                 return EXIT_INVALID_ARGS
 
+        elif args.command == "auth":
+            # Auth command is handled specially - doesn't need existing token
+            from ciris_manager.auth_cli import handle_auth_command
+
+            if not args.auth_command:
+                print("Error: No auth subcommand specified", file=sys.stderr)
+                print("Available commands: login, logout, status, token", file=sys.stderr)
+                return EXIT_INVALID_ARGS
+
+            # Create a namespace with base_url for auth handler
+            args.base_url = ctx.client.base_url if ctx.client else get_api_url()
+            return handle_auth_command(args)
+
         else:
             print(f"Error: Unknown command: {args.command}", file=sys.stderr)
             return EXIT_INVALID_ARGS
@@ -472,10 +527,23 @@ def main() -> int:
     token = args.token or load_token()
     api_url = args.api_url or get_api_url()
 
+    # Auth command doesn't require existing token
+    if args.command == "auth":
+        from ciris_manager.auth_cli import handle_auth_command
+
+        if not args.auth_command:
+            print("Error: No auth subcommand specified", file=sys.stderr)
+            print("Available commands: login, logout, status, token", file=sys.stderr)
+            return EXIT_INVALID_ARGS
+
+        args.base_url = api_url
+        return handle_auth_command(args)
+
     if not token:
         print(
             "Error: No authentication token found.\n"
-            "Please set CIRIS_MANAGER_TOKEN environment variable or create ~/.manager_token file.",
+            "Run 'ciris-manager-client auth login your-email@ciris.ai' to authenticate,\n"
+            "or set CIRIS_MANAGER_TOKEN environment variable.",
             file=sys.stderr,
         )
         return EXIT_AUTH_ERROR
