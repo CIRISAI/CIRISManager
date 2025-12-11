@@ -104,7 +104,7 @@ def create_device_auth_routes() -> APIRouter:
         else:
             base_url = "https://agents.ciris.ai"
 
-        verification_uri = f"{base_url}/manager/device"
+        verification_uri = f"{base_url}/manager/v1/device"
 
         return DeviceCodeResponse(
             device_code=device_code,
