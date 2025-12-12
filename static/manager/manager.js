@@ -2674,92 +2674,70 @@ function hideAgentSettingsModal() {
     modal.classList.add('hidden');
 }
 
-// Reload Discord Adapter for the current agent
-async function reloadDiscordAdapter(buttonElement) {
+// Reload an adapter for the current agent using Manager proxy
+async function reloadAdapter(adapterId, buttonElement) {
     const agentId = document.getElementById('settings-agent-id').textContent;
-    
+
     if (!agentId) {
         showError('No agent selected');
         return;
     }
-    
-    // Get the agent's port from the global agents data
-    const agent = agents.find(a => a.agent_id === agentId);
-    if (!agent || !agent.api_port) {
-        showError('Cannot find agent port');
-        return;
-    }
-    
+
     // Get button reference
     const button = buttonElement || event.target;
-    
+
     try {
         // Show loading state
         const originalHTML = button.innerHTML;
         button.disabled = true;
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Reloading...';
-        
+
         // First, save any pending changes
         await saveAgentSettings(new Event('submit'), true); // true = silent save
-        
+
         // Wait a moment for settings to apply
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Get auth token from the agent
-        const loginResponse = await fetch(`/api/${agentId}/auth/login`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                username: 'admin',
-                password: 'ciris_admin_password'
-            })
-        });
-        
-        if (!loginResponse.ok) {
-            throw new Error('Failed to authenticate with agent');
-        }
-        
-        const authData = await loginResponse.json();
-        const token = authData.access_token;
-        
-        // Reload the Discord adapter
-        const reloadResponse = await fetch(`/api/${agentId}/system/adapters/discord/reload`, {
+
+        // Use Manager proxy endpoint - Manager handles authentication
+        const reloadResponse = await fetch(`/manager/v1/agents/${agentId}/adapters/${adapterId}/reload`, {
             method: 'PUT',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 auto_start: true
             })
         });
-        
+
         if (!reloadResponse.ok) {
             const errorData = await reloadResponse.json();
-            throw new Error(errorData.detail || 'Failed to reload Discord adapter');
+            throw new Error(errorData.detail || `Failed to reload ${adapterId} adapter`);
         }
-        
+
         const result = await reloadResponse.json();
-        
+
         // Restore button
         button.disabled = false;
         button.innerHTML = originalHTML;
-        
-        showSuccess(`Discord adapter reloaded successfully${result.message ? ': ' + result.message : ''}`);
-        
+
+        showSuccess(`${adapterId} adapter reloaded successfully${result.message ? ': ' + result.message : ''}`);
+
     } catch (error) {
-        console.error('Error reloading Discord adapter:', error);
-        
+        console.error(`Error reloading ${adapterId} adapter:`, error);
+
         // Restore button on error
         if (button) {
             button.disabled = false;
-            button.innerHTML = '<i class="fas fa-sync"></i> Reload Discord Adapter';
+            button.innerHTML = `<i class="fas fa-sync"></i> Reload ${adapterId} Adapter`;
         }
-        
-        showError('Failed to reload Discord adapter: ' + error.message);
+
+        showError(`Failed to reload ${adapterId} adapter: ` + error.message);
     }
+}
+
+// Backward compatibility wrapper for Discord adapter reload
+async function reloadDiscordAdapter(buttonElement) {
+    return reloadAdapter('discord', buttonElement);
 }
 
 // Add environment variable row to settings modal
