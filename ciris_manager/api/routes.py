@@ -5,7 +5,7 @@ Provides endpoints for agent creation, discovery, and management.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Header, Response, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List, Union
 import asyncio
@@ -765,6 +765,50 @@ def create_routes(manager: Any) -> APIRouter:
                 status_code=500,
                 detail=f"Failed to delete agent {agent_id}. Check logs for details.",
             )
+
+    @router.get("/agents/{agent_id}/logs")
+    async def get_agent_logs(
+        agent_id: str,
+        lines: int = 100,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        _user: dict = auth_dependency,
+    ) -> PlainTextResponse:
+        """
+        Get container logs for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            lines: Number of log lines to return (default 100)
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server deployments
+        """
+        try:
+            # Resolve the agent
+            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+
+            # Get container name
+            container_name = f"ciris-agent-{agent_id}"
+
+            # Get the correct Docker client for this agent's server
+            client = manager.docker_client.get_client(agent.server_id)
+
+            try:
+                container = client.containers.get(container_name)
+                logs = container.logs(tail=lines, timestamps=True).decode("utf-8")
+                return PlainTextResponse(content=logs)
+            except Exception as e:
+                logger.warning(f"Failed to get logs for container {container_name}: {e}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Container {container_name} not found or logs unavailable",
+                )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting logs for agent {agent_id}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
     @router.post("/agents/{agent_id}/start")
     async def start_agent(
