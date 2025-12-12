@@ -123,10 +123,10 @@ class LogShipper:
         request_id: Optional[str] = None,
         trace_id: Optional[str] = None,
         user_id: Optional[str] = None,
-        **attributes,
-    ):
+        **attributes: object,
+    ) -> None:
         """Add a log entry to the buffer."""
-        entry = {
+        entry: dict[str, object] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": level,
             "message": message,
@@ -286,11 +286,11 @@ class LogShipperHandler(logging.Handler):
         super().__init__(level=min_level)
         self.shipper = shipper
 
-    def emit(self, record: logging.LogRecord):
+    def emit(self, record: logging.LogRecord) -> None:
         """Emit a log record."""
         try:
             # Extract extra attributes
-            attributes = {}
+            attributes: dict[str, object] = {}
             for key, value in record.__dict__.items():
                 if key not in (
                     "name",
@@ -326,20 +326,20 @@ class LogShipperHandler(logging.Handler):
                         except (TypeError, ValueError):
                             pass
 
-            # Extract special fields from attributes
-            event = attributes.pop("event", None)
-            request_id = attributes.pop("request_id", None)
-            trace_id = attributes.pop("trace_id", None)
-            user_id = attributes.pop("user_id", None)
+            # Extract special fields from attributes (cast to str if present)
+            event_val = attributes.pop("event", None)
+            request_id_val = attributes.pop("request_id", None)
+            trace_id_val = attributes.pop("trace_id", None)
+            user_id_val = attributes.pop("user_id", None)
 
             self.shipper._log(
                 level=record.levelname,
                 message=self.format(record),
-                event=event,
+                event=str(event_val) if event_val is not None else None,
                 logger_name=record.name,
-                request_id=request_id,
-                trace_id=trace_id,
-                user_id=user_id,
+                request_id=str(request_id_val) if request_id_val is not None else None,
+                trace_id=str(trace_id_val) if trace_id_val is not None else None,
+                user_id=str(user_id_val) if user_id_val is not None else None,
                 **attributes,
             )
 
