@@ -843,12 +843,14 @@ def create_routes(manager: Any) -> APIRouter:
             )
 
         try:
-            agent_info = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
-            container_name = agent_info.container_name
-            resolved_server_id = agent_info.server_id
+            # Resolve the agent
+            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+
+            # Get container name (same pattern as other endpoints)
+            container_name = f"ciris-{agent_id}"
 
             # Get Docker client for the appropriate server
-            client = manager.docker_client.get_client(resolved_server_id)
+            client = manager.docker_client.get_client(agent.server_id)
 
             try:
                 container = client.containers.get(container_name)
@@ -864,6 +866,8 @@ def create_routes(manager: Any) -> APIRouter:
                     )
                 content = output.decode("utf-8") if isinstance(output, bytes) else output
                 return PlainTextResponse(content=content)
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.warning(
                     f"Failed to get log file {filename} for container {container_name}: {e}"

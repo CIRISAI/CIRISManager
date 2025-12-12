@@ -94,9 +94,9 @@ class CIRISManagerClient:
         if not endpoint.startswith("/"):
             raise ValueError("Endpoint must start with /")
 
-        # Allow only safe characters in endpoint: alphanumeric, -, _, /, {}, ?, =, &
-        # The {} is for path parameters, ?=& for query strings
-        if not re.match(r"^/[a-zA-Z0-9/_\-{}?=&%]+$", endpoint):
+        # Allow only safe characters in endpoint: alphanumeric, -, _, /, {}, ?, =, &, .
+        # The {} is for path parameters, ?=& for query strings, . for filenames
+        if not re.match(r"^/[a-zA-Z0-9/_\-{}?=&%.]+$", endpoint):
             raise ValueError("Invalid endpoint format")
 
         url = f"{self.base_url}{endpoint}"
