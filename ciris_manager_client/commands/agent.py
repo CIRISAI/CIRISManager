@@ -5,8 +5,10 @@ This module provides commands for managing CIRIS agents including
 creation, deletion, lifecycle operations, and monitoring.
 """
 
+import os
 import sys
 from argparse import Namespace
+from datetime import datetime
 from typing import Dict, Any
 
 from ciris_manager_sdk import APIError, AuthenticationError
@@ -739,6 +741,207 @@ class AgentCommands:
             return EXIT_API_ERROR
         except Exception as e:
             print(f"Error fetching version info: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
+    def maintenance(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Get or set maintenance mode for an agent.
+
+        When maintenance mode is enabled:
+        - Container manager will not automatically restart the agent
+        - Deployments will skip this agent
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments (agent_id, enable, disable)
+
+        Returns:
+            Exit code
+        """
+        try:
+            agent_id = args.agent_id
+            enable = getattr(args, "enable", False)
+            disable = getattr(args, "disable", False)
+
+            # If neither --enable nor --disable, just show current status
+            if not enable and not disable:
+                if not ctx.quiet:
+                    print(f"Fetching maintenance status for agent '{agent_id}'...")
+
+                result = ctx.client.get_maintenance_status(agent_id)
+
+                # Format output
+                status = result.get("maintenance_mode", "unknown")
+                do_not_autostart = result.get("do_not_autostart", False)
+
+                if ctx.output_format == "table":
+                    print(f"Agent: {agent_id}")
+                    print(f"Maintenance Mode: {status}")
+                    print(f"do_not_autostart: {do_not_autostart}")
+                else:
+                    output = formatter.format_output(result, ctx.output_format)
+                    print(output)
+
+                return EXIT_SUCCESS
+
+            # Set maintenance mode
+            enable_value = enable if enable else not disable
+
+            if not ctx.quiet:
+                action = "Enabling" if enable_value else "Disabling"
+                print(f"{action} maintenance mode for agent '{agent_id}'...")
+
+            result = ctx.client.set_maintenance_mode(agent_id, enable=enable_value)
+
+            if not ctx.quiet:
+                status = "enabled" if enable_value else "disabled"
+                print(f"Maintenance mode {status} for agent '{agent_id}'")
+
+            if ctx.verbose or ctx.output_format != "table":
+                output = formatter.format_output(result, ctx.output_format)
+                print(output)
+
+            return EXIT_SUCCESS
+
+        except AuthenticationError as e:
+            print(f"Authentication error: {e}", file=sys.stderr)
+            return EXIT_AUTH_ERROR
+        except APIError as e:
+            if e.status_code == 404:
+                print(f"Agent '{args.agent_id}' not found", file=sys.stderr)
+                return EXIT_NOT_FOUND
+            print(f"API error: {e}", file=sys.stderr)
+            return EXIT_API_ERROR
+        except Exception as e:
+            print(f"Error managing maintenance mode: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
+    def pull_logs(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Pull log files from all agents.
+
+        Downloads latest.log and incidents_latest.log from each running agent
+        and saves them to a local directory.
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments (output_dir, agent_id)
+
+        Returns:
+            Exit code
+        """
+        try:
+            # Determine output directory
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_dir = getattr(args, "output_dir", None) or f"/tmp/agent_logs_{timestamp}"
+
+            # Get list of agents to pull logs from
+            target_agent_id = getattr(args, "agent_id", None)
+
+            if target_agent_id:
+                # Single agent mode
+                agents = [ctx.client.get_agent(target_agent_id)]
+                if not ctx.quiet:
+                    print(f"Pulling logs for agent: {target_agent_id}")
+            else:
+                # All agents mode
+                agents = ctx.client.list_agents()
+                if not ctx.quiet:
+                    print(f"Found {len(agents)} agents")
+
+            # Filter to only running agents
+            running_agents = [a for a in agents if a.get("status") == "running"]
+            if not running_agents:
+                print("No running agents found", file=sys.stderr)
+                return EXIT_SUCCESS
+
+            if not ctx.quiet:
+                print(f"Pulling logs from {len(running_agents)} running agents...")
+                print(f"Output directory: {base_dir}")
+
+            # Create base directory
+            os.makedirs(base_dir, exist_ok=True)
+
+            success_count = 0
+            error_count = 0
+
+            for agent in running_agents:
+                agent_id = agent.get("agent_id")
+                server_id = agent.get("server_id", "main")
+                occurrence_id = agent.get("occurrence_id")
+
+                # Build unique directory name
+                if occurrence_id:
+                    dir_name = f"{agent_id}_{occurrence_id}_{server_id}"
+                else:
+                    dir_name = f"{agent_id}_{server_id}"
+
+                agent_dir = os.path.join(base_dir, dir_name)
+                os.makedirs(agent_dir, exist_ok=True)
+
+                if not ctx.quiet:
+                    print(f"  Fetching logs for {agent_id} ({server_id})...", end=" ")
+
+                # Fetch both log files
+                files_saved = 0
+                for filename in ["latest.log", "incidents_latest.log"]:
+                    try:
+                        content = ctx.client.get_agent_log_file(
+                            agent_id,
+                            filename=filename,
+                            occurrence_id=occurrence_id,
+                            server_id=server_id,
+                        )
+
+                        # Save to file
+                        filepath = os.path.join(agent_dir, filename)
+                        with open(filepath, "w") as f:
+                            f.write(content)
+                        files_saved += 1
+
+                    except APIError as e:
+                        if ctx.verbose:
+                            print(
+                                f"\n    Warning: Could not fetch {filename}: {e}", file=sys.stderr
+                            )
+                    except Exception as e:
+                        if ctx.verbose:
+                            print(f"\n    Warning: Error fetching {filename}: {e}", file=sys.stderr)
+
+                if files_saved > 0:
+                    success_count += 1
+                    if not ctx.quiet:
+                        print(f"saved {files_saved} file(s)")
+                else:
+                    error_count += 1
+                    if not ctx.quiet:
+                        print("failed")
+
+            # Summary
+            if not ctx.quiet:
+                print(f"\nCompleted: {success_count} agents succeeded, {error_count} failed")
+                print(f"Logs saved to: {base_dir}")
+
+            return EXIT_SUCCESS if error_count == 0 else EXIT_ERROR
+
+        except AuthenticationError as e:
+            print(f"Authentication error: {e}", file=sys.stderr)
+            return EXIT_AUTH_ERROR
+        except APIError as e:
+            print(f"API error: {e}", file=sys.stderr)
+            return EXIT_API_ERROR
+        except Exception as e:
+            print(f"Error pulling logs: {e}", file=sys.stderr)
             if ctx.verbose:
                 import traceback
 

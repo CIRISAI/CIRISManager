@@ -248,6 +248,42 @@ class CIRISManagerClient:
         )
         return response.text
 
+    def get_agent_log_file(
+        self,
+        agent_id: str,
+        filename: str = "latest.log",
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> str:
+        """
+        Get a specific log file from an agent container.
+
+        Args:
+            agent_id: Agent identifier
+            filename: Log filename - 'latest.log' or 'incidents_latest.log'
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
+
+        Returns:
+            Full contents of the log file as string
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_filename = quote(filename, safe="")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/logs/file/{safe_filename}",
+            params=params if params else None,
+        )
+        return response.text
+
     # Template Management
 
     def list_templates(self) -> List[str]:
@@ -430,6 +466,44 @@ class CIRISManagerClient:
             Dict with 'deployments' list, 'latest_tag' info, and 'total_pending' count
         """
         response = self._request("GET", "/manager/v1/updates/pending/all")
+        return response.json()
+
+    # Maintenance Mode
+
+    def get_maintenance_status(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Get maintenance mode status for an agent.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with agent_id, do_not_autostart, and maintenance_mode fields
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/maintenance")
+        return response.json()
+
+    def set_maintenance_mode(self, agent_id: str, enable: bool = True) -> Dict[str, Any]:
+        """
+        Enable or disable maintenance mode for an agent.
+
+        When maintenance mode is enabled, the container manager will not
+        automatically restart the agent if it crashes or stops, and
+        deployments will skip this agent.
+
+        Args:
+            agent_id: Agent identifier
+            enable: True to enable maintenance mode, False to disable
+
+        Returns:
+            Dict with status, agent_id, do_not_autostart, and message
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        payload = {"do_not_autostart": enable}
+        response = self._request("POST", f"/manager/v1/agents/{safe_id}/maintenance", json=payload)
         return response.json()
 
     # Utility Methods

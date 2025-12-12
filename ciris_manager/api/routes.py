@@ -810,6 +810,75 @@ def create_routes(manager: Any) -> APIRouter:
             logger.error(f"Error getting logs for agent {agent_id}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
+    @router.get("/agents/{agent_id}/logs/file/{filename}")
+    async def get_agent_log_file(
+        agent_id: str,
+        filename: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        _user: dict = auth_dependency,
+    ) -> PlainTextResponse:
+        """
+        Get a specific log file from an agent container.
+
+        Supported filenames:
+        - latest.log: Current application log
+        - incidents_latest.log: Current incidents log
+
+        Args:
+            agent_id: Agent identifier
+            filename: Log filename (latest.log or incidents_latest.log)
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
+
+        Returns:
+            PlainTextResponse with log file contents
+        """
+        # Validate filename to prevent path traversal
+        allowed_files = ["latest.log", "incidents_latest.log"]
+        if filename not in allowed_files:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid filename. Allowed: {allowed_files}",
+            )
+
+        try:
+            agent_info = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+            container_name = agent_info.container_name
+            resolved_server_id = agent_info.server_id
+
+            # Get Docker client for the appropriate server
+            client = manager.docker_client.get_client(resolved_server_id)
+
+            try:
+                container = client.containers.get(container_name)
+                # Use docker exec to cat the log file
+                exit_code, output = container.exec_run(
+                    f"cat /app/logs/{filename}",
+                    demux=False,
+                )
+                if exit_code != 0:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Log file {filename} not found in container {container_name}",
+                    )
+                content = output.decode("utf-8") if isinstance(output, bytes) else output
+                return PlainTextResponse(content=content)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get log file {filename} for container {container_name}: {e}"
+                )
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Container {container_name} not found or log file unavailable: {e}",
+                )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting log file for agent {agent_id}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     @router.post("/agents/{agent_id}/start")
     async def start_agent(
         agent_id: str,

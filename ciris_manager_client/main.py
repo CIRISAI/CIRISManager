@@ -217,6 +217,31 @@ def setup_agent_parser(subparsers):
         help="Server ID for multi-server agents (e.g., 'main', 'scout', 'scout2')",
     )
 
+    # agent maintenance
+    maintenance_parser = agent_subparsers.add_parser(
+        "maintenance", help="Get or set maintenance mode for an agent"
+    )
+    maintenance_parser.add_argument("agent_id", help="Agent ID")
+    maintenance_parser.add_argument(
+        "--enable",
+        action="store_true",
+        help="Enable maintenance mode (skip deployments and auto-restart)",
+    )
+    maintenance_parser.add_argument(
+        "--disable", action="store_true", help="Disable maintenance mode (resume normal operations)"
+    )
+
+    # agent pull-logs
+    pull_logs_parser = agent_subparsers.add_parser(
+        "pull-logs", help="Download log files from agents"
+    )
+    pull_logs_parser.add_argument(
+        "--agent-id", help="Specific agent ID (optional, pulls all if not specified)"
+    )
+    pull_logs_parser.add_argument(
+        "--output-dir", "-o", help="Output directory (default: /tmp/agent_logs_TIMESTAMP)"
+    )
+
 
 def setup_config_parser(subparsers):
     """Set up config command subparser."""
