@@ -693,7 +693,37 @@ http {
             proxy_read_timeout 86400s;
         }
 
-        # Main Grafana UI (handles /lens/api/* for Grafana's internal API)
+        # CIRISLens Log Ingestion API (specific route - must be before /lens/api/ catch-all)
+        location /lens/api/v1/logs/ {
+            proxy_pass http://127.0.0.1:8000/api/v1/logs/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # CIRISLens Admin API (specific route)
+        location /lens/api/admin/ {
+            proxy_pass http://127.0.0.1:8000/api/admin/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Grafana API (everything else under /lens/api/ goes to Grafana)
+        location /lens/api/ {
+            proxy_pass http://127.0.0.1:3001/api/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Main Grafana UI
         location /lens/ {
             proxy_pass http://127.0.0.1:3001/;
             proxy_http_version 1.1;
@@ -714,16 +744,6 @@ http {
         # CIRISLens Admin UI (OAuth protected)
         location /lens/admin/ {
             proxy_pass http://127.0.0.1:8000/admin/;
-            proxy_http_version 1.1;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-
-        # CIRISLens Backend API (for admin operations)
-        location /lens/backend/ {
-            proxy_pass http://127.0.0.1:8000/api/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
