@@ -75,7 +75,7 @@ class NginxManager:
             logger.error(f"Directory permissions: {oct(self.config_dir.stat().st_mode)}")
             raise RuntimeError(f"No write permission for nginx directory {self.config_dir}: {e}")
 
-    def update_config(self, agents: List[AgentInfo]) -> bool:
+    def update_config(self, agents: List[AgentInfo]) -> tuple[bool, str]:
         """
         Update nginx configuration with current agent list.
 
@@ -83,7 +83,8 @@ class NginxManager:
             agents: List of agent dictionaries with id, name, port info
 
         Returns:
-            True if successful, False otherwise
+            Tuple of (success: bool, error_message: str)
+            error_message is empty string on success
         """
         start_time = time.time()
 
@@ -135,10 +136,11 @@ class NginxManager:
                     logger.error(f"Directory owner: uid={stat.st_uid}, gid={stat.st_gid}")
                     logger.error(f"Directory perms: {oct(stat.st_mode)}")
 
+                error_msg = f"Permission denied writing to {self.new_config_path}"
                 logger.error(
                     f"Ensure the CIRISManager process has write access to {self.config_dir}"
                 )
-                return False
+                return False, error_msg
 
             # 3. Backup current config if it exists
             if self.config_path.exists():
@@ -159,8 +161,9 @@ class NginxManager:
                 # Clean up temp file
                 self.new_config_path.unlink()
             except Exception as e:
-                logger.error(f"Failed to write nginx config in-place: {e}")
-                return False
+                error_msg = f"Failed to write nginx config in-place: {e}"
+                logger.error(error_msg)
+                return False, error_msg
 
             # 5. Validate and reload nginx
             logger.info("Validating nginx configuration...")
@@ -183,29 +186,32 @@ class NginxManager:
                             "agents": agent_info,
                         },
                     )
-                    return True
+                    return True, ""
                 else:
-                    logger.error("❌ Nginx reload failed, rolling back")
+                    error_msg = "Nginx reload failed after config update"
+                    logger.error(f"❌ {error_msg}, rolling back")
                     self._rollback()
                     log_nginx_operation(
                         operation="update_config",
                         success=False,
-                        error="Nginx reload failed after config update",
+                        error=error_msg,
                     )
-                    return False
+                    return False, error_msg
             else:
-                logger.error("❌ Nginx validation failed, rolling back")
+                # Get validation error details
+                validation_error = self._get_validation_error()
+                error_msg = f"Nginx config validation failed: {validation_error}"
+                logger.error(f"❌ {error_msg}, rolling back")
                 self._rollback()
-                log_nginx_operation(
-                    operation="update_config", success=False, error="Nginx config validation failed"
-                )
-                return False
+                log_nginx_operation(operation="update_config", success=False, error=error_msg)
+                return False, error_msg
 
         except Exception as e:
-            logger.error(f"❌ Failed to update nginx config: {e}", exc_info=True)
+            error_msg = f"Exception during nginx config update: {e}"
+            logger.error(f"❌ {error_msg}", exc_info=True)
             self._rollback()
-            log_nginx_operation(operation="update_config", success=False, error=str(e))
-            return False
+            log_nginx_operation(operation="update_config", success=False, error=error_msg)
+            return False, error_msg
 
     def generate_config(self, agents: List[AgentInfo]) -> str:
         """
@@ -871,11 +877,18 @@ http {
             capture_output=True,
         )
 
+        # Store the last validation error for retrieval
+        self._last_validation_error = result.stderr.decode() if result.returncode != 0 else ""
+
         if result.returncode != 0:
-            logger.error(f"Nginx validation failed: {result.stderr.decode()}")
+            logger.error(f"Nginx validation failed: {self._last_validation_error}")
             return False
 
         return True
+
+    def _get_validation_error(self) -> str:
+        """Get the last nginx validation error message."""
+        return getattr(self, "_last_validation_error", "Unknown validation error")
 
     def _reload_nginx(self) -> bool:
         """Reload nginx configuration."""

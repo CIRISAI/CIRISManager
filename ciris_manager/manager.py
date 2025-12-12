@@ -636,13 +636,15 @@ class CIRISManager:
 
                 if server_config.is_local:
                     # Main server: update local nginx config file
-                    success = nginx_manager.update_config(server_agents)
+                    success, error_msg = nginx_manager.update_config(server_agents)
                     if success:
                         logger.info(
                             f"✅ Updated nginx config for main server with {len(server_agents)} agents"
                         )
                     else:
-                        logger.error("❌ Failed to update nginx config for main server")
+                        logger.error(
+                            f"❌ Failed to update nginx config for main server: {error_msg}"
+                        )
                         all_success = False
                 else:
                     # Remote server: deploy config via Docker API
