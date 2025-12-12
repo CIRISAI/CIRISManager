@@ -10,7 +10,7 @@ Usage:
     setup_logging(
         service_name="cirisbilling",
         token="svc_xxx",
-        endpoint="https://agents.ciris.ai/lens/api/v1/logs/ingest"
+        endpoint="https://agents.ciris.ai/lens/backend/v1/logs/ingest"
     )
 
     # Then use standard logging
@@ -22,7 +22,7 @@ Usage:
     shipper = LogShipper(
         service_name="cirisbilling",
         token="svc_xxx",
-        endpoint="https://agents.ciris.ai/lens/api/v1/logs/ingest"
+        endpoint="https://agents.ciris.ai/lens/backend/v1/logs/ingest"
     )
     shipper.info("Payment processed", event="payment_completed", user_id="u123")
     shipper.flush()  # Send buffered logs
@@ -57,7 +57,7 @@ class LogShipper:
         self,
         service_name: str,
         token: str,
-        endpoint: str = "https://agents.ciris.ai/lens/api/v1/logs/ingest",
+        endpoint: str = "https://agents.ciris.ai/lens/backend/v1/logs/ingest",
         batch_size: int = 100,
         flush_interval: float = 5.0,
         server_id: Optional[str] = None,
@@ -350,7 +350,7 @@ class LogShipperHandler(logging.Handler):
 def setup_logging(
     service_name: str,
     token: str,
-    endpoint: str = "https://agents.ciris.ai/lens/api/v1/logs/ingest",
+    endpoint: str = "https://agents.ciris.ai/lens/backend/v1/logs/ingest",
     min_level: int = logging.INFO,
     also_console: bool = True,
     **shipper_kwargs,
@@ -435,7 +435,7 @@ def from_env(service_name: Optional[str] = None) -> LogShipper:
     name = service_name or os.environ.get("CIRISLENS_SERVICE_NAME")
     token = os.environ.get("CIRISLENS_TOKEN")
     endpoint = os.environ.get(
-        "CIRISLENS_ENDPOINT", "https://agents.ciris.ai/lens/api/v1/logs/ingest"
+        "CIRISLENS_ENDPOINT", "https://agents.ciris.ai/lens/backend/v1/logs/ingest"
     )
 
     if not name:

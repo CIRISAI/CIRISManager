@@ -180,7 +180,7 @@ def setup_logging(
                 service_name="cirismanager",
                 token=cirislens_token,
                 endpoint=os.environ.get(
-                    "CIRISLENS_ENDPOINT", "https://agents.ciris.ai/lens/api/v1/logs/ingest"
+                    "CIRISLENS_ENDPOINT", "https://agents.ciris.ai/lens/backend/v1/logs/ingest"
                 ),
                 batch_size=50,
                 flush_interval=10.0,
