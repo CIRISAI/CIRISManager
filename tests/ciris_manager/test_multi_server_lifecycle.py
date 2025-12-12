@@ -67,8 +67,8 @@ def multi_server_manager(multi_server_config):
     ):
         # Configure mock nginx manager
         mock_nginx_instance = Mock()
-        mock_nginx_instance.update_config = Mock(return_value=True)
-        mock_nginx_instance.remove_agent_routes = Mock(return_value=True)
+        mock_nginx_instance.update_config = Mock(return_value=(True, ""))
+        mock_nginx_instance.remove_agent_routes = Mock(return_value=(True, ""))
         mock_nginx.return_value = mock_nginx_instance
 
         # Configure mock Docker client

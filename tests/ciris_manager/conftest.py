@@ -99,7 +99,7 @@ def mock_nginx_managers():
     """Create mock nginx managers for main and scout servers."""
     # Main server nginx manager
     mock_main = Mock()
-    mock_main.update_config = Mock(return_value=True)
+    mock_main.update_config = Mock(return_value=(True, ""))
     mock_main.generate_config = Mock(return_value="main nginx config")
 
     # Scout server nginx manager

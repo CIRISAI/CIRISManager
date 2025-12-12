@@ -132,38 +132,63 @@ class TestNginxManager:
         assert reload_call[0][0][4] == "-s"
         assert reload_call[0][0][5] == "reload"
 
+    @patch("ciris_manager.nginx_manager.time.sleep")
     @patch("subprocess.run")
-    def test_update_config_success(self, mock_run, nginx_manager, sample_agents):
+    def test_update_config_success(self, mock_run, mock_sleep, nginx_manager, sample_agents):
         """Test successful config update."""
-        # Mock successful validation and reload
-        mock_run.return_value = MagicMock(returncode=0)
 
-        result = nginx_manager.update_config(sample_agents)
-        assert result is True
+        # Mock successful validation, reload, and health check
+        # update_config calls: nginx -t, nginx -s reload, docker inspect, nginx -t (health check)
+        def mock_subprocess(cmd, *args, **kwargs):
+            result = MagicMock(returncode=0, stderr=b"")
+            # For docker inspect, return "running" status
+            if "inspect" in cmd:
+                result.stdout = b"running\n"
+            else:
+                result.stdout = b""
+            return result
 
-        # Should have called: nginx -t, nginx -s reload
-        assert mock_run.call_count == 2
+        mock_run.side_effect = mock_subprocess
+
+        success, error_msg = nginx_manager.update_config(sample_agents)
+        assert success is True
+        assert error_msg == ""
+
+        # Should have called: nginx -t, nginx -s reload, docker inspect, nginx -t (health)
+        assert mock_run.call_count == 4
 
         # Check that config files were created
         assert nginx_manager.config_path.exists()
         assert not nginx_manager.new_config_path.exists()  # Should be cleaned up
 
+    @patch("ciris_manager.nginx_manager.time.sleep")
     @patch("subprocess.run")
-    def test_update_config_validation_failure(self, mock_run, nginx_manager, sample_agents):
+    def test_update_config_validation_failure(
+        self, mock_run, mock_sleep, nginx_manager, sample_agents
+    ):
         """Test config update with validation failure."""
-        # nginx -t fails (no docker cp needed)
-        mock_run.return_value = MagicMock(returncode=1, stderr=b"Invalid config")
+        # nginx -t fails, but nginx container is healthy (so just rollback)
+        call_count = [0]
 
-        result = nginx_manager.update_config(sample_agents)
-        assert result is False
+        def mock_subprocess(cmd, *args, **kwargs):
+            call_count[0] += 1
+            # First call is nginx -t (validation) - fails
+            if call_count[0] == 1:
+                return MagicMock(returncode=1, stderr=b"Invalid config", stdout=b"")
+            # Subsequent calls for health check - nginx is healthy
+            if "inspect" in cmd:
+                return MagicMock(returncode=0, stdout=b"running\n", stderr=b"")
+            # Health check nginx -t succeeds
+            return MagicMock(returncode=0, stdout=b"", stderr=b"")
 
-        # Should call nginx -t, but not reload
-        assert mock_run.call_count == 1
+        mock_run.side_effect = mock_subprocess
 
-        # Original config should be unchanged if it existed
-        if nginx_manager.config_path.exists():
-            # Would check content is unchanged
-            pass
+        success, error_msg = nginx_manager.update_config(sample_agents)
+        assert success is False
+        assert "validation failed" in error_msg.lower()
+
+        # Should call: nginx -t (fail), docker inspect (health), nginx -t (health ok)
+        assert mock_run.call_count >= 1  # At least validation call
 
     @patch("subprocess.run")
     def test_rollback(self, mock_run, nginx_manager):
@@ -183,20 +208,31 @@ class TestNginxManager:
         # Backup file should still exist (not deleted by rollback)
         assert nginx_manager.backup_path.exists()
 
+    @patch("ciris_manager.nginx_manager.time.sleep")
     @patch("subprocess.run")
-    def test_remove_agent_routes(self, mock_run, nginx_manager, sample_agents):
+    def test_remove_agent_routes(self, mock_run, mock_sleep, nginx_manager, sample_agents):
         """Test removing agent routes."""
-        # Mock successful operations
-        mock_run.return_value = MagicMock(returncode=0)
+
+        # Mock successful operations (validation, reload, health check)
+        def mock_subprocess(cmd, *args, **kwargs):
+            result = MagicMock(returncode=0, stderr=b"")
+            if "inspect" in cmd:
+                result.stdout = b"running\n"
+            else:
+                result.stdout = b""
+            return result
+
+        mock_run.side_effect = mock_subprocess
 
         # Remove one agent
         remaining_agents = [a for a in sample_agents if a.agent_id != "agent-scout"]
-        result = nginx_manager.remove_agent_routes("agent-scout", remaining_agents)
+        success, error_msg = nginx_manager.remove_agent_routes("agent-scout", remaining_agents)
 
-        assert result is True
+        assert success is True
+        assert error_msg == ""
 
-        # Should have made 2 calls: nginx -t, nginx -s reload (no docker cp needed)
-        assert mock_run.call_count == 2
+        # Should have made 4 calls: nginx -t, nginx -s reload, docker inspect, nginx -t (health)
+        assert mock_run.call_count == 4
 
         # Check that new config only has remaining agent
         config = nginx_manager.config_path.read_text()

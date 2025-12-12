@@ -1004,7 +1004,7 @@ class TestCIRISManager:
 
             def track_main_update(agents):
                 grouped_agents["main"] = list(agents)
-                return True  # Simulate successful update
+                return (True, "")  # Simulate successful update
 
             mock_main_nginx.update_config = Mock(side_effect=track_main_update)
 

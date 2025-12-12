@@ -3,6 +3,8 @@ NGINX configuration management for CIRIS agents.
 
 This module handles complete nginx configuration generation including
 all routes for GUI, manager API, and dynamic agent routes.
+
+Includes crash loop detection and automatic rollback for nginx container.
 """
 
 import os
@@ -10,6 +12,7 @@ import shutil
 import subprocess
 import time
 import base64
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 import logging
@@ -19,6 +22,10 @@ from ciris_manager.models import AgentInfo
 from ciris_manager.logging_config import log_nginx_operation
 
 logger = logging.getLogger("ciris_manager.nginx")
+
+# Constants for crash loop detection
+NGINX_CRASH_LOOP_MAX_ROLLBACKS = 3
+NGINX_CONTAINER_START_TIMEOUT = 10  # seconds to wait for container to stabilize
 
 
 class NginxManager:
@@ -74,6 +81,206 @@ class NginxManager:
             logger.error(f"Directory owner: {self.config_dir.stat().st_uid}")
             logger.error(f"Directory permissions: {oct(self.config_dir.stat().st_mode)}")
             raise RuntimeError(f"No write permission for nginx directory {self.config_dir}: {e}")
+
+    def _create_timestamped_backup(self) -> Optional[Path]:
+        """
+        Create a timestamped backup of the current nginx config.
+
+        Returns:
+            Path to backup file if created, None if no config to backup
+        """
+        if not self.config_path.exists():
+            logger.debug("No existing config to backup")
+            return None
+
+        # Check if current config is empty (nothing to backup)
+        if self.config_path.stat().st_size == 0:
+            logger.warning("Current nginx config is empty, skipping backup")
+            return None
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = self.config_dir / f"nginx.conf.backup.{timestamp}"
+
+        try:
+            shutil.copy2(self.config_path, backup_file)
+            logger.info(f"📦 Created timestamped backup: {backup_file.name}")
+            return backup_file
+        except Exception as e:
+            logger.error(f"Failed to create timestamped backup: {e}")
+            return None
+
+    def _get_backup_files(self) -> List[Path]:
+        """
+        Get all backup files sorted by timestamp (newest first).
+
+        Returns:
+            List of backup file paths, newest first
+        """
+        backups = list(self.config_dir.glob("nginx.conf.backup.*"))
+        # Sort by modification time, newest first
+        backups.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        return backups
+
+    def _cleanup_old_backups(self, keep_count: int = 10) -> None:
+        """
+        Remove old backup files, keeping only the most recent ones.
+
+        Args:
+            keep_count: Number of recent backups to keep
+        """
+        backups = self._get_backup_files()
+        if len(backups) > keep_count:
+            for old_backup in backups[keep_count:]:
+                try:
+                    old_backup.unlink()
+                    logger.debug(f"Removed old backup: {old_backup.name}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove old backup {old_backup.name}: {e}")
+
+    def _is_nginx_healthy(self, timeout: int = NGINX_CONTAINER_START_TIMEOUT) -> bool:
+        """
+        Check if the nginx container is running and healthy.
+
+        Args:
+            timeout: Seconds to wait for container to stabilize
+
+        Returns:
+            True if nginx is healthy, False otherwise
+        """
+        try:
+            # Wait a moment for container to stabilize after restart/reload
+            time.sleep(2)
+
+            # Check container status
+            result = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.Status}}", self.container_name],
+                capture_output=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0:
+                logger.error(f"Failed to inspect nginx container: {result.stderr.decode()}")
+                return False
+
+            status = result.stdout.decode().strip()
+
+            if status == "running":
+                # Also verify nginx can validate its config
+                validate_result = subprocess.run(
+                    ["docker", "exec", self.container_name, "nginx", "-t"],
+                    capture_output=True,
+                    timeout=10,
+                )
+                if validate_result.returncode == 0:
+                    logger.debug("Nginx container is healthy")
+                    return True
+                else:
+                    logger.warning(f"Nginx config invalid: {validate_result.stderr.decode()}")
+                    return False
+            elif status == "restarting":
+                logger.warning("Nginx container is in restart loop")
+                return False
+            else:
+                logger.warning(f"Nginx container status: {status}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            logger.error("Timeout checking nginx container health")
+            return False
+        except Exception as e:
+            logger.error(f"Error checking nginx health: {e}")
+            return False
+
+    def _rollback_to_backup(self, backup_path: Path) -> bool:
+        """
+        Rollback to a specific backup file.
+
+        Args:
+            backup_path: Path to the backup file to restore
+
+        Returns:
+            True if rollback successful and nginx is healthy
+        """
+        if not backup_path.exists():
+            logger.error(f"Backup file does not exist: {backup_path}")
+            return False
+
+        try:
+            logger.info(f"🔄 Rolling back to: {backup_path.name}")
+
+            # Write backup content in-place to preserve inode
+            with open(self.config_path, "w") as f:
+                with open(backup_path, "r") as backup_f:
+                    f.write(backup_f.read())
+
+            # Reload nginx
+            reload_result = subprocess.run(
+                ["docker", "exec", self.container_name, "nginx", "-s", "reload"],
+                capture_output=True,
+                timeout=30,
+            )
+
+            if reload_result.returncode != 0:
+                # If reload fails, try restarting the container
+                logger.warning("Nginx reload failed, trying container restart")
+                restart_result = subprocess.run(
+                    ["docker", "restart", self.container_name],
+                    capture_output=True,
+                    timeout=60,
+                )
+                if restart_result.returncode != 0:
+                    logger.error(f"Container restart failed: {restart_result.stderr.decode()}")
+                    return False
+
+            # Check if nginx is now healthy
+            if self._is_nginx_healthy():
+                logger.info(f"✅ Successfully rolled back to {backup_path.name}")
+                return True
+            else:
+                logger.warning(f"Nginx not healthy after rollback to {backup_path.name}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Rollback to {backup_path.name} failed: {e}")
+            return False
+
+    def _handle_nginx_crash_loop(self) -> tuple[bool, str]:
+        """
+        Handle nginx crash loop by trying progressively older backups.
+
+        Attempts to rollback through up to NGINX_CRASH_LOOP_MAX_ROLLBACKS backups
+        until nginx starts successfully.
+
+        Returns:
+            Tuple of (success: bool, error_message: str)
+        """
+        backups = self._get_backup_files()
+
+        if not backups:
+            error_msg = "No backup files available to rollback to"
+            logger.error(f"❌ {error_msg}")
+            return False, error_msg
+
+        logger.warning(
+            f"🔄 Nginx crash loop detected! Attempting rollback through "
+            f"{min(len(backups), NGINX_CRASH_LOOP_MAX_ROLLBACKS)} backups..."
+        )
+
+        for i, backup in enumerate(backups[:NGINX_CRASH_LOOP_MAX_ROLLBACKS]):
+            logger.info(f"Rollback attempt {i + 1}/{NGINX_CRASH_LOOP_MAX_ROLLBACKS}: {backup.name}")
+
+            if self._rollback_to_backup(backup):
+                logger.info(f"✅ Nginx recovered using backup: {backup.name}")
+                return True, ""
+
+            logger.warning(f"Backup {backup.name} did not fix the issue, trying next...")
+
+        error_msg = (
+            f"Failed to recover nginx after {NGINX_CRASH_LOOP_MAX_ROLLBACKS} rollback attempts. "
+            "Manual intervention required!"
+        )
+        logger.critical(f"❌ {error_msg}")
+        return False, error_msg
 
     def update_config(self, agents: List[AgentInfo]) -> tuple[bool, str]:
         """
@@ -142,10 +349,10 @@ class NginxManager:
                 )
                 return False, error_msg
 
-            # 3. Backup current config if it exists
-            if self.config_path.exists():
-                shutil.copy2(self.config_path, self.backup_path)
-                logger.info("Backed up current nginx config")
+            # 3. Create timestamped backup before making changes
+            backup_file = self._create_timestamped_backup()
+            if backup_file:
+                logger.info(f"Created backup before update: {backup_file.name}")
 
             # 4. Write in-place to preserve inode for Docker bind mounts
             # CRITICAL: Do NOT use os.rename() as it creates a new inode
@@ -172,25 +379,50 @@ class NginxManager:
 
                 logger.info("Reloading nginx...")
                 if self._reload_nginx():
-                    duration_ms = int((time.time() - start_time) * 1000)
-                    logger.info(f"✅ Nginx config updated successfully in {duration_ms}ms")
+                    # Verify nginx is actually healthy after reload
+                    if self._is_nginx_healthy():
+                        duration_ms = int((time.time() - start_time) * 1000)
+                        logger.info(f"✅ Nginx config updated successfully in {duration_ms}ms")
 
-                    # Log success with structured data
-                    log_nginx_operation(
-                        operation="update_config",
-                        success=True,
-                        details={
-                            "agent_count": len(agents),
-                            "config_size": len(new_config),
-                            "duration_ms": duration_ms,
-                            "agents": agent_info,
-                        },
-                    )
-                    return True, ""
+                        # Clean up old backups after successful update
+                        self._cleanup_old_backups(keep_count=10)
+
+                        # Log success with structured data
+                        log_nginx_operation(
+                            operation="update_config",
+                            success=True,
+                            details={
+                                "agent_count": len(agents),
+                                "config_size": len(new_config),
+                                "duration_ms": duration_ms,
+                                "agents": agent_info,
+                            },
+                        )
+                        return True, ""
+                    else:
+                        # Nginx reload succeeded but container is unhealthy (crash loop)
+                        logger.error("❌ Nginx reload succeeded but container is unhealthy")
+                        recovered, recovery_msg = self._handle_nginx_crash_loop()
+                        if recovered:
+                            error_msg = "Config update caused crash loop, recovered using backup"
+                            logger.warning(error_msg)
+                        else:
+                            error_msg = f"Nginx crash loop, recovery failed: {recovery_msg}"
+                        log_nginx_operation(
+                            operation="update_config",
+                            success=False,
+                            error=error_msg,
+                        )
+                        return False, error_msg
                 else:
-                    error_msg = "Nginx reload failed after config update"
-                    logger.error(f"❌ {error_msg}, rolling back")
-                    self._rollback()
+                    # Nginx reload command failed - try crash loop recovery
+                    logger.error("❌ Nginx reload failed, attempting crash loop recovery")
+                    recovered, recovery_msg = self._handle_nginx_crash_loop()
+                    if recovered:
+                        error_msg = "Nginx reload failed, recovered using backup"
+                        logger.warning(error_msg)
+                    else:
+                        error_msg = f"Nginx reload failed, recovery failed: {recovery_msg}"
                     log_nginx_operation(
                         operation="update_config",
                         success=False,
@@ -198,18 +430,40 @@ class NginxManager:
                     )
                     return False, error_msg
             else:
-                # Get validation error details
+                # Config validation failed - try crash loop recovery
                 validation_error = self._get_validation_error()
-                error_msg = f"Nginx config validation failed: {validation_error}"
-                logger.error(f"❌ {error_msg}, rolling back")
-                self._rollback()
+                logger.error(f"❌ Nginx validation failed: {validation_error}")
+
+                # Check if nginx is in crash loop and try to recover
+                if not self._is_nginx_healthy():
+                    logger.warning("Nginx unhealthy after validation failure, attempting recovery")
+                    recovered, recovery_msg = self._handle_nginx_crash_loop()
+                    if recovered:
+                        error_msg = (
+                            f"Validation failed ({validation_error}), recovered using backup"
+                        )
+                    else:
+                        error_msg = f"Validation failed ({validation_error}), recovery failed: {recovery_msg}"
+                else:
+                    # Nginx still healthy, just the new config is bad
+                    self._rollback()
+                    error_msg = f"Nginx config validation failed: {validation_error}"
+
                 log_nginx_operation(operation="update_config", success=False, error=error_msg)
                 return False, error_msg
 
         except Exception as e:
             error_msg = f"Exception during nginx config update: {e}"
             logger.error(f"❌ {error_msg}", exc_info=True)
-            self._rollback()
+
+            # Try crash loop recovery on any exception
+            if not self._is_nginx_healthy():
+                recovered, recovery_msg = self._handle_nginx_crash_loop()
+                if not recovered:
+                    error_msg = f"{error_msg} (recovery also failed: {recovery_msg})"
+            else:
+                self._rollback()
+
             log_nginx_operation(operation="update_config", success=False, error=error_msg)
             return False, error_msg
 
@@ -928,23 +1182,33 @@ http {
         return True
 
     def _rollback(self) -> None:
-        """Rollback to previous configuration."""
-        if self.backup_path.exists():
+        """Rollback to the most recent backup configuration."""
+        backups = self._get_backup_files()
+
+        if backups:
+            # Try the most recent backup
+            if self._rollback_to_backup(backups[0]):
+                logger.info(f"Rolled back to most recent backup: {backups[0].name}")
+            else:
+                logger.error("Rollback to most recent backup failed")
+        elif self.backup_path.exists():
+            # Fallback to legacy backup file if exists
             try:
-                # Write in-place to preserve inode for Docker bind mounts
                 with open(self.config_path, "w") as f:
                     with open(self.backup_path, "r") as backup_f:
                         f.write(backup_f.read())
                 self._reload_nginx()
-                logger.info("Rolled back to previous nginx config (in-place)")
+                logger.info("Rolled back to legacy backup (nginx.conf.backup)")
             except Exception as e:
-                logger.error(f"Rollback failed: {e}")
+                logger.error(f"Legacy rollback failed: {e}")
+        else:
+            logger.error("No backup files available for rollback")
 
         # Clean up temporary file
         if self.new_config_path.exists():
             self.new_config_path.unlink()
 
-    def remove_agent_routes(self, agent_id: str, agents: List[AgentInfo]) -> bool:
+    def remove_agent_routes(self, agent_id: str, agents: List[AgentInfo]) -> tuple[bool, str]:
         """
         Remove routes for a specific agent by regenerating config without it.
 
@@ -953,7 +1217,7 @@ http {
             agents: Current list of ALL agents (will filter out the one to remove)
 
         Returns:
-            True if successful
+            Tuple of (success: bool, error_message: str)
         """
         # Filter out the agent to remove
         remaining_agents = [a for a in agents if a.agent_id != agent_id]
