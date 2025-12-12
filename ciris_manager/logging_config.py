@@ -3,16 +3,22 @@ Centralized logging configuration for CIRISManager.
 
 Implements file-based logging with rotation, multiple log streams,
 and structured logging for better observability.
+
+Optionally ships logs to CIRISLens when CIRISLENS_TOKEN is set.
 """
 # mypy: ignore-errors
 
 import logging
 import logging.handlers
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Dict, Any
 import json
 from datetime import datetime, timezone
+
+# CIRISLens integration
+_cirislens_shipper = None
 
 
 class StructuredFormatter(logging.Formatter):
@@ -163,10 +169,35 @@ def setup_logging(
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
     logging.getLogger("docker").setLevel(logging.WARNING)
 
+    # CIRISLens integration - ship logs when token is available
+    global _cirislens_shipper
+    cirislens_token = os.environ.get("CIRISLENS_TOKEN")
+    if cirislens_token:
+        try:
+            from ciris_manager.logshipper import LogShipper, LogShipperHandler
+
+            _cirislens_shipper = LogShipper(
+                service_name="cirismanager",
+                token=cirislens_token,
+                endpoint=os.environ.get(
+                    "CIRISLENS_ENDPOINT", "https://agents.ciris.ai/lens/api/v1/logs/ingest"
+                ),
+                batch_size=50,
+                flush_interval=10.0,
+            )
+
+            # Add handler to root logger
+            lens_handler = LogShipperHandler(_cirislens_shipper, min_level=logging.INFO)
+            root_logger.addHandler(lens_handler)
+
+            root_logger.info("CIRISLens log shipping enabled")
+        except Exception as e:
+            root_logger.warning(f"Failed to initialize CIRISLens log shipping: {e}")
+
     # Log startup
     root_logger.info(
         f"Logging initialized - Console: {console_level}, File: {file_level}, "
-        f"Directory: {log_dir}, JSON: {use_json}"
+        f"Directory: {log_dir}, JSON: {use_json}, CIRISLens: {cirislens_token is not None}"
     )
 
 
@@ -244,6 +275,20 @@ def log_agent_operation(
 
     log_method = getattr(logger, level.lower())
     log_method(message, extra=extra)
+
+
+# CIRISLens helper functions
+def get_cirislens_stats() -> Optional[Dict[str, Any]]:
+    """Get CIRISLens log shipping statistics."""
+    if _cirislens_shipper:
+        return _cirislens_shipper.get_stats()
+    return None
+
+
+def shutdown_cirislens() -> None:
+    """Gracefully shutdown CIRISLens log shipper."""
+    if _cirislens_shipper:
+        _cirislens_shipper.shutdown()
 
 
 # Convenience function for nginx operations
