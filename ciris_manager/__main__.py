@@ -3,23 +3,41 @@ CIRISManager CLI entry point.
 """
 
 import asyncio
+import os
 import sys
 import argparse
 import logging
+from pathlib import Path
 
 from ciris_manager.manager import CIRISManager
 from ciris_manager.config.settings import CIRISManagerConfig
+from ciris_manager.logging_config import setup_logging as setup_full_logging
 
 
 def setup_logging(verbose: bool = False) -> None:
-    """Setup logging configuration."""
-    level = logging.DEBUG if verbose else logging.INFO
+    """Setup logging configuration with CIRISLens integration."""
+    console_level = "DEBUG" if verbose else "INFO"
 
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
+    # Determine log directory
+    log_dir = "/var/log/cirismanager"
+    if not os.access("/var/log", os.W_OK):
+        local_log_path = Path.home() / ".local" / "log" / "cirismanager"
+        log_dir = str(local_log_path)
+
+    try:
+        setup_full_logging(
+            log_dir=log_dir,
+            console_level=console_level,
+            file_level="DEBUG",
+            use_json=False,
+        )
+    except PermissionError:
+        # Fall back to basic logging if file logging fails
+        logging.basicConfig(
+            level=getattr(logging, console_level),
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[logging.StreamHandler(sys.stdout)],
+        )
 
 
 def main() -> int:
