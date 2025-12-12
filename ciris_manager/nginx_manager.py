@@ -433,6 +433,16 @@ http {
             proxy_read_timeout 86400s;
         }
 
+        # CIRISLens API for log ingestion (must be before /lens/ catch-all)
+        location /lens/api/ {
+            proxy_pass http://127.0.0.1:8000/api/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # Main Grafana UI
         location /lens/ {
             proxy_pass http://127.0.0.1:3001/;
@@ -453,7 +463,7 @@ http {
 
         # CIRISLens Admin UI (OAuth protected)
         location /lens/admin/ {
-            proxy_pass http://127.0.0.1:8200/admin/;
+            proxy_pass http://127.0.0.1:8000/admin/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -463,7 +473,7 @@ http {
 
         # CIRISLens Backend API (for admin operations)
         location /lens/backend/ {
-            proxy_pass http://127.0.0.1:8200/api/;
+            proxy_pass http://127.0.0.1:8000/api/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
