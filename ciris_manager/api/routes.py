@@ -846,8 +846,11 @@ def create_routes(manager: Any) -> APIRouter:
             # Resolve the agent
             agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
-            # Get container name (same pattern as other endpoints)
-            container_name = f"ciris-{agent_id}"
+            # Get container name - include occurrence_id if present
+            if agent.occurrence_id:
+                container_name = f"ciris-{agent_id}-{agent.occurrence_id}"
+            else:
+                container_name = f"ciris-{agent_id}"
 
             # Get Docker client for the appropriate server
             client = manager.docker_client.get_client(agent.server_id)
