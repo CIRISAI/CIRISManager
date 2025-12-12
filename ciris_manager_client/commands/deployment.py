@@ -146,7 +146,10 @@ class DeploymentCommands:
     @staticmethod
     def cancel(ctx: CommandContext, args: Namespace) -> int:
         """
-        Cancel a deployment.
+        Cancel/reject a deployment.
+
+        For pending deployments, uses reject endpoint.
+        For stuck deployments, uses cancel endpoint.
 
         Args:
             ctx: Command context
@@ -162,10 +165,20 @@ class DeploymentCommands:
             if not ctx.quiet:
                 print(f"Cancelling deployment {deployment_id}...")
 
-            result = ctx.client.cancel_deployment(deployment_id, reason)
+            # Try reject first (for pending deployments)
+            try:
+                result = ctx.client.reject_deployment(deployment_id, reason)
+                action = "rejected"
+            except APIError as e:
+                if e.status_code == 404:
+                    # Not a pending deployment, try cancel (for stuck deployments)
+                    result = ctx.client.cancel_deployment(deployment_id, reason)
+                    action = "cancelled"
+                else:
+                    raise
 
             if not ctx.quiet:
-                print(f"✓ Deployment {deployment_id} cancelled successfully")
+                print(f"✓ Deployment {deployment_id} {action} successfully")
                 print(f"  Reason: {reason}")
                 if result.get("message"):
                     print(f"  Message: {result['message']}")
@@ -183,6 +196,50 @@ class DeploymentCommands:
             return EXIT_API_ERROR
         except Exception as e:
             print(f"Error cancelling deployment: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
+    def start(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Start/launch a pending deployment.
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments (deployment_id)
+
+        Returns:
+            Exit code
+        """
+        try:
+            deployment_id = args.deployment_id
+
+            if not ctx.quiet:
+                print(f"Starting deployment {deployment_id}...")
+
+            result = ctx.client.start_deployment(deployment_id)
+
+            if not ctx.quiet:
+                print(f"✓ Deployment {deployment_id} started successfully")
+                if result.get("message"):
+                    print(f"  Message: {result['message']}")
+
+            return EXIT_SUCCESS
+
+        except AuthenticationError as e:
+            print(f"Authentication error: {e}", file=sys.stderr)
+            return EXIT_AUTH_ERROR
+        except APIError as e:
+            if e.status_code == 404:
+                print(f"Deployment {args.deployment_id} not found or not pending", file=sys.stderr)
+                return EXIT_NOT_FOUND
+            print(f"API error: {e}", file=sys.stderr)
+            return EXIT_API_ERROR
+        except Exception as e:
+            print(f"Error starting deployment: {e}", file=sys.stderr)
             if ctx.verbose:
                 import traceback
 

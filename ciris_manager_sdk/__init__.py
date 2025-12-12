@@ -94,9 +94,9 @@ class CIRISManagerClient:
         if not endpoint.startswith("/"):
             raise ValueError("Endpoint must start with /")
 
-        # Allow only safe characters in endpoint: alphanumeric, -, _, /, {}
-        # The {} is for path parameters that will be validated separately
-        if not re.match(r"^/[a-zA-Z0-9/_\-{}]+$", endpoint):
+        # Allow only safe characters in endpoint: alphanumeric, -, _, /, {}, ?, =, &
+        # The {} is for path parameters, ?=& for query strings
+        if not re.match(r"^/[a-zA-Z0-9/_\-{}?=&%]+$", endpoint):
             raise ValueError("Invalid endpoint format")
 
         url = f"{self.base_url}{endpoint}"
@@ -357,6 +357,8 @@ class CIRISManagerClient:
         """
         Cancel a stuck or failed deployment.
 
+        Note: For pending/staged deployments, use reject_deployment() instead.
+
         Args:
             deployment_id: ID of the deployment to cancel
             reason: Reason for cancellation
@@ -366,6 +368,39 @@ class CIRISManagerClient:
         """
         payload = {"deployment_id": deployment_id, "reason": reason}
         response = self._request("POST", "/manager/v1/updates/cancel", json=payload)
+        return response.json()
+
+    def reject_deployment(
+        self, deployment_id: str, reason: str = "Rejected via SDK"
+    ) -> Dict[str, Any]:
+        """
+        Reject a pending/staged deployment.
+
+        Use this for deployments that are staged but not yet started.
+
+        Args:
+            deployment_id: ID of the deployment to reject
+            reason: Reason for rejection
+
+        Returns:
+            Rejection response with status
+        """
+        payload = {"deployment_id": deployment_id, "reason": reason}
+        response = self._request("POST", "/manager/v1/updates/reject", json=payload)
+        return response.json()
+
+    def start_deployment(self, deployment_id: str) -> Dict[str, Any]:
+        """
+        Start/launch a pending deployment.
+
+        Args:
+            deployment_id: ID of the deployment to start
+
+        Returns:
+            Response with status and deployment_id
+        """
+        payload = {"deployment_id": deployment_id}
+        response = self._request("POST", "/manager/v1/updates/launch", json=payload)
         return response.json()
 
     def get_deployment_status(

@@ -314,6 +314,10 @@ def setup_deployment_parser(subparsers):
         "--reason", default="Cancelled via CLI", help="Reason for cancellation"
     )
 
+    # deployment start
+    start_parser = deployment_subparsers.add_parser("start", help="Start a pending deployment")
+    start_parser.add_argument("deployment_id", help="Deployment ID to start")
+
 
 def setup_auth_parser(subparsers):
     """Set up auth command subparser."""
