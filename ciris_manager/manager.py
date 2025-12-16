@@ -1212,8 +1212,15 @@ class CIRISManager:
 
     async def _start_api_server(self) -> None:
         """Start the FastAPI server for CIRISManager API."""
-        logger.info("DEBUG: _start_api_server method called")
+        import time
+
+        start_time = time.time()
+        logger.info("=" * 60)
+        logger.info("API SERVER STARTUP SEQUENCE BEGINNING")
+        logger.info("=" * 60)
+
         try:
+            from contextlib import asynccontextmanager
             from fastapi import FastAPI
             from fastapi.responses import JSONResponse
             import uvicorn
@@ -1223,8 +1230,32 @@ class CIRISManager:
             from .api.device_auth_routes import create_device_auth_routes
             from .api.server_routes import create_server_routes
 
-            app = FastAPI(title="CIRISManager API", version="1.0.0")
-            logger.info("DEBUG: FastAPI app created in manager.py")
+            logger.info(f"[{time.time() - start_time:.2f}s] Imports complete")
+
+            # Define explicit lifespan context manager with logging
+            @asynccontextmanager
+            async def lifespan(app: FastAPI):
+                logger.info("=" * 40)
+                logger.info("ASGI LIFESPAN: startup phase beginning")
+                logger.info("=" * 40)
+                lifespan_start = time.time()
+
+                # Startup logic (nothing blocking here!)
+                logger.info("ASGI LIFESPAN: No blocking startup tasks")
+                logger.info(
+                    f"ASGI LIFESPAN: startup complete in {time.time() - lifespan_start:.3f}s"
+                )
+
+                yield  # Application runs
+
+                # Shutdown logic
+                logger.info("ASGI LIFESPAN: shutdown phase beginning")
+                logger.info("ASGI LIFESPAN: shutdown complete")
+
+            app = FastAPI(title="CIRISManager API", version="1.0.0", lifespan=lifespan)
+            logger.info(
+                f"[{time.time() - start_time:.2f}s] FastAPI app created with explicit lifespan"
+            )
 
             # Try to add rate limiting if available
             try:
@@ -1260,11 +1291,11 @@ class CIRISManager:
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
             # Create routes with manager instance
-            logger.info("DEBUG: About to call create_routes in manager.py")
+            logger.info(f"[{time.time() - start_time:.2f}s] About to call create_routes...")
             router = create_routes(self)
-            logger.info("DEBUG: create_routes returned successfully in manager.py")
+            logger.info(f"[{time.time() - start_time:.2f}s] create_routes returned successfully")
             app.include_router(router, prefix="/manager/v1")
-            logger.info("DEBUG: Included router in FastAPI app in manager.py")
+            logger.info(f"[{time.time() - start_time:.2f}s] v1 routes included at /manager/v1")
 
             # Include server management routes
             server_router = create_server_routes(self)
@@ -1323,6 +1354,11 @@ class CIRISManager:
                     status_code=307,  # Temporary redirect, preserves method
                 )
 
+            logger.info(
+                f"[{time.time() - start_time:.2f}s] All routes configured, creating uvicorn server..."
+            )
+            logger.info("=" * 60)
+
             config = uvicorn.Config(
                 app,
                 host=self.config.manager.host,
@@ -1331,13 +1367,16 @@ class CIRISManager:
             )
             server = uvicorn.Server(config)
 
+            logger.info(f"[{time.time() - start_time:.2f}s] Uvicorn config created")
             logger.info(
                 f"Starting API server on {self.config.manager.host}:{self.config.manager.port}"
             )
+            logger.info("Calling server.serve() - if this hangs, check ASGI LIFESPAN logs above")
             await server.serve()
+            logger.info("server.serve() returned (server shutdown)")
 
         except Exception as e:
-            logger.error(f"Failed to start API server: {e}")
+            logger.error(f"Failed to start API server: {e}", exc_info=True)
 
     async def delete_agent(
         self,

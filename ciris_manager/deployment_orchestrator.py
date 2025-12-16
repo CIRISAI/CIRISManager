@@ -59,6 +59,11 @@ class DeploymentOrchestrator:
         # Track background tasks to prevent garbage collection
         self._background_tasks: set = set()
 
+        # Deferred recovery - set during __init__, run on first async operation
+        # This avoids calling asyncio.create_task() from synchronous __init__
+        self._pending_recovery_deployment: Optional[DeploymentStatus] = None
+        self._recovery_started = False
+
         # Agent directory path
         self.agent_dir = Path("/opt/ciris/agents")
 
@@ -119,9 +124,11 @@ class DeploymentOrchestrator:
                                     f"Agents pending restart: {deployment.agents_pending_restart}, "
                                     f"Agents in progress: {list(deployment.agents_in_progress.keys())}"
                                 )
-                                # Schedule recovery of interrupted operations
-                                asyncio.create_task(
-                                    self._recover_interrupted_deployment(deployment)
+                                # Mark for deferred recovery - don't use asyncio.create_task in __init__!
+                                # The recovery will be triggered on the first async operation.
+                                self._pending_recovery_deployment = deployment
+                                logger.info(
+                                    "Deployment recovery deferred - will run on first async operation"
                                 )
                             else:
                                 logger.warning(
@@ -220,6 +227,23 @@ class DeploymentOrchestrator:
         logger.info(
             f"Deployment state saved: {len(self.deployments)} deployments, {len(self.pending_deployments)} pending"
         )
+
+    async def _run_deferred_recovery(self) -> None:
+        """
+        Run deferred deployment recovery if needed.
+
+        This is called from async methods to handle recovery that was deferred
+        during __init__ (since we can't call asyncio.create_task from __init__).
+        """
+        if self._pending_recovery_deployment and not self._recovery_started:
+            self._recovery_started = True
+            deployment = self._pending_recovery_deployment
+            self._pending_recovery_deployment = None
+            logger.info(f"Running deferred recovery for deployment {deployment.deployment_id}")
+            # Create the recovery task now that we're in an async context
+            task = asyncio.create_task(self._recover_interrupted_deployment(deployment))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
     def _validate_canary_groups(self) -> None:
         """
@@ -576,6 +600,9 @@ class DeploymentOrchestrator:
         Returns:
             Deployment status
         """
+        # Run any deferred recovery from __init__
+        await self._run_deferred_recovery()
+
         async with self._deployment_lock:
             if self.current_deployment:
                 raise ValueError(f"Deployment {self.current_deployment} already in progress")

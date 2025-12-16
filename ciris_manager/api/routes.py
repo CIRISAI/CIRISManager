@@ -91,19 +91,28 @@ def create_routes(manager: Any) -> APIRouter:
     Returns:
         Configured APIRouter
     """
-    logger.info("DEBUG: create_routes function starting - jailbreaker debugging")
+    import time
+
+    start_time = time.time()
+    logger.info("create_routes() starting...")
     router = APIRouter()
 
     # Initialize deployment orchestrator
+    logger.info(f"[{time.time() - start_time:.2f}s] Creating DeploymentOrchestrator...")
     deployment_orchestrator = DeploymentOrchestrator(manager)
+    logger.info(f"[{time.time() - start_time:.2f}s] DeploymentOrchestrator created successfully")
 
     # Initialize deployment token manager
+    logger.info(f"[{time.time() - start_time:.2f}s] Creating DeploymentTokenManager...")
     from ciris_manager.deployment_tokens import DeploymentTokenManager
 
     token_manager = DeploymentTokenManager()
+    logger.info(f"[{time.time() - start_time:.2f}s] DeploymentTokenManager created")
 
     # Load deployment tokens (auto-generates if missing)
+    logger.info(f"[{time.time() - start_time:.2f}s] Loading deployment tokens...")
     DEPLOY_TOKENS = token_manager.get_all_tokens()
+    logger.info(f"[{time.time() - start_time:.2f}s] Deployment tokens loaded")
 
     # Also set them as environment variables for backwards compatibility
     for repo, token in DEPLOY_TOKENS.items():
