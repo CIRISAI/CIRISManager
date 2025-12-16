@@ -36,7 +36,7 @@ class NginxManager:
         config_dir: str = "/home/ciris/nginx",
         container_name: str = "ciris-nginx",
         hostname: str = "agents.ciris.ai",
-        use_ssl: bool = False,
+        use_ssl: bool = True,
     ):
         """
         Initialize nginx manager.
@@ -45,8 +45,8 @@ class NginxManager:
             config_dir: Directory for nginx configuration files
             container_name: Name of the nginx Docker container
             hostname: Hostname for this nginx instance (e.g., agents.ciris.ai, scoutapi.ciris.ai)
-            use_ssl: Whether to generate HTTPS config with Let's Encrypt certs.
-                     Set to False when using Cloudflare for SSL termination (default).
+            use_ssl: Whether to generate HTTPS config with Let's Encrypt certs (default True).
+                     Set to False only when using Cloudflare Flexible SSL mode.
         """
         self.config_dir = Path(config_dir)
         self.container_name = container_name
