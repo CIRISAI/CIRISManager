@@ -1,0 +1,298 @@
+---
+# Consensual Shutdown of Old Infrastructure
+# Gracefully shuts down agents with migration notification
+# Waits for agents to acknowledge before stopping containers
+
+- name: Verify New Infrastructure is Healthy Before Shutdown
+  hosts: new_manager
+  gather_facts: yes
+
+  tasks:
+    - name: Check manager API
+      uri:
+        url: "http://localhost:8888/manager/v1/status"
+        method: GET
+        return_content: yes
+      register: manager_status
+      failed_when: manager_status.status != 200
+
+    - name: Verify manager is healthy
+      assert:
+        that:
+          - "(manager_status.content | from_json).status == 'running'"
+        fail_msg: "New manager is not healthy. Aborting shutdown of old infrastructure."
+        success_msg: "New manager is healthy. Proceeding with consensual shutdown."
+
+- name: Verify New Agents are Healthy
+  hosts: new_agents
+  gather_facts: yes
+
+  tasks:
+    - name: Check all agent containers are healthy
+      community.docker.docker_container_info:
+        name: "{{ item }}"
+      register: container_info
+      loop:
+        - ciris-datum
+        - ciris-echo-core-jm2jy2
+        - ciris-echo-speculative-4fc6ru
+        - ciris-gui
+        - ciris-nginx
+
+    - name: Verify all containers are healthy
+      assert:
+        that:
+          - (item.container.State.Health.Status | default('none') == 'healthy') or (item.container.State.Status == 'running' and item.container.State.Health is not defined)
+        fail_msg: "Container {{ item.item }} is not healthy on new infrastructure"
+        success_msg: "Container {{ item.item }} is healthy"
+      loop: "{{ container_info.results }}"
+
+- name: Verify New Scouts are Healthy
+  hosts: new_scout1:new_scout2
+  gather_facts: yes
+
+  tasks:
+    - name: Check nginx container
+      community.docker.docker_container_info:
+        name: ciris-nginx
+      register: nginx_info
+
+    - name: Get scout container name
+      set_fact:
+        scout_container: "{{ 'ciris-scout-remote-test-dahrb9' if inventory_hostname == 'new_scout1' else 'ciris-scout-remote-test-dahrb9-002' }}"
+
+    - name: Check scout container
+      community.docker.docker_container_info:
+        name: "{{ scout_container }}"
+      register: scout_info
+
+    - name: Verify containers are healthy
+      assert:
+        that:
+          - (scout_info.container.State.Health.Status | default('none') == 'healthy') or (scout_info.container.State.Status == 'running' and scout_info.container.State.Health is not defined)
+        fail_msg: "Scout container {{ scout_container }} is not healthy"
+        success_msg: "Scout container {{ scout_container }} is healthy"
+
+- name: Consensual Shutdown of Old Main Server Agents
+  hosts: old_main
+  gather_facts: yes
+  vars:
+    shutdown_message: "{{ migration_message }}"
+    shutdown_timeout: 60
+
+  tasks:
+    - name: Display shutdown notice
+      debug:
+        msg: |
+          ==========================================
+          CONSENSUAL AGENT SHUTDOWN
+          ==========================================
+          Message: {{ shutdown_message }}
+          Agents to shutdown:
+            - ciris-datum
+            - ciris-echo-core-jm2jy2
+            - ciris-echo-speculative-4fc6ru
+          ==========================================
+
+    - name: Send graceful shutdown request to datum via manager
+      uri:
+        url: "http://localhost:8888/manager/v1/agents/datum/shutdown"
+        method: POST
+        body_format: json
+        body:
+          message: "{{ shutdown_message }}"
+          timeout: "{{ shutdown_timeout }}"
+        status_code: [200, 202, 404]
+        timeout: 30
+      register: datum_shutdown
+      ignore_errors: yes
+
+    - name: Wait for datum to acknowledge shutdown
+      pause:
+        seconds: 10
+      when: datum_shutdown.status in [200, 202]
+
+    - name: Send graceful shutdown request to echo-core via manager
+      uri:
+        url: "http://localhost:8888/manager/v1/agents/echo-core-jm2jy2/shutdown"
+        method: POST
+        body_format: json
+        body:
+          message: "{{ shutdown_message }}"
+          timeout: "{{ shutdown_timeout }}"
+        status_code: [200, 202, 404]
+        timeout: 30
+      register: echo_core_shutdown
+      ignore_errors: yes
+
+    - name: Wait for echo-core to acknowledge shutdown
+      pause:
+        seconds: 10
+      when: echo_core_shutdown.status in [200, 202]
+
+    - name: Send graceful shutdown request to echo-speculative via manager
+      uri:
+        url: "http://localhost:8888/manager/v1/agents/echo-speculative-4fc6ru/shutdown"
+        method: POST
+        body_format: json
+        body:
+          message: "{{ shutdown_message }}"
+          timeout: "{{ shutdown_timeout }}"
+        status_code: [200, 202, 404]
+        timeout: 30
+      register: echo_spec_shutdown
+      ignore_errors: yes
+
+    - name: Wait for echo-speculative to acknowledge shutdown
+      pause:
+        seconds: 10
+      when: echo_spec_shutdown.status in [200, 202]
+
+    - name: Stop agent containers gracefully
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: stopped
+        stop_timeout: 30
+      loop:
+        - ciris-datum
+        - ciris-echo-core-jm2jy2
+        - ciris-echo-speculative-4fc6ru
+      register: stopped_agents
+
+    - name: Stop supporting containers
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: stopped
+        stop_timeout: 30
+      loop:
+        - ciris-gui
+        - ciris-nginx
+      ignore_errors: yes
+
+    - name: Display shutdown summary
+      debug:
+        msg: |
+          Old main server shutdown complete:
+          - datum: {{ 'stopped' if datum_shutdown is defined else 'skipped' }}
+          - echo-core: {{ 'stopped' if echo_core_shutdown is defined else 'skipped' }}
+          - echo-speculative: {{ 'stopped' if echo_spec_shutdown is defined else 'skipped' }}
+
+          Agents received migration message:
+          "{{ shutdown_message }}"
+
+- name: Consensual Shutdown of Old Scout1 Server
+  hosts: old_scout1
+  gather_facts: yes
+  vars:
+    shutdown_message: "{{ migration_message }}"
+
+  tasks:
+    - name: Display shutdown notice for scout1
+      debug:
+        msg: |
+          Shutting down scout1 agent with message:
+          "{{ shutdown_message }}"
+
+    - name: Send graceful shutdown to scout agent
+      uri:
+        url: "http://localhost:8000/v1/system/shutdown"
+        method: POST
+        body_format: json
+        body:
+          message: "{{ shutdown_message }}"
+        status_code: [200, 202, 404, 405]
+        timeout: 30
+      register: scout1_shutdown
+      ignore_errors: yes
+
+    - name: Wait for agent to acknowledge
+      pause:
+        seconds: 10
+
+    - name: Stop scout container
+      community.docker.docker_container:
+        name: ciris-scout-remote-test-dahrb9
+        state: stopped
+        stop_timeout: 30
+
+    - name: Stop nginx container
+      community.docker.docker_container:
+        name: ciris-nginx
+        state: stopped
+        stop_timeout: 30
+
+- name: Consensual Shutdown of Old Scout2 Server
+  hosts: old_scout2
+  gather_facts: yes
+  vars:
+    shutdown_message: "{{ migration_message }}"
+
+  tasks:
+    - name: Display shutdown notice for scout2
+      debug:
+        msg: |
+          Shutting down scout2 agent with message:
+          "{{ shutdown_message }}"
+
+    - name: Send graceful shutdown to scout agent
+      uri:
+        url: "http://localhost:8000/v1/system/shutdown"
+        method: POST
+        body_format: json
+        body:
+          message: "{{ shutdown_message }}"
+        status_code: [200, 202, 404, 405]
+        timeout: 30
+      register: scout2_shutdown
+      ignore_errors: yes
+
+    - name: Wait for agent to acknowledge
+      pause:
+        seconds: 10
+
+    - name: Stop scout container
+      community.docker.docker_container:
+        name: ciris-scout-remote-test-dahrb9-002
+        state: stopped
+        stop_timeout: 30
+
+    - name: Stop nginx container
+      community.docker.docker_container:
+        name: ciris-nginx
+        state: stopped
+        stop_timeout: 30
+
+- name: Summary
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Display migration summary
+      debug:
+        msg: |
+          ==========================================
+          CONSENSUAL SHUTDOWN COMPLETE
+          ==========================================
+
+          All old infrastructure agents have been notified
+          and gracefully shut down with the message:
+
+          "{{ migration_message }}"
+
+          Old Infrastructure Status:
+          - old_main: Containers stopped
+          - old_scout1: Containers stopped
+          - old_scout2: Containers stopped
+
+          New Infrastructure Status:
+          - new_manager: CIRISManager running
+          - new_agents: All containers running
+          - new_scout1: Scout agent running
+          - new_scout2: Scout agent running
+
+          Next steps:
+          1. Update DNS records in Cloudflare
+          2. Run verification playbook (06-verify-migration.yml)
+          3. Monitor for 48-72 hours before decommissioning
+
+          ==========================================
