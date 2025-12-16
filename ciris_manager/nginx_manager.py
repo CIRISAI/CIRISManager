@@ -37,6 +37,7 @@ class NginxManager:
         container_name: str = "ciris-nginx",
         hostname: str = "agents.ciris.ai",
         use_ssl: bool = True,
+        manager_address: str = "127.0.0.1:8888",
     ):
         """
         Initialize nginx manager.
@@ -47,11 +48,14 @@ class NginxManager:
             hostname: Hostname for this nginx instance (e.g., agents.ciris.ai, scoutapi.ciris.ai)
             use_ssl: Whether to generate HTTPS config with Let's Encrypt certs (default True).
                      Set to False only when using Cloudflare Flexible SSL mode.
+            manager_address: Address of the CIRISManager API (host:port). Use VPC IP when
+                     manager runs on a different server than nginx.
         """
         self.config_dir = Path(config_dir)
         self.container_name = container_name
         self.hostname = hostname
         self.use_ssl = use_ssl
+        self.manager_address = manager_address
         self.config_path = self.config_dir / "nginx.conf"
         self.new_config_path = self.config_dir / "nginx.conf.new"
         self.backup_path = self.config_dir / "nginx.conf.backup"
@@ -534,9 +538,9 @@ http {
     }
 
     # Manager API upstream
-    upstream manager {
-        server 127.0.0.1:8888;
-    }
+    upstream manager {{
+        server {self.manager_address};
+    }}
 
     # CIRISLens API upstream
     upstream cirislens {

@@ -122,10 +122,14 @@ class CIRISManager:
                     (s for s in self.config.servers if s.server_id == "main"),
                     self.config.servers[0],
                 )
+                # Manager runs on this server (10.10.0.3), nginx runs on main server
+                # So main server nginx needs to proxy to manager via VPC
+                manager_vpc_ip = "10.10.0.3"
                 self.nginx_managers["main"] = NginxManager(
                     config_dir=self.config.nginx.config_dir,
                     container_name=self.config.nginx.container_name,
                     hostname=main_server.hostname,
+                    manager_address=f"{manager_vpc_ip}:8888",
                 )
                 logger.info(
                     f"✅ Initialized Nginx Manager for main server ({main_server.hostname})"
