@@ -870,9 +870,15 @@ http {
         }
 """
         else:
-            # Remote servers: simple 404 for root
+            # Remote servers: return 200 at root for load balancer health checks
             server += """
-        # Remote server - no GUI, return 404 for unmatched routes
+        # Remote server - no GUI, return 200 for load balancer health checks
+        location = / {
+            return 200 "healthy\\n";
+            add_header Content-Type text/plain;
+        }
+
+        # Return 404 for any other unmatched routes
         location / {
             return 404 "Agent server - API only\\n";
             add_header Content-Type text/plain;
