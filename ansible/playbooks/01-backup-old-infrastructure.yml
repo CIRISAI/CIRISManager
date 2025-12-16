@@ -1,0 +1,264 @@
+---
+# Backup Old Infrastructure
+# Creates timestamped backups of all agent data before migration
+# Includes verification checksums for data integrity
+
+- name: Backup Old Main Server
+  hosts: old_main
+  gather_facts: yes
+  vars:
+    backup_dir: "{{ backup_base_dir }}/{{ backup_timestamp }}/old_main"
+
+  tasks:
+    - name: Create backup directory
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Stop agent containers gracefully for consistent backup
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: stopped
+        stop_timeout: 30
+      loop:
+        - ciris-datum
+        - ciris-echo-core-jm2jy2
+        - ciris-echo-speculative-4fc6ru
+      register: stopped_containers
+      ignore_errors: yes
+
+    - name: Wait for containers to stop
+      pause:
+        seconds: 5
+
+    - name: Backup datum agent data
+      archive:
+        path: /opt/ciris/agents/datum
+        dest: "{{ backup_dir }}/datum.tar.gz"
+        format: gz
+      register: datum_backup
+
+    - name: Backup echo-core agent data
+      archive:
+        path: /opt/ciris/agents/echo-core-jm2jy2
+        dest: "{{ backup_dir }}/echo-core-jm2jy2.tar.gz"
+        format: gz
+      register: echo_core_backup
+
+    - name: Backup echo-speculative agent data
+      archive:
+        path: /opt/ciris/agents/echo-speculative-4fc6ru
+        dest: "{{ backup_dir }}/echo-speculative-4fc6ru.tar.gz"
+        format: gz
+      register: echo_spec_backup
+
+    - name: Backup metadata.json
+      copy:
+        src: /opt/ciris/agents/metadata.json
+        dest: "{{ backup_dir }}/metadata.json"
+        remote_src: yes
+
+    - name: Backup shared OAuth data
+      archive:
+        path: /home/ciris/shared/oauth
+        dest: "{{ backup_dir }}/oauth.tar.gz"
+        format: gz
+      ignore_errors: yes
+
+    - name: Backup nginx configuration
+      archive:
+        path: /home/ciris/nginx
+        dest: "{{ backup_dir }}/nginx.tar.gz"
+        format: gz
+      ignore_errors: yes
+
+    - name: Generate checksums for verification
+      shell: |
+        cd {{ backup_dir }}
+        sha256sum *.tar.gz *.json > checksums.sha256
+      args:
+        chdir: "{{ backup_dir }}"
+
+    - name: Restart agent containers
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: started
+      loop:
+        - ciris-datum
+        - ciris-echo-core-jm2jy2
+        - ciris-echo-speculative-4fc6ru
+      ignore_errors: yes
+
+    - name: Wait for containers to be healthy
+      community.docker.docker_container_info:
+        name: "{{ item }}"
+      register: container_info
+      until: container_info.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+      loop:
+        - ciris-datum
+        - ciris-echo-core-jm2jy2
+        - ciris-echo-speculative-4fc6ru
+      ignore_errors: yes
+
+    - name: Display backup summary
+      debug:
+        msg: |
+          Backup completed for old_main:
+          - Datum: {{ datum_backup.dest | default('failed') }}
+          - Echo-Core: {{ echo_core_backup.dest | default('failed') }}
+          - Echo-Speculative: {{ echo_spec_backup.dest | default('failed') }}
+          - Location: {{ backup_dir }}
+
+- name: Backup Old Scout1 Server
+  hosts: old_scout1
+  gather_facts: yes
+  vars:
+    backup_dir: "{{ backup_base_dir }}/{{ backup_timestamp }}/old_scout1"
+
+  tasks:
+    - name: Create backup directory
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Stop scout container gracefully
+      community.docker.docker_container:
+        name: ciris-scout-remote-test-dahrb9
+        state: stopped
+        stop_timeout: 30
+      ignore_errors: yes
+
+    - name: Wait for container to stop
+      pause:
+        seconds: 5
+
+    - name: Backup scout agent data
+      archive:
+        path: /opt/ciris/agents/scout-remote-test-dahrb9
+        dest: "{{ backup_dir }}/scout-remote-test-dahrb9.tar.gz"
+        format: gz
+      register: scout1_backup
+
+    - name: Generate checksums
+      shell: |
+        cd {{ backup_dir }}
+        sha256sum *.tar.gz > checksums.sha256
+      args:
+        chdir: "{{ backup_dir }}"
+
+    - name: Restart scout container
+      community.docker.docker_container:
+        name: ciris-scout-remote-test-dahrb9
+        state: started
+      ignore_errors: yes
+
+    - name: Wait for container to be healthy
+      community.docker.docker_container_info:
+        name: ciris-scout-remote-test-dahrb9
+      register: container_info
+      until: container_info.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+      ignore_errors: yes
+
+    - name: Display backup summary
+      debug:
+        msg: "Scout1 backup: {{ scout1_backup.dest | default('failed') }}"
+
+- name: Backup Old Scout2 Server
+  hosts: old_scout2
+  gather_facts: yes
+  vars:
+    backup_dir: "{{ backup_base_dir }}/{{ backup_timestamp }}/old_scout2"
+
+  tasks:
+    - name: Create backup directory
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Stop scout container gracefully
+      community.docker.docker_container:
+        name: ciris-scout-remote-test-dahrb9-002
+        state: stopped
+        stop_timeout: 30
+      ignore_errors: yes
+
+    - name: Wait for container to stop
+      pause:
+        seconds: 5
+
+    - name: Backup scout agent data
+      archive:
+        path: /opt/ciris/agents/scout-remote-test-dahrb9-002
+        dest: "{{ backup_dir }}/scout-remote-test-dahrb9-002.tar.gz"
+        format: gz
+      register: scout2_backup
+
+    - name: Generate checksums
+      shell: |
+        cd {{ backup_dir }}
+        sha256sum *.tar.gz > checksums.sha256
+      args:
+        chdir: "{{ backup_dir }}"
+
+    - name: Restart scout container
+      community.docker.docker_container:
+        name: ciris-scout-remote-test-dahrb9-002
+        state: started
+      ignore_errors: yes
+
+    - name: Wait for container to be healthy
+      community.docker.docker_container_info:
+        name: ciris-scout-remote-test-dahrb9-002
+      register: container_info
+      until: container_info.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+      ignore_errors: yes
+
+    - name: Display backup summary
+      debug:
+        msg: "Scout2 backup: {{ scout2_backup.dest | default('failed') }}"
+
+- name: Fetch Backups to Control Node
+  hosts: old_infra
+  gather_facts: yes
+  vars:
+    local_backup_dir: "/home/emoore/ciris-migration-backups/{{ backup_timestamp }}"
+
+  tasks:
+    - name: Create local backup directory
+      delegate_to: localhost
+      file:
+        path: "{{ local_backup_dir }}/{{ inventory_hostname }}"
+        state: directory
+        mode: '0755'
+
+    - name: Fetch backup files
+      synchronize:
+        src: "{{ backup_base_dir }}/{{ backup_timestamp }}/{{ inventory_hostname }}/"
+        dest: "{{ local_backup_dir }}/{{ inventory_hostname }}/"
+        mode: pull
+      ignore_errors: yes
+
+    - name: Verify checksums locally
+      delegate_to: localhost
+      shell: |
+        cd {{ local_backup_dir }}/{{ inventory_hostname }}
+        if [ -f checksums.sha256 ]; then
+          sha256sum -c checksums.sha256
+        else
+          echo "No checksums file found"
+        fi
+      register: checksum_verify
+      ignore_errors: yes
+
+    - name: Display verification result
+      debug:
+        msg: "{{ checksum_verify.stdout_lines | default(['Verification skipped']) }}"

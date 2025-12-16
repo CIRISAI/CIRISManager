@@ -1,0 +1,79 @@
+---
+# CIRIS Research Infrastructure Migration Variables
+
+# Migration metadata
+migration_version: "1.0"
+migration_date: "2025-12-15"
+migration_message: "Migrating to new improved infrastructure with better isolation and cost efficiency"
+
+# Docker registry
+docker_registry: ghcr.io/cirisai
+agent_image: "{{ docker_registry }}/ciris-agent:latest"
+gui_image: "{{ docker_registry }}/ciris-gui:latest"
+nginx_image: nginx:alpine
+
+# Backup settings
+backup_base_dir: /tmp/ciris-migration-backup
+backup_timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+
+# Health check settings
+health_check_retries: 10
+health_check_delay: 5
+container_start_timeout: 60
+
+# Rollback settings
+enable_rollback: true
+rollback_on_failure: true
+
+# Old infrastructure IPs (for reference)
+old_main_ip: 108.61.119.117
+old_scout1_ip: 207.148.14.113
+old_scout2_ip: 104.207.141.1
+
+# New infrastructure IPs
+new_manager_ip: 45.76.226.222
+new_agents_ip: 45.76.231.182
+new_scout1_ip: 144.202.55.195
+new_scout2_ip: 45.76.18.133
+
+# New infrastructure VPC IPs
+new_manager_vpc: 10.10.0.3
+new_agents_vpc: 10.10.0.4
+new_scout1_vpc: 10.10.0.5
+new_scout2_vpc: 10.10.0.6
+
+# Manager API settings
+old_manager_api: "http://{{ old_main_ip }}:8888"
+new_manager_api: "http://{{ new_manager_ip }}:8888"
+
+# Agents to migrate
+main_agents:
+  - name: datum
+    agent_id: datum
+    port: 8001
+    source_dir: /opt/ciris/agents/datum
+
+  - name: echo-core
+    agent_id: echo-core-jm2jy2
+    port: 8002
+    source_dir: /opt/ciris/agents/echo-core-jm2jy2
+
+  - name: echo-speculative
+    agent_id: echo-speculative-4fc6ru
+    port: 8003
+    source_dir: /opt/ciris/agents/echo-speculative-4fc6ru
+
+scout_agents:
+  - name: scout-remote-test
+    agent_id: scout-remote-test-dahrb9
+    port: 8000
+    source_host: old_scout1
+    target_host: new_scout1
+    source_dir: /opt/ciris/agents/scout-remote-test-dahrb9
+
+  - name: scout-remote-test-002
+    agent_id: scout-remote-test-dahrb9-002
+    port: 8000
+    source_host: old_scout2
+    target_host: new_scout2
+    source_dir: /opt/ciris/agents/scout-remote-test-dahrb9-002

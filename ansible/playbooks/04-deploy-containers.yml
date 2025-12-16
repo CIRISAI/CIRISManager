@@ -1,0 +1,334 @@
+---
+# Deploy Containers on New Infrastructure
+# Deploys nginx, GUI, and agent containers with health checks
+
+- name: Deploy Containers on New Agents Server
+  hosts: new_agents
+  gather_facts: yes
+
+  handlers:
+    - name: rollback nginx
+      community.docker.docker_container:
+        name: ciris-nginx
+        state: absent
+      when: rollback_on_failure | default(true)
+
+    - name: rollback gui
+      community.docker.docker_container:
+        name: ciris-gui
+        state: absent
+      when: rollback_on_failure | default(true)
+
+    - name: rollback all agents
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - ciris-datum
+        - ciris-echo-core-jm2jy2
+        - ciris-echo-speculative-4fc6ru
+      when: rollback_on_failure | default(true)
+
+  tasks:
+    # Deploy Nginx first
+    - name: Generate nginx configuration
+      template:
+        src: ../files/nginx-agents.conf.j2
+        dest: /home/ciris/nginx/nginx.conf
+        mode: '0644'
+
+    - name: Deploy nginx container
+      community.docker.docker_container:
+        name: ciris-nginx
+        image: "{{ nginx_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "80:80"
+          - "443:443"
+        volumes:
+          - /home/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+        networks:
+          - name: ciris-network
+        healthcheck:
+          test: ["CMD", "nginx", "-t"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+      register: nginx_deploy
+      notify: rollback nginx
+
+    - name: Wait for nginx to be ready
+      wait_for:
+        port: 80
+        host: localhost
+        timeout: 30
+
+    # Deploy GUI container
+    - name: Deploy GUI container
+      community.docker.docker_container:
+        name: ciris-gui
+        image: "{{ gui_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "3000:3000"
+        env:
+          REACT_APP_API_URL: "https://agents.ciris.ai"
+        networks:
+          - name: ciris-network
+        healthcheck:
+          test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+      register: gui_deploy
+      notify: rollback gui
+
+    - name: Wait for GUI container to be healthy
+      community.docker.docker_container_info:
+        name: ciris-gui
+      register: gui_health
+      until: gui_health.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    # Deploy datum agent
+    - name: Deploy datum agent container
+      community.docker.docker_compose_v2:
+        project_src: /opt/ciris/agents/datum
+        state: present
+      register: datum_deploy
+      notify: rollback all agents
+
+    - name: Wait for datum to be healthy
+      community.docker.docker_container_info:
+        name: ciris-datum
+      register: datum_health
+      until: datum_health.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    - name: Verify datum API responds
+      uri:
+        url: "http://localhost:8001/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: datum_api
+      retries: 5
+      delay: 5
+      until: datum_api.status in [200, 401, 403]
+
+    # Deploy echo-core agent
+    - name: Deploy echo-core agent container
+      community.docker.docker_compose_v2:
+        project_src: /opt/ciris/agents/echo-core-jm2jy2
+        state: present
+      register: echo_core_deploy
+      notify: rollback all agents
+
+    - name: Wait for echo-core to be healthy
+      community.docker.docker_container_info:
+        name: ciris-echo-core-jm2jy2
+      register: echo_core_health
+      until: echo_core_health.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    - name: Verify echo-core API responds
+      uri:
+        url: "http://localhost:8002/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: echo_core_api
+      retries: 5
+      delay: 5
+      until: echo_core_api.status in [200, 401, 403]
+
+    # Deploy echo-speculative agent
+    - name: Deploy echo-speculative agent container
+      community.docker.docker_compose_v2:
+        project_src: /opt/ciris/agents/echo-speculative-4fc6ru
+        state: present
+      register: echo_spec_deploy
+      notify: rollback all agents
+
+    - name: Wait for echo-speculative to be healthy
+      community.docker.docker_container_info:
+        name: ciris-echo-speculative-4fc6ru
+      register: echo_spec_health
+      until: echo_spec_health.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    - name: Verify echo-speculative API responds
+      uri:
+        url: "http://localhost:8003/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: echo_spec_api
+      retries: 5
+      delay: 5
+      until: echo_spec_api.status in [200, 401, 403]
+
+    - name: Display deployment summary for new_agents
+      debug:
+        msg: |
+          Deployment complete on new_agents ({{ new_agents_ip }}):
+          - nginx: {{ 'healthy' if nginx_deploy.changed else 'already running' }}
+          - GUI: {{ gui_health.container.State.Health.Status }}
+          - datum: {{ datum_health.container.State.Health.Status }}
+          - echo-core: {{ echo_core_health.container.State.Health.Status }}
+          - echo-speculative: {{ echo_spec_health.container.State.Health.Status }}
+
+- name: Deploy Containers on New Scout1 Server
+  hosts: new_scout1
+  gather_facts: yes
+
+  handlers:
+    - name: rollback scout1 nginx
+      community.docker.docker_container:
+        name: ciris-nginx
+        state: absent
+      when: rollback_on_failure | default(true)
+
+    - name: rollback scout1 agent
+      community.docker.docker_container:
+        name: ciris-scout-remote-test-dahrb9
+        state: absent
+      when: rollback_on_failure | default(true)
+
+  tasks:
+    - name: Generate nginx configuration for scout1
+      template:
+        src: ../files/nginx-scout.conf.j2
+        dest: /home/ciris/nginx/nginx.conf
+        mode: '0644'
+      vars:
+        agent_name: scout-remote-test-dahrb9
+        agent_port: 8000
+
+    - name: Deploy nginx container
+      community.docker.docker_container:
+        name: ciris-nginx
+        image: "{{ nginx_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "80:80"
+          - "443:443"
+        volumes:
+          - /home/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+        networks:
+          - name: ciris-network
+        healthcheck:
+          test: ["CMD", "nginx", "-t"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+      register: nginx_deploy
+      notify: rollback scout1 nginx
+
+    - name: Wait for nginx to be ready
+      wait_for:
+        port: 80
+        host: localhost
+        timeout: 30
+
+    - name: Deploy scout agent container
+      community.docker.docker_compose_v2:
+        project_src: /opt/ciris/agents/scout-remote-test-dahrb9
+        state: present
+      register: scout1_deploy
+      notify: rollback scout1 agent
+
+    - name: Wait for scout1 to be healthy
+      community.docker.docker_container_info:
+        name: ciris-scout-remote-test-dahrb9
+      register: scout1_health
+      until: scout1_health.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    - name: Display deployment summary for scout1
+      debug:
+        msg: |
+          Deployment complete on new_scout1 ({{ new_scout1_ip }}):
+          - nginx: {{ 'healthy' if nginx_deploy.changed else 'already running' }}
+          - scout-remote-test-dahrb9: {{ scout1_health.container.State.Health.Status }}
+
+- name: Deploy Containers on New Scout2 Server
+  hosts: new_scout2
+  gather_facts: yes
+
+  handlers:
+    - name: rollback scout2 nginx
+      community.docker.docker_container:
+        name: ciris-nginx
+        state: absent
+      when: rollback_on_failure | default(true)
+
+    - name: rollback scout2 agent
+      community.docker.docker_container:
+        name: ciris-scout-remote-test-dahrb9-002
+        state: absent
+      when: rollback_on_failure | default(true)
+
+  tasks:
+    - name: Generate nginx configuration for scout2
+      template:
+        src: ../files/nginx-scout.conf.j2
+        dest: /home/ciris/nginx/nginx.conf
+        mode: '0644'
+      vars:
+        agent_name: scout-remote-test-dahrb9-002
+        agent_port: 8000
+
+    - name: Deploy nginx container
+      community.docker.docker_container:
+        name: ciris-nginx
+        image: "{{ nginx_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "80:80"
+          - "443:443"
+        volumes:
+          - /home/ciris/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+        networks:
+          - name: ciris-network
+        healthcheck:
+          test: ["CMD", "nginx", "-t"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+      register: nginx_deploy
+      notify: rollback scout2 nginx
+
+    - name: Wait for nginx to be ready
+      wait_for:
+        port: 80
+        host: localhost
+        timeout: 30
+
+    - name: Deploy scout agent container
+      community.docker.docker_compose_v2:
+        project_src: /opt/ciris/agents/scout-remote-test-dahrb9-002
+        state: present
+      register: scout2_deploy
+      notify: rollback scout2 agent
+
+    - name: Wait for scout2 to be healthy
+      community.docker.docker_container_info:
+        name: ciris-scout-remote-test-dahrb9-002
+      register: scout2_health
+      until: scout2_health.container.State.Health.Status == 'healthy'
+      retries: "{{ health_check_retries }}"
+      delay: "{{ health_check_delay }}"
+
+    - name: Display deployment summary for scout2
+      debug:
+        msg: |
+          Deployment complete on new_scout2 ({{ new_scout2_ip }}):
+          - nginx: {{ 'healthy' if nginx_deploy.changed else 'already running' }}
+          - scout-remote-test-dahrb9-002: {{ scout2_health.container.State.Health.Status }}

@@ -70,7 +70,7 @@ jobs:
       - name: Deploy CIRISManager
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: 108.61.119.117
+          host: 45.76.226.222
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
@@ -261,7 +261,7 @@ jobs:
       - name: Verify Deployment
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: 108.61.119.117
+          host: 45.76.226.222
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |

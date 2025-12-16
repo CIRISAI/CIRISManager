@@ -1,0 +1,94 @@
+---
+# CIRIS Research Infrastructure Inventory
+all:
+  hosts:
+    # OLD infrastructure (to be decommissioned)
+    old_main:
+      ansible_host: 108.61.119.117
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/ciris_deploy
+      description: "Old main server (agents.ciris.ai) - TO BE DECOMMISSIONED"
+
+    old_scout1:
+      ansible_host: 207.148.14.113
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/ciris_deploy
+      description: "Old scout1 (scoutapi.ciris.ai) - TO BE DECOMMISSIONED"
+
+    old_scout2:
+      ansible_host: 104.207.141.1
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/ciris_deploy
+      description: "Old scout2 - TO BE DECOMMISSIONED"
+
+    # NEW infrastructure (10.10.0.0/24 VPC)
+    new_manager:
+      ansible_host: 45.76.226.222
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/ciris_deploy
+      vpc_ip: 10.10.0.3
+      description: "New manager VM - CIRISManager service"
+
+    new_agents:
+      ansible_host: 45.76.231.182
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/ciris_deploy
+      vpc_ip: 10.10.0.4
+      description: "New agents VM - main agent containers"
+
+    new_scout1:
+      ansible_host: 144.202.55.195
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/ciris_deploy
+      vpc_ip: 10.10.0.5
+      description: "New scout1 VM - additional agent capacity"
+
+    new_scout2:
+      ansible_host: 45.76.18.133
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/ciris_deploy
+      vpc_ip: 10.10.0.6
+      description: "New scout2 VM - additional agent capacity"
+
+  children:
+    # Old infrastructure (to be decommissioned)
+    old_infra:
+      hosts:
+        old_main:
+        old_scout1:
+        old_scout2:
+
+    # New infrastructure
+    new_infra:
+      hosts:
+        new_manager:
+        new_agents:
+        new_scout1:
+        new_scout2:
+
+    # All research servers
+    all_research:
+      hosts:
+        old_main:
+        old_scout1:
+        old_scout2:
+        new_manager:
+        new_agents:
+        new_scout1:
+        new_scout2:
+
+    # Manager hosts
+    manager_hosts:
+      hosts:
+        old_main:
+        new_manager:
+
+    # Agent hosts (where containers run)
+    agent_hosts:
+      hosts:
+        old_main:
+        old_scout1:
+        old_scout2:
+        new_agents:
+        new_scout1:
+        new_scout2:

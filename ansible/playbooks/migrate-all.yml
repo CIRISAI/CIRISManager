@@ -1,0 +1,135 @@
+---
+# Master Migration Playbook
+# Runs all migration steps in sequence with confirmation prompts
+# Can also be run with --start-at-task to resume from a specific point
+
+- name: Migration Pre-flight Check
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: Display migration plan
+      debug:
+        msg: |
+          ==========================================
+          CIRIS RESEARCH INFRASTRUCTURE MIGRATION
+          ==========================================
+
+          This playbook will:
+          1. Backup all agent data from old infrastructure
+          2. Prepare new infrastructure (directories, images)
+          3. Transfer data to new servers
+          4. Deploy containers on new infrastructure
+          5. Gracefully shutdown old agents with migration notice
+          6. Verify migration success
+
+          OLD INFRASTRUCTURE (to be migrated):
+          - old_main ({{ old_main_ip }}): datum, echo-core, echo-speculative, GUI
+          - old_scout1 ({{ old_scout1_ip }}): scout-remote-test
+          - old_scout2 ({{ old_scout2_ip }}): scout-remote-test-002
+
+          NEW INFRASTRUCTURE (targets):
+          - new_manager ({{ new_manager_ip }}): CIRISManager service
+          - new_agents ({{ new_agents_ip }}): main agents + GUI
+          - new_scout1 ({{ new_scout1_ip }}): scout agent
+          - new_scout2 ({{ new_scout2_ip }}): scout agent
+
+          ESTIMATED DOWNTIME: 5-10 minutes per agent
+          ROLLBACK: Handlers will cleanup on failure
+
+          ==========================================
+
+    - name: Confirm migration
+      pause:
+        prompt: "Press Enter to begin migration (Ctrl+C to abort)"
+
+# Step 1: Backup
+- name: Step 1 - Backup Old Infrastructure
+  import_playbook: 01-backup-old-infrastructure.yml
+
+- name: Confirm backup success
+  hosts: localhost
+  tasks:
+    - name: Verify backup files exist
+      find:
+        paths: /home/emoore/ciris-migration-backups
+        patterns: "*.tar.gz"
+        recurse: yes
+      register: backup_files
+
+    - name: Display backup count
+      debug:
+        msg: "Found {{ backup_files.files | length }} backup files"
+
+    - name: Pause before continuing
+      pause:
+        prompt: "Backups complete. Press Enter to continue to infrastructure preparation"
+
+# Step 2: Prepare new infrastructure
+- name: Step 2 - Prepare New Infrastructure
+  import_playbook: 02-prepare-new-infrastructure.yml
+
+- name: Confirm preparation success
+  hosts: localhost
+  tasks:
+    - name: Pause before data transfer
+      pause:
+        prompt: "New infrastructure prepared. Press Enter to transfer data"
+
+# Step 3: Transfer data
+- name: Step 3 - Transfer Data
+  import_playbook: 03-transfer-data.yml
+
+- name: Confirm transfer success
+  hosts: localhost
+  tasks:
+    - name: Pause before container deployment
+      pause:
+        prompt: "Data transferred. Press Enter to deploy containers"
+
+# Step 4: Deploy containers
+- name: Step 4 - Deploy Containers
+  import_playbook: 04-deploy-containers.yml
+
+- name: Confirm deployment success
+  hosts: localhost
+  tasks:
+    - name: Pause before shutdown
+      pause:
+        prompt: |
+          Containers deployed on new infrastructure.
+
+          IMPORTANT: This next step will SHUT DOWN the old agents.
+          Make sure new agents are healthy before proceeding.
+
+          Press Enter to begin consensual shutdown of old agents
+
+# Step 5: Consensual shutdown
+- name: Step 5 - Consensual Shutdown
+  import_playbook: 05-consensual-shutdown.yml
+
+# Step 6: Verify
+- name: Step 6 - Verify Migration
+  import_playbook: 06-verify-migration.yml
+
+- name: Migration Complete
+  hosts: localhost
+  tasks:
+    - name: Final message
+      debug:
+        msg: |
+          ==========================================
+          MIGRATION COMPLETE
+          ==========================================
+
+          All agents have been migrated to new infrastructure.
+
+          DNS Updates Required (Cloudflare):
+          - manager.ciris.ai -> {{ new_manager_ip }}
+          - agents.ciris.ai -> {{ new_agents_ip }}
+          - scoutapi.ciris.ai -> {{ new_scout1_ip }}
+
+          Keep old infrastructure running for 48-72 hours
+          as a rollback option until DNS fully propagates.
+
+          ==========================================

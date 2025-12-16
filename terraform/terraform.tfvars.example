@@ -1,0 +1,38 @@
+# CIRISManager Research Infrastructure - Configuration
+#
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored and will not be committed.
+
+# Vultr API key (get from https://my.vultr.com/settings/#settingsapi)
+vultr_api_key = "YOUR_VULTR_API_KEY"
+
+# SSH key IDs from Vultr (get from https://my.vultr.com/settings/#settingssshkeys)
+# Run: vultr-cli ssh-key list
+ssh_key_ids = ["your-ssh-key-id"]
+
+# Region (ord = Chicago, matching existing infrastructure)
+region = "ord"
+
+# Manager VM - CIRISManager service + nginx routing
+# vc2-1c-2gb: 1 vCPU, 2GB RAM, 55GB SSD - $12/mo
+manager_plan     = "vc2-1c-2gb"
+manager_hostname = "ciris-manager"
+manager_label    = "ciris-manager-research"
+
+# Agents VM - Agent containers + GUI
+# vc2-2c-4gb: 2 vCPU, 4GB RAM, 80GB SSD - $24/mo
+agents_plan     = "vc2-2c-4gb"
+agents_hostname = "ciris-agents"
+agents_label    = "ciris-agents-research"
+
+# OS (2284 = Ubuntu 24.04 LTS)
+os_id = 2284
+
+# VPC Configuration
+vpc_description = "CIRIS Research Infrastructure VPC"
+vpc_subnet      = "10.10.0.0"
+vpc_subnet_size = 24
+
+# Tags
+environment = "research"
+project     = "ciris"

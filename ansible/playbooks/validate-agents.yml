@@ -1,0 +1,157 @@
+---
+# Validate CIRIS Agents Health
+# Usage: ansible-playbook -i inventory.yml playbooks/validate-agents.yml
+#   or:  ansible-playbook playbooks/validate-agents.yml -e "target_host=108.61.119.117"
+
+- name: Validate CIRIS Infrastructure Health
+  hosts: "{{ target_host | default('all') }}"
+  gather_facts: no
+  vars:
+    ansible_user: root
+    ansible_ssh_private_key_file: ~/.ssh/ciris_deploy
+    manager_api_port: 8888
+
+  tasks:
+    - name: Check SSH connectivity
+      ping:
+      register: ssh_check
+
+    - name: Gather system info
+      shell: |
+        echo "Hostname: $(hostname)"
+        echo "Uptime: $(uptime -p)"
+        echo "Load: $(cat /proc/loadavg | cut -d' ' -f1-3)"
+        echo "Memory: $(free -h | grep Mem | awk '{print $3 "/" $2}')"
+      register: system_info
+      changed_when: false
+
+    - name: Display system info
+      debug:
+        msg: "{{ system_info.stdout_lines }}"
+
+    # Docker checks
+    - name: Check Docker daemon is running
+      shell: systemctl is-active docker
+      register: docker_status
+      changed_when: false
+      failed_when: docker_status.stdout != "active"
+
+    - name: List running CIRIS containers
+      shell: docker ps --filter 'name=ciris' --format '{{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}'
+      register: ciris_containers
+      changed_when: false
+
+    - name: Display running containers
+      debug:
+        msg: "{{ ciris_containers.stdout_lines }}"
+
+    # CIRISManager service check (main server only)
+    - name: Check CIRISManager service status
+      shell: systemctl is-active ciris-manager 2>/dev/null || echo "not-installed"
+      register: manager_service
+      changed_when: false
+
+    - name: Display CIRISManager status
+      debug:
+        msg: "CIRISManager service: {{ manager_service.stdout }}"
+      when: manager_service.stdout != "not-installed"
+
+    # Manager API health check
+    - name: Check Manager API health
+      uri:
+        url: "http://localhost:{{ manager_api_port }}/manager/v1/status"
+        method: GET
+        timeout: 10
+      register: manager_api
+      ignore_errors: yes
+      when: manager_service.stdout == "active"
+
+    - name: Display Manager API status
+      debug:
+        msg: "Manager API: {{ 'healthy' if manager_api.status == 200 else 'unhealthy' }}"
+      when: manager_service.stdout == "active" and manager_api is defined
+
+    # Get agent list from manager
+    - name: Get registered agents from Manager API
+      uri:
+        url: "http://localhost:{{ manager_api_port }}/manager/v1/agents"
+        method: GET
+        timeout: 10
+        return_content: yes
+      register: agents_response
+      ignore_errors: yes
+      when: manager_service.stdout == "active"
+
+    # Check individual agent health
+    - name: Check agent container health status
+      shell: |
+        docker ps --filter 'name=ciris-' --format '{{ '{{' }}.Names{{ '}}' }} {{ '{{' }}.Status{{ '}}' }}' | while read line; do
+          name=$(echo "$line" | awk '{print $1}')
+          if echo "$line" | grep -q "(healthy)"; then
+            echo "$name: HEALTHY"
+          elif echo "$line" | grep -q "(unhealthy)"; then
+            echo "$name: UNHEALTHY"
+          else
+            echo "$name: NO_HEALTHCHECK"
+          fi
+        done
+      register: agent_health
+      changed_when: false
+
+    - name: Display agent health status
+      debug:
+        msg: "{{ agent_health.stdout_lines }}"
+
+    # Nginx check
+    - name: Check nginx container is running
+      shell: docker ps --filter 'name=ciris-nginx' --format '{{ '{{' }}.Status{{ '}}' }}'
+      register: nginx_status
+      changed_when: false
+
+    - name: Test nginx is responding
+      uri:
+        url: "http://localhost:80/"
+        method: GET
+        timeout: 10
+        status_code: [200, 301, 302, 308, 404]  # 404 OK for API-only servers
+      register: nginx_http
+      ignore_errors: yes
+
+    - name: Display nginx status
+      debug:
+        msg: "Nginx: {{ nginx_status.stdout }} - HTTP {{ 'OK' if nginx_http.status is defined and nginx_http.status in [200, 301, 302, 308] else 'FAIL' }}"
+
+    # fail2ban check
+    - name: Check fail2ban status
+      shell: fail2ban-client status sshd 2>/dev/null | grep -E 'Currently banned|Total banned' || echo "fail2ban not active"
+      register: fail2ban_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display fail2ban status
+      debug:
+        msg: "{{ fail2ban_status.stdout_lines }}"
+
+    # Summary
+    - name: Generate health summary
+      set_fact:
+        health_summary:
+          ssh: "{{ 'OK' if ssh_check is success else 'FAIL' }}"
+          docker: "{{ 'OK' if docker_status.stdout == 'active' else 'FAIL' }}"
+          manager_service: "{{ manager_service.stdout | regex_replace('inactive.*', 'not-installed') }}"
+          manager_api: "{{ 'OK' if (manager_api is defined and manager_api.status is defined and manager_api.status == 200) else 'N/A' }}"
+          nginx: "{{ 'OK' if nginx_status.stdout is search('Up') else 'DOWN' }}"
+          containers: "{{ ciris_containers.stdout_lines | length }}"
+
+    - name: Display health summary
+      debug:
+        msg: |
+
+          ========== HEALTH SUMMARY ==========
+          SSH:              {{ health_summary.ssh }}
+          Docker:           {{ health_summary.docker }}
+          Manager Service:  {{ health_summary.manager_service }}
+          Manager API:      {{ health_summary.manager_api }}
+          Nginx:            {{ health_summary.nginx }}
+          Containers:       {{ health_summary.containers }}
+          ====================================

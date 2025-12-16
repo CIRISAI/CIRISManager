@@ -1,0 +1,276 @@
+---
+# Transfer Data to New Infrastructure
+# Copies agent data from old servers to new servers
+# Includes verification and rollback capabilities
+
+- name: Transfer Main Agent Data
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    local_backup_dir: "/home/emoore/ciris-migration-backups"
+    ssh_key: "~/.ssh/ciris_deploy"
+
+  tasks:
+    - name: Find old_main backup directory
+      find:
+        paths: "{{ local_backup_dir }}"
+        file_type: directory
+        patterns: "*"
+        recurse: yes
+        contains: "old_main"
+      register: old_main_dirs
+
+    - name: Find actual backup files
+      find:
+        paths: "{{ local_backup_dir }}"
+        patterns: "datum.tar.gz"
+        recurse: yes
+      register: datum_files
+
+    - name: Set backup paths
+      set_fact:
+        old_main_backup: "{{ (datum_files.files | first).path | dirname }}"
+      when: datum_files.files | length > 0
+
+    - name: Find scout1 backup
+      find:
+        paths: "{{ local_backup_dir }}"
+        patterns: "scout-remote-test-dahrb9.tar.gz"
+        recurse: yes
+      register: scout1_files
+
+    - name: Set scout1 backup path
+      set_fact:
+        old_scout1_backup: "{{ (scout1_files.files | first).path | dirname }}"
+      when: scout1_files.files | length > 0
+
+    - name: Find scout2 backup
+      find:
+        paths: "{{ local_backup_dir }}"
+        patterns: "scout-remote-test-dahrb9-002.tar.gz"
+        recurse: yes
+      register: scout2_files
+
+    - name: Set scout2 backup path
+      set_fact:
+        old_scout2_backup: "{{ (scout2_files.files | first).path | dirname }}"
+      when: scout2_files.files | length > 0
+
+    - name: Verify backups exist
+      fail:
+        msg: "Required backup not found. Run 01-backup-old-infrastructure.yml first."
+      when: datum_files.files | length == 0
+
+    - name: Display backup paths being used
+      debug:
+        msg: |
+          Using backups:
+          - old_main: {{ old_main_backup }}
+          - old_scout1: {{ old_scout1_backup }}
+          - old_scout2: {{ old_scout2_backup }}
+
+    # Transfer to new_agents
+    - name: Copy datum backup to new_agents
+      shell: |
+        scp -i {{ ssh_key }} -o StrictHostKeyChecking=no \
+          {{ old_main_backup }}/datum.tar.gz \
+          root@{{ new_agents_ip }}:/tmp/
+      register: datum_copy
+
+    - name: Copy echo-core backup to new_agents
+      shell: |
+        scp -i {{ ssh_key }} -o StrictHostKeyChecking=no \
+          {{ old_main_backup }}/echo-core-jm2jy2.tar.gz \
+          root@{{ new_agents_ip }}:/tmp/
+      register: echo_core_copy
+
+    - name: Copy echo-speculative backup to new_agents
+      shell: |
+        scp -i {{ ssh_key }} -o StrictHostKeyChecking=no \
+          {{ old_main_backup }}/echo-speculative-4fc6ru.tar.gz \
+          root@{{ new_agents_ip }}:/tmp/
+      register: echo_spec_copy
+
+    - name: Copy OAuth data to new_agents
+      shell: |
+        scp -i {{ ssh_key }} -o StrictHostKeyChecking=no \
+          {{ old_main_backup }}/oauth.tar.gz \
+          root@{{ new_agents_ip }}:/tmp/
+      register: oauth_copy
+      ignore_errors: yes
+
+    - name: Copy metadata.json to new_agents
+      shell: |
+        scp -i {{ ssh_key }} -o StrictHostKeyChecking=no \
+          {{ old_main_backup }}/metadata.json \
+          root@{{ new_agents_ip }}:/opt/ciris/agents/
+
+    # Transfer to new_scout1
+    - name: Copy scout1 backup to new_scout1
+      shell: |
+        scp -i {{ ssh_key }} -o StrictHostKeyChecking=no \
+          {{ old_scout1_backup }}/scout-remote-test-dahrb9.tar.gz \
+          root@{{ new_scout1_ip }}:/tmp/
+      register: scout1_copy
+
+    # Transfer to new_scout2
+    - name: Copy scout2 backup to new_scout2
+      shell: |
+        scp -i {{ ssh_key }} -o StrictHostKeyChecking=no \
+          {{ old_scout2_backup }}/scout-remote-test-dahrb9-002.tar.gz \
+          root@{{ new_scout2_ip }}:/tmp/
+      register: scout2_copy
+
+- name: Extract Data on New Agents Server
+  hosts: new_agents
+  gather_facts: yes
+
+  tasks:
+    - name: Extract datum data
+      unarchive:
+        src: /tmp/datum.tar.gz
+        dest: /opt/ciris/agents/
+        remote_src: yes
+        extra_opts: ['--strip-components=0']
+      register: datum_extract
+
+    - name: Verify datum extraction
+      stat:
+        path: /opt/ciris/agents/datum/docker-compose.yml
+      register: datum_verify
+      failed_when: not datum_verify.stat.exists
+
+    - name: Extract echo-core data
+      unarchive:
+        src: /tmp/echo-core-jm2jy2.tar.gz
+        dest: /opt/ciris/agents/
+        remote_src: yes
+        extra_opts: ['--strip-components=0']
+      register: echo_core_extract
+
+    - name: Verify echo-core extraction
+      stat:
+        path: /opt/ciris/agents/echo-core-jm2jy2/docker-compose.yml
+      register: echo_core_verify
+      failed_when: not echo_core_verify.stat.exists
+
+    - name: Extract echo-speculative data
+      unarchive:
+        src: /tmp/echo-speculative-4fc6ru.tar.gz
+        dest: /opt/ciris/agents/
+        remote_src: yes
+        extra_opts: ['--strip-components=0']
+      register: echo_spec_extract
+
+    - name: Verify echo-speculative extraction
+      stat:
+        path: /opt/ciris/agents/echo-speculative-4fc6ru/docker-compose.yml
+      register: echo_spec_verify
+      failed_when: not echo_spec_verify.stat.exists
+
+    - name: Extract OAuth data
+      unarchive:
+        src: /tmp/oauth.tar.gz
+        dest: /home/ciris/shared/
+        remote_src: yes
+        extra_opts: ['--strip-components=0']
+      ignore_errors: yes
+
+    - name: Set proper ownership
+      file:
+        path: "{{ item }}"
+        owner: root
+        group: root
+        recurse: yes
+      loop:
+        - /opt/ciris/agents/datum
+        - /opt/ciris/agents/echo-core-jm2jy2
+        - /opt/ciris/agents/echo-speculative-4fc6ru
+
+    - name: Cleanup temp files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/datum.tar.gz
+        - /tmp/echo-core-jm2jy2.tar.gz
+        - /tmp/echo-speculative-4fc6ru.tar.gz
+        - /tmp/oauth.tar.gz
+
+    - name: Display extraction summary
+      debug:
+        msg: |
+          Data extracted on new_agents:
+          - Datum: {{ 'OK' if datum_verify.stat.exists else 'FAILED' }}
+          - Echo-Core: {{ 'OK' if echo_core_verify.stat.exists else 'FAILED' }}
+          - Echo-Speculative: {{ 'OK' if echo_spec_verify.stat.exists else 'FAILED' }}
+
+- name: Extract Data on New Scout1 Server
+  hosts: new_scout1
+  gather_facts: yes
+
+  tasks:
+    - name: Extract scout1 data
+      unarchive:
+        src: /tmp/scout-remote-test-dahrb9.tar.gz
+        dest: /opt/ciris/agents/
+        remote_src: yes
+        extra_opts: ['--strip-components=0']
+      register: scout1_extract
+
+    - name: Verify scout1 extraction
+      stat:
+        path: /opt/ciris/agents/scout-remote-test-dahrb9/docker-compose.yml
+      register: scout1_verify
+      failed_when: not scout1_verify.stat.exists
+
+    - name: Set proper ownership
+      file:
+        path: /opt/ciris/agents/scout-remote-test-dahrb9
+        owner: root
+        group: root
+        recurse: yes
+
+    - name: Cleanup temp files
+      file:
+        path: /tmp/scout-remote-test-dahrb9.tar.gz
+        state: absent
+
+    - name: Display extraction summary
+      debug:
+        msg: "Scout1 data extracted: {{ 'OK' if scout1_verify.stat.exists else 'FAILED' }}"
+
+- name: Extract Data on New Scout2 Server
+  hosts: new_scout2
+  gather_facts: yes
+
+  tasks:
+    - name: Extract scout2 data
+      unarchive:
+        src: /tmp/scout-remote-test-dahrb9-002.tar.gz
+        dest: /opt/ciris/agents/
+        remote_src: yes
+        extra_opts: ['--strip-components=0']
+      register: scout2_extract
+
+    - name: Verify scout2 extraction
+      stat:
+        path: /opt/ciris/agents/scout-remote-test-dahrb9-002/docker-compose.yml
+      register: scout2_verify
+      failed_when: not scout2_verify.stat.exists
+
+    - name: Set proper ownership
+      file:
+        path: /opt/ciris/agents/scout-remote-test-dahrb9-002
+        owner: root
+        group: root
+        recurse: yes
+
+    - name: Cleanup temp files
+      file:
+        path: /tmp/scout-remote-test-dahrb9-002.tar.gz
+        state: absent
+
+    - name: Display extraction summary
+      debug:
+        msg: "Scout2 data extracted: {{ 'OK' if scout2_verify.stat.exists else 'FAILED' }}"

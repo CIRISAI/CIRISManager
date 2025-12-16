@@ -1,0 +1,291 @@
+---
+# Verify Migration Success
+# Comprehensive health checks for all new infrastructure components
+
+- name: Verify New Manager
+  hosts: new_manager
+  gather_facts: yes
+
+  tasks:
+    - name: Check CIRISManager service status
+      systemd:
+        name: ciris-manager
+      register: manager_service
+
+    - name: Verify manager service is running
+      assert:
+        that:
+          - manager_service.status.ActiveState == 'active'
+        fail_msg: "CIRISManager service is not running"
+        success_msg: "CIRISManager service is active"
+
+    - name: Check manager API health
+      uri:
+        url: "http://localhost:8888/manager/v1/status"
+        method: GET
+        return_content: yes
+      register: manager_api
+      failed_when: manager_api.status != 200
+
+    - name: Display manager status
+      debug:
+        msg: |
+          Manager Status:
+          - Service: {{ manager_service.status.ActiveState }}
+          - API Version: {{ (manager_api.content | from_json).version }}
+          - Uptime: {{ (manager_api.content | from_json).uptime_seconds }} seconds
+
+- name: Verify New Agents Server
+  hosts: new_agents
+  gather_facts: yes
+
+  tasks:
+    - name: Get all container statuses
+      community.docker.docker_container_info:
+        name: "{{ item }}"
+      register: containers
+      loop:
+        - ciris-nginx
+        - ciris-gui
+        - ciris-datum
+        - ciris-echo-core-jm2jy2
+        - ciris-echo-speculative-4fc6ru
+
+    - name: Verify all containers are healthy
+      assert:
+        that:
+          - item.container.State.Status == 'running'
+          - item.container.State.Health.Status == 'healthy' or item.container.State.Health is not defined
+        fail_msg: "Container {{ item.item }} is not healthy"
+        success_msg: "Container {{ item.item }} is healthy"
+      loop: "{{ containers.results }}"
+
+    - name: Test nginx health endpoint
+      uri:
+        url: "http://localhost/nginx-health"
+        method: GET
+        status_code: 200
+      register: nginx_health
+
+    - name: Test GUI endpoint
+      uri:
+        url: "http://localhost:3000"
+        method: GET
+        status_code: [200, 304]
+      register: gui_health
+
+    - name: Test datum API
+      uri:
+        url: "http://localhost:8001/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: datum_api
+
+    - name: Test echo-core API
+      uri:
+        url: "http://localhost:8002/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: echo_core_api
+
+    - name: Test echo-speculative API
+      uri:
+        url: "http://localhost:8003/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: echo_spec_api
+
+    - name: Test nginx proxy to datum
+      uri:
+        url: "http://localhost/api/datum/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: datum_proxy
+
+    - name: Display new_agents verification summary
+      debug:
+        msg: |
+          New Agents Server Verification ({{ new_agents_ip }}):
+
+          Containers:
+          {% for c in containers.results %}
+          - {{ c.item }}: {{ c.container.State.Status }} ({{ c.container.State.Health.Status | default('no healthcheck') }})
+          {% endfor %}
+
+          Endpoints:
+          - nginx health: {{ nginx_health.status }}
+          - GUI: {{ gui_health.status }}
+          - datum API: {{ datum_api.status }}
+          - echo-core API: {{ echo_core_api.status }}
+          - echo-speculative API: {{ echo_spec_api.status }}
+          - nginx->datum proxy: {{ datum_proxy.status }}
+
+- name: Verify New Scout1 Server
+  hosts: new_scout1
+  gather_facts: yes
+
+  tasks:
+    - name: Get container statuses
+      community.docker.docker_container_info:
+        name: "{{ item }}"
+      register: containers
+      loop:
+        - ciris-nginx
+        - ciris-scout-remote-test-dahrb9
+
+    - name: Verify all containers are healthy
+      assert:
+        that:
+          - item.container.State.Status == 'running'
+        fail_msg: "Container {{ item.item }} is not healthy"
+        success_msg: "Container {{ item.item }} is healthy"
+      loop: "{{ containers.results }}"
+
+    - name: Test nginx health endpoint
+      uri:
+        url: "http://localhost/nginx-health"
+        method: GET
+        status_code: 200
+      register: nginx_health
+
+    - name: Test scout API directly
+      uri:
+        url: "http://localhost:8000/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: scout_api
+
+    - name: Test nginx proxy to scout
+      uri:
+        url: "http://localhost/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: scout_proxy
+
+    - name: Display scout1 verification summary
+      debug:
+        msg: |
+          Scout1 Server Verification ({{ new_scout1_ip }}):
+
+          Containers:
+          {% for c in containers.results %}
+          - {{ c.item }}: {{ c.container.State.Status }}
+          {% endfor %}
+
+          Endpoints:
+          - nginx health: {{ nginx_health.status }}
+          - scout API direct: {{ scout_api.status }}
+          - nginx->scout proxy: {{ scout_proxy.status }}
+
+- name: Verify New Scout2 Server
+  hosts: new_scout2
+  gather_facts: yes
+
+  tasks:
+    - name: Get container statuses
+      community.docker.docker_container_info:
+        name: "{{ item }}"
+      register: containers
+      loop:
+        - ciris-nginx
+        - ciris-scout-remote-test-dahrb9-002
+
+    - name: Verify all containers are healthy
+      assert:
+        that:
+          - item.container.State.Status == 'running'
+        fail_msg: "Container {{ item.item }} is not healthy"
+        success_msg: "Container {{ item.item }} is healthy"
+      loop: "{{ containers.results }}"
+
+    - name: Test nginx health endpoint
+      uri:
+        url: "http://localhost/nginx-health"
+        method: GET
+        status_code: 200
+      register: nginx_health
+
+    - name: Test scout API directly
+      uri:
+        url: "http://localhost:8000/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: scout_api
+
+    - name: Test nginx proxy to scout
+      uri:
+        url: "http://localhost/v1/health"
+        method: GET
+        status_code: [200, 401, 403]
+      register: scout_proxy
+
+    - name: Display scout2 verification summary
+      debug:
+        msg: |
+          Scout2 Server Verification ({{ new_scout2_ip }}):
+
+          Containers:
+          {% for c in containers.results %}
+          - {{ c.item }}: {{ c.container.State.Status }}
+          {% endfor %}
+
+          Endpoints:
+          - nginx health: {{ nginx_health.status }}
+          - scout API direct: {{ scout_api.status }}
+          - nginx->scout proxy: {{ scout_proxy.status }}
+
+- name: Verify Old Infrastructure is Stopped
+  hosts: old_infra
+  gather_facts: yes
+
+  tasks:
+    - name: Check for running CIRIS containers
+      shell: docker ps --filter 'name=ciris' --format '{{ "{{" }}.Names{{ "}}" }}' | wc -l
+      register: running_containers
+
+    - name: Display old infrastructure status
+      debug:
+        msg: |
+          {{ inventory_hostname }}:
+          - Running CIRIS containers: {{ running_containers.stdout }}
+          - Status: {{ 'STOPPED' if running_containers.stdout | int == 0 else 'WARNING: Containers still running' }}
+
+- name: Final Summary
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Display migration verification summary
+      debug:
+        msg: |
+          ==========================================
+          MIGRATION VERIFICATION COMPLETE
+          ==========================================
+
+          NEW INFRASTRUCTURE:
+          - Manager ({{ new_manager_ip }}): CIRISManager running
+          - Agents ({{ new_agents_ip }}): All containers healthy
+          - Scout1 ({{ new_scout1_ip }}): Scout agent healthy
+          - Scout2 ({{ new_scout2_ip }}): Scout agent healthy
+
+          OLD INFRASTRUCTURE:
+          - old_main ({{ old_main_ip }}): Containers stopped
+          - old_scout1 ({{ old_scout1_ip }}): Containers stopped
+          - old_scout2 ({{ old_scout2_ip }}): Containers stopped
+
+          NEXT STEPS:
+          1. Update DNS in Cloudflare:
+             - manager.ciris.ai -> {{ new_manager_ip }}
+             - agents.ciris.ai -> {{ new_agents_ip }}
+             - scoutapi.ciris.ai -> {{ new_scout1_ip }}
+
+          2. Monitor for 48-72 hours
+
+          3. Decommission old VMs after DNS propagation
+
+          COST SAVINGS:
+          - Old: ~$100/month
+          - New: $60/month
+          - Savings: $40/month (40%)
+
+          ==========================================

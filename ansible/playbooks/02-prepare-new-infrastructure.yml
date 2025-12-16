@@ -1,0 +1,247 @@
+---
+# Prepare New Infrastructure
+# Sets up directories, pulls images, and validates connectivity
+
+- name: Prepare New Agents Server
+  hosts: new_agents
+  gather_facts: yes
+
+  handlers:
+    - name: restart docker
+      service:
+        name: docker
+        state: restarted
+
+  tasks:
+    - name: Verify Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create CIRIS directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - /opt/ciris/agents
+        - /opt/ciris/agents/datum
+        - /opt/ciris/agents/echo-core-jm2jy2
+        - /opt/ciris/agents/echo-speculative-4fc6ru
+        - /home/ciris/shared/oauth
+        - /home/ciris/nginx
+        - /var/log/ciris
+
+    - name: Create ciris user if not exists
+      user:
+        name: ciris
+        shell: /bin/bash
+        groups: docker
+        append: yes
+        create_home: yes
+
+    - name: Pull Docker images
+      community.docker.docker_image:
+        name: "{{ item }}"
+        source: pull
+        force_source: yes
+      loop:
+        - "{{ agent_image }}"
+        - "{{ gui_image }}"
+        - "{{ nginx_image }}"
+      register: image_pull
+      retries: 3
+      delay: 10
+      until: image_pull is succeeded
+
+    - name: Create Docker network
+      community.docker.docker_network:
+        name: ciris-network
+        driver: bridge
+        state: present
+
+    - name: Verify Docker TLS connectivity from manager
+      delegate_to: new_manager
+      uri:
+        url: "https://{{ new_agents_vpc }}:2376/version"
+        method: GET
+        client_cert: /etc/ciris-manager/docker-certs/agents/client-cert.pem
+        client_key: /etc/ciris-manager/docker-certs/agents/client-key.pem
+        validate_certs: no
+        return_content: yes
+      register: docker_version
+      failed_when: docker_version.status != 200
+
+    - name: Display Docker version
+      debug:
+        msg: "Docker on new_agents: {{ (docker_version.content | from_json).Version }}"
+
+- name: Prepare New Scout1 Server
+  hosts: new_scout1
+  gather_facts: yes
+
+  tasks:
+    - name: Verify Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create CIRIS directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - /opt/ciris/agents
+        - /opt/ciris/agents/scout-remote-test-dahrb9
+        - /home/ciris/nginx
+        - /var/log/ciris
+
+    - name: Create ciris user if not exists
+      user:
+        name: ciris
+        shell: /bin/bash
+        groups: docker
+        append: yes
+        create_home: yes
+
+    - name: Pull Docker images
+      community.docker.docker_image:
+        name: "{{ item }}"
+        source: pull
+        force_source: yes
+      loop:
+        - "{{ agent_image }}"
+        - "{{ nginx_image }}"
+      register: image_pull
+      retries: 3
+      delay: 10
+      until: image_pull is succeeded
+
+    - name: Create Docker network
+      community.docker.docker_network:
+        name: ciris-network
+        driver: bridge
+        state: present
+
+    - name: Verify Docker TLS connectivity from manager
+      delegate_to: new_manager
+      uri:
+        url: "https://{{ new_scout1_vpc }}:2376/version"
+        method: GET
+        client_cert: /etc/ciris-manager/docker-certs/scout1/client-cert.pem
+        client_key: /etc/ciris-manager/docker-certs/scout1/client-key.pem
+        validate_certs: no
+        return_content: yes
+      register: docker_version
+      failed_when: docker_version.status != 200
+
+    - name: Display Docker version
+      debug:
+        msg: "Docker on new_scout1: {{ (docker_version.content | from_json).Version }}"
+
+- name: Prepare New Scout2 Server
+  hosts: new_scout2
+  gather_facts: yes
+
+  tasks:
+    - name: Verify Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create CIRIS directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - /opt/ciris/agents
+        - /opt/ciris/agents/scout-remote-test-dahrb9-002
+        - /home/ciris/nginx
+        - /var/log/ciris
+
+    - name: Create ciris user if not exists
+      user:
+        name: ciris
+        shell: /bin/bash
+        groups: docker
+        append: yes
+        create_home: yes
+
+    - name: Pull Docker images
+      community.docker.docker_image:
+        name: "{{ item }}"
+        source: pull
+        force_source: yes
+      loop:
+        - "{{ agent_image }}"
+        - "{{ nginx_image }}"
+      register: image_pull
+      retries: 3
+      delay: 10
+      until: image_pull is succeeded
+
+    - name: Create Docker network
+      community.docker.docker_network:
+        name: ciris-network
+        driver: bridge
+        state: present
+
+    - name: Verify Docker TLS connectivity from manager
+      delegate_to: new_manager
+      uri:
+        url: "https://{{ new_scout2_vpc }}:2376/version"
+        method: GET
+        client_cert: /etc/ciris-manager/docker-certs/scout2/client-cert.pem
+        client_key: /etc/ciris-manager/docker-certs/scout2/client-key.pem
+        validate_certs: no
+        return_content: yes
+      register: docker_version
+      failed_when: docker_version.status != 200
+
+    - name: Display Docker version
+      debug:
+        msg: "Docker on new_scout2: {{ (docker_version.content | from_json).Version }}"
+
+- name: Verify Manager Connectivity to All Servers
+  hosts: new_manager
+  gather_facts: yes
+
+  tasks:
+    - name: Test manager API is responding
+      uri:
+        url: "http://localhost:8888/manager/v1/status"
+        method: GET
+        return_content: yes
+      register: manager_status
+      failed_when: manager_status.status != 200
+
+    - name: Display manager status
+      debug:
+        msg: |
+          Manager Status:
+          - Version: {{ (manager_status.content | from_json).version }}
+          - Uptime: {{ (manager_status.content | from_json).uptime_seconds }} seconds
+          - Auth Mode: {{ (manager_status.content | from_json).auth_mode }}
+
+    - name: Summary of infrastructure readiness
+      debug:
+        msg: |
+          New Infrastructure Ready:
+          - Manager ({{ new_manager_ip }}): CIRISManager running
+          - Agents ({{ new_agents_ip }}): Docker ready, images pulled
+          - Scout1 ({{ new_scout1_ip }}): Docker ready, images pulled
+          - Scout2 ({{ new_scout2_ip }}): Docker ready, images pulled
+
+          All servers connected via VPC (10.10.0.0/24)
+          Docker TLS configured and verified
