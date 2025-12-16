@@ -991,8 +991,11 @@ http {
             container.exec_run(f"rm -f {temp_path}")
 
             # Step 4: Reload nginx
+            # Note: Use kill -HUP 1 instead of nginx -s reload because in Docker containers
+            # running with "daemon off", nginx runs as PID 1 and doesn't write a PID file.
+            # nginx -s reload would fail with "invalid PID number" error.
             logger.info("[Remote Deploy] Step 4/4: Reloading nginx")
-            reload_cmd = "nginx -s reload"
+            reload_cmd = "kill -HUP 1"
             exec_result = container.exec_run(reload_cmd)
 
             if exec_result.exit_code != 0:

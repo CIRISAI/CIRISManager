@@ -236,23 +236,24 @@ jobs:
             echo "Service restarted successfully, checking health endpoint..."
 
             # Wait for service to be ready
+            # Note: API startup takes ~70-80 seconds due to remote Docker connections over VPC
             echo "Waiting for CIRISManager API to be ready..."
-            for i in {1..30}; do
+            for i in {1..45}; do
               if curl -sf http://localhost:8888/manager/v1/health 2>/dev/null; then
                 echo "✓ CIRISManager is healthy and responding!"
                 break
               fi
-              if [ $i -eq 30 ]; then
-                echo "ERROR: CIRISManager health check failed after 60 seconds!"
+              if [ $i -eq 45 ]; then
+                echo "ERROR: CIRISManager health check failed after 90 seconds!"
                 echo "Service status:"
                 systemctl status ciris-manager --no-pager || true
                 echo "Recent logs:"
                 journalctl -u ciris-manager --no-pager -n 100 || true
                 echo "Port check:"
-                netstat -tlnp | grep 8888 || true
+                ss -tlnp | grep 8888 || true
                 exit 1
               fi
-              echo "Waiting for API... (attempt $i/30)"
+              echo "Waiting for API... (attempt $i/45)"
               sleep 2
             done
 
