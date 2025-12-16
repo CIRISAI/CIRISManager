@@ -36,6 +36,7 @@ class NginxManager:
         config_dir: str = "/home/ciris/nginx",
         container_name: str = "ciris-nginx",
         hostname: str = "agents.ciris.ai",
+        use_ssl: bool = False,
     ):
         """
         Initialize nginx manager.
@@ -44,10 +45,13 @@ class NginxManager:
             config_dir: Directory for nginx configuration files
             container_name: Name of the nginx Docker container
             hostname: Hostname for this nginx instance (e.g., agents.ciris.ai, scoutapi.ciris.ai)
+            use_ssl: Whether to generate HTTPS config with Let's Encrypt certs.
+                     Set to False when using Cloudflare for SSL termination (default).
         """
         self.config_dir = Path(config_dir)
         self.container_name = container_name
         self.hostname = hostname
+        self.use_ssl = use_ssl
         self.config_path = self.config_dir / "nginx.conf"
         self.new_config_path = self.config_dir / "nginx.conf.new"
         self.backup_path = self.config_dir / "nginx.conf.backup"
@@ -571,7 +575,10 @@ http {
 
         is_main = self._is_main_server()
 
-        server = f"""    # === {'MAIN' if is_main else 'AGENT'} SERVER ({self.hostname}) ===
+        # When using Cloudflare (use_ssl=False), generate HTTP-only config
+        # Cloudflare terminates SSL and forwards HTTP to origin
+        if self.use_ssl:
+            server = f"""    # === {'MAIN' if is_main else 'AGENT'} SERVER ({self.hostname}) ===
     # Redirect HTTP to HTTPS (with health check exception)
     server {{
         listen 80;
@@ -600,6 +607,21 @@ http {
         ssl_certificate_key /etc/letsencrypt/live/{self.hostname}/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_ciphers HIGH:!aNULL:!MD5;
+
+        # Health check endpoint
+        location /health {{
+            access_log off;
+            return 200 "healthy\\n";
+            add_header Content-Type text/plain;
+        }}
+"""
+        else:
+            # HTTP-only config for Cloudflare SSL termination
+            server = f"""    # === {'MAIN' if is_main else 'AGENT'} SERVER ({self.hostname}) ===
+    # HTTP Server (Cloudflare handles SSL termination)
+    server {{
+        listen 80;
+        server_name {self.hostname};
 
         # Health check endpoint
         location /health {{
