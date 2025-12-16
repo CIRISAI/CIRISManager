@@ -375,53 +375,80 @@ All I/O operations use async/await for non-blocking execution:
 
 ## Production Deployment
 
+### Current Infrastructure Status (December 2025)
+
+**Architecture:** Split manager/agents across 4 VMs in Vultr VPC (10.10.0.0/24)
+
+| Server | Public IP | VPC IP | Role | Domain |
+|--------|-----------|--------|------|--------|
+| Manager | 45.76.226.222 | 10.10.0.3 | CIRISManager service only | - |
+| Agents | 45.76.231.182 | 10.10.0.4 | nginx + agents | agents.ciris.ai |
+| Scout1 | 144.202.55.195 | 10.10.0.5 | nginx + agents | scoutapilb.ciris.ai |
+| Scout2 | 45.76.18.133 | 10.10.0.6 | nginx + agents | scoutapilb.ciris.ai |
+
+**Old Infrastructure (deprecated):** 108.61.119.117, 207.148.14.113 - still running but not managed
+
 ### Production Server Access
 
-**Main Server (agents.ciris.ai):**
+**Manager Server (no public domain):**
 ```bash
-ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
+ssh -i ~/.ssh/ciris_deploy root@45.76.226.222
 
-# Note: Use IP address for SSH, not domain (Cloudflare proxied)
-# Domain: agents.ciris.ai
-# Public IP: 108.61.119.117
-# User: root
-# Key: ~/.ssh/ciris_deploy
-
-# CIRIS deployment location: /opt/ciris
+# Runs CIRISManager systemd service ONLY
+# VPC IP: 10.10.0.3
+# API: http://10.10.0.3:8888 (VPC only, proxied via agents server)
+# Config: /etc/ciris-manager/config.yml
+# Install: /opt/ciris-manager/
+# Registry: /opt/ciris/agents/metadata.json
 ```
 
-**Scout Server (scoutapi.ciris.ai):**
+**Agents Server (agents.ciris.ai):**
 ```bash
-ssh -i ~/.ssh/ciris_deploy root@207.148.14.113
+ssh -i ~/.ssh/ciris_deploy root@45.76.231.182
 
-# Independent container host for additional agent capacity
-# Domain: scoutapi.ciris.ai
-# Public IP: 207.148.14.113
-# VPC IP: 10.2.96.4 (for Docker API access from main server)
-# User: root
-# Key: ~/.ssh/ciris_deploy
-
-# Architecture:
-# - Runs own nginx container for scoutapi.ciris.ai
-# - Hosts agent containers managed remotely by main CIRISManager
-# - Docker API exposed on VPC IP:2376 with TLS
-# - Cloudflare routes scoutapi.ciris.ai traffic directly here (not via main)
+# Runs nginx + agent containers
+# VPC IP: 10.10.0.4
+# Domain: agents.ciris.ai (Cloudflare proxied)
+# SSL: /etc/letsencrypt/live/agents.ciris.ai/
+# Nginx config: /home/ciris/nginx/nginx.conf
+# Docker API: https://10.10.0.4:2376 (TLS)
 ```
 
-**Scout2 Server:**
+**Scout1 Server (scoutapilb.ciris.ai):**
 ```bash
-ssh -i ~/.ssh/ciris_deploy root@104.207.141.1
+ssh -i ~/.ssh/ciris_deploy root@144.202.55.195
 
-# Second independent container host for additional agent capacity
-# Public IP: 104.207.141.1
-# User: root
-# Key: ~/.ssh/ciris_deploy
-
-# Architecture:
-# - Additional agent hosting capacity
-# - Managed remotely by main CIRISManager
-# - Docker API exposed for remote management
+# Runs nginx + scout agent containers
+# VPC IP: 10.10.0.5
+# Domain: scoutapilb.ciris.ai (Cloudflare proxied)
+# SSL: /etc/letsencrypt/live/scoutapilb.ciris.ai/
+# Nginx config: /opt/ciris/nginx/nginx.conf
+# Docker API: https://10.10.0.5:2376 (TLS)
 ```
+
+**Scout2 Server (scoutapilb.ciris.ai):**
+```bash
+ssh -i ~/.ssh/ciris_deploy root@45.76.18.133
+
+# Runs nginx + scout agent containers
+# VPC IP: 10.10.0.6
+# Domain: scoutapilb.ciris.ai (Cloudflare proxied, same as scout1)
+# SSL: /etc/letsencrypt/live/scoutapilb.ciris.ai/
+# Nginx config: /opt/ciris/nginx/nginx.conf
+# Docker API: https://10.10.0.6:2376 (TLS)
+```
+
+### Critical Architecture Notes
+
+1. **Manager runs on separate server from nginx** - Manager API (port 8888) is proxied through agents server nginx via VPC IP 10.10.0.3
+
+2. **Cloudflare Full SSL mode** - All origin servers must have valid SSL certs. Certs are Let's Encrypt, stored in `/etc/letsencrypt/live/{hostname}/`
+
+3. **Nginx reload in Docker** - Use `kill -HUP 1` not `nginx -s reload` because containers run with `daemon off;`
+
+4. **API startup takes ~4 minutes** - Due to remote Docker TLS connections, image cleanup, and ASGI lifespan
+
+5. **Registry server_id must match config.yml** - e.g., `scout1` not `scout`. Mismatch causes 0 agents deployed
 
 ### Agent API Authentication
 When making API calls to agents, use the centralized auth system:
@@ -675,23 +702,25 @@ CIRISManager generates one complete nginx.conf that includes:
 
 ## Multi-Server Architecture
 
-CIRISManager supports deploying agents across multiple physical servers while maintaining centralized management from the main server.
+CIRISManager supports deploying agents across multiple physical servers while maintaining centralized management from the manager server.
 
 ### Server Types
 
-**Main Server** (`agents.ciris.ai` / 108.61.119.117):
-- Runs CIRISManager service (systemd, not Docker)
-- Hosts nginx with **FULL deployment** (Manager GUI + Agent GUI + API routing)
-- Runs local agent containers
-- Manages remote servers via Docker API over TLS
+**Manager Server** (45.76.226.222):
+- Runs CIRISManager systemd service ONLY (no nginx, no agents)
+- Manages ALL remote servers via Docker API over TLS
 - Stores agent registry (`/opt/ciris/agents/metadata.json`)
+- API proxied through agents server nginx
 
-**Remote Servers** (e.g., `scoutapi.ciris.ai` / 207.148.14.113):
-- Runs nginx container with **API_ONLY deployment** (no GUI routes)
-- Runs agent containers assigned via `server_id` in registry
+**Agents Server** (`agents.ciris.ai` / 45.76.231.182):
+- Runs nginx with **FULL deployment** (Manager GUI + Agent GUI + API routing)
+- Runs main agent containers (datum, echo-*, etc.)
+- Proxies `/manager/v1/*` to manager server via VPC
+
+**Scout Servers** (`scoutapilb.ciris.ai` / scout1, scout2):
+- Run nginx with **API_ONLY deployment** (no GUI routes)
+- Run scout agent containers
 - No CIRISManager installation needed
-- Docker daemon exposes TLS API on VPC IP:2376
-- Receives nginx config deployments via Docker exec
 
 ### Configuration
 
@@ -701,19 +730,36 @@ Multi-server configuration in `/etc/ciris-manager/config.yml`:
 servers:
   - server_id: main
     hostname: agents.ciris.ai
-    is_local: true
-    # Main server - runs CIRISManager directly on host
+    is_local: false                      # Manager is on different server!
+    public_ip: 45.76.231.182
+    vpc_ip: 10.10.0.4
+    docker_host: https://10.10.0.4:2376
+    tls_ca: /etc/ciris-manager/docker-certs/agents/ca.pem
+    tls_cert: /etc/ciris-manager/docker-certs/agents/client-cert.pem
+    tls_key: /etc/ciris-manager/docker-certs/agents/client-key.pem
 
-  - server_id: scout
-    hostname: scoutapi.ciris.ai
+  - server_id: scout1                    # MUST match registry server_id exactly
+    hostname: scoutapilb.ciris.ai
     is_local: false
-    public_ip: 207.148.14.113
-    vpc_ip: 10.2.96.4                    # Used for Docker API and agent HTTP calls
-    docker_host: https://10.2.96.4:2376  # TLS-secured Docker API
-    tls_ca: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/ca.pem
-    tls_cert: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-cert.pem
-    tls_key: /etc/ciris-manager/docker-certs/scoutapi.ciris.ai/client-key.pem
+    public_ip: 144.202.55.195
+    vpc_ip: 10.10.0.5
+    docker_host: https://10.10.0.5:2376
+    tls_ca: /etc/ciris-manager/docker-certs/scout1/ca.pem
+    tls_cert: /etc/ciris-manager/docker-certs/scout1/client-cert.pem
+    tls_key: /etc/ciris-manager/docker-certs/scout1/client-key.pem
+
+  - server_id: scout2
+    hostname: scoutapilb.ciris.ai        # Same domain, different origin
+    is_local: false
+    public_ip: 45.76.18.133
+    vpc_ip: 10.10.0.6
+    docker_host: https://10.10.0.6:2376
+    tls_ca: /etc/ciris-manager/docker-certs/scout2/ca.pem
+    tls_cert: /etc/ciris-manager/docker-certs/scout2/client-cert.pem
+    tls_key: /etc/ciris-manager/docker-certs/scout2/client-key.pem
 ```
+
+**CRITICAL:** The `server_id` in config.yml must EXACTLY match the `server_id` in the agent registry (metadata.json). A mismatch (e.g., `scout` vs `scout1`) causes agents to not be routed.
 
 ### Docker API Security
 
