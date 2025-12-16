@@ -532,10 +532,10 @@ http {
 
         # Main server upstreams (GUI, Manager, CIRISLens, eee.ciris.ai)
         if self._is_main_server():
-            upstreams += """    # Agent GUI upstream (multi-tenant container from CIRISAgent)
-    upstream agent_gui {
+            upstreams += f"""    # Agent GUI upstream (multi-tenant container from CIRISAgent)
+    upstream agent_gui {{
         server 127.0.0.1:3000;
-    }
+    }}
 
     # Manager API upstream
     upstream manager {{
@@ -543,18 +543,18 @@ http {
     }}
 
     # CIRISLens API upstream
-    upstream cirislens {
+    upstream cirislens {{
         server 127.0.0.1:8000;
-    }
+    }}
 
     # eee.ciris.ai upstreams
-    upstream oauth2_proxy {
+    upstream oauth2_proxy {{
         server 127.0.0.1:4180;
-    }
+    }}
 
-    upstream engine {
+    upstream engine {{
         server 127.0.0.1:8080;
-    }
+    }}
 """
 
         # Add agent upstreams (all servers)
