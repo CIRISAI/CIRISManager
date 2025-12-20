@@ -406,7 +406,8 @@ class ContainerOperations:
 
             async with aiofiles.open(metadata_file, "r") as f:
                 content = await f.read()
-                return json.loads(content)
+                result: Dict[str, Any] = json.loads(content)
+                return result
 
         except Exception as e:
             logger.error(f"Failed to get {container_type} versions: {e}")
