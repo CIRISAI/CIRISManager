@@ -406,10 +406,11 @@ class CIRISManager:
         else:
             logger.warning(f"Init script not found at {init_script_src}")
 
-        # Add service token to environment for agent
+        # Add service token and admin password to environment for agent
         if environment is None:
             environment = {}
         environment["CIRIS_SERVICE_TOKEN"] = service_token
+        environment["CIRIS_ADMIN_PASSWORD"] = admin_password
 
         # Generate docker-compose.yml
         # Default to mock LLM if not specified
