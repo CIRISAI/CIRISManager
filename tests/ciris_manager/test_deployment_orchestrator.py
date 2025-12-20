@@ -7,7 +7,7 @@ from unittest.mock import Mock, AsyncMock, patch
 import asyncio
 from datetime import datetime, timezone
 
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.models import (
     UpdateNotification,
     AgentInfo,
@@ -495,7 +495,7 @@ class TestDeploymentOrchestrator:
 
             # Mock asyncio.sleep to avoid waiting
             with patch(
-                "ciris_manager.deployment_orchestrator.asyncio.sleep", new_callable=AsyncMock
+                "ciris_manager.deployment.orchestrator.asyncio.sleep", new_callable=AsyncMock
             ) as mock_sleep:
                 mock_sleep.return_value = None
 

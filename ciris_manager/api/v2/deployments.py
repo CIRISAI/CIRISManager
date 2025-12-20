@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from .models import Deployment
 from ciris_manager.api.auth import get_current_user_dependency as get_current_user
 from ciris_manager.manager_core import get_manager
-from ciris_manager.deployment_orchestrator import get_deployment_orchestrator, UpdateNotification
+from ciris_manager.deployment import get_deployment_orchestrator
+from ciris_manager.models import UpdateNotification
 
 
 router = APIRouter(prefix="/deployments", tags=["deployments"])

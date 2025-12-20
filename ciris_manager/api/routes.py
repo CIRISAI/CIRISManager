@@ -15,7 +15,7 @@ import os  # noqa: F401 - used in jailbreaker section
 import aiofiles  # type: ignore
 from .auth import get_current_user_dependency as get_current_user
 from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id
 from .rate_limit import create_limit
 
@@ -422,7 +422,7 @@ def create_routes(manager: Any) -> APIRouter:
         Uses DeploymentOrchestrator as single source of truth for version data.
         """
         from ciris_manager.docker_discovery import DockerAgentDiscovery
-        from ciris_manager.deployment_orchestrator import get_deployment_orchestrator
+        from ciris_manager.deployment import get_deployment_orchestrator
 
         discovery = DockerAgentDiscovery(
             manager.agent_registry, docker_client_manager=manager.docker_client
@@ -1579,7 +1579,7 @@ def create_routes(manager: Any) -> APIRouter:
                 # Use different recreation strategy for remote vs local agents
                 if server_id != "main":
                     # Remote server - use Docker API to avoid port conflicts
-                    from ciris_manager.deployment_orchestrator import get_deployment_orchestrator
+                    from ciris_manager.deployment import get_deployment_orchestrator
 
                     orchestrator = get_deployment_orchestrator()
                     success = await orchestrator._recreate_agent_container(

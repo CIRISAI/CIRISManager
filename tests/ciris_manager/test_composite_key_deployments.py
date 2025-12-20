@@ -12,7 +12,7 @@ These tests ensure that the composite key changes don't break any deployment mec
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.models import (
     UpdateNotification,
     AgentInfo,

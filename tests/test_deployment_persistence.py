@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 import pytest
 
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.models import (
     UpdateNotification,
     DeploymentStatus,
@@ -31,12 +31,17 @@ class TestDeploymentPersistence:
     @pytest.fixture
     def orchestrator(self, temp_dir):
         """Create an orchestrator with temp state directory."""
-        with patch("ciris_manager.deployment_orchestrator.Path") as mock_path:
-            mock_path.return_value = temp_dir
-            orch = DeploymentOrchestrator()
-            orch.state_dir = temp_dir
-            orch.deployment_state_file = temp_dir / "deployment_state.json"
-            return orch
+        orch = DeploymentOrchestrator()
+        # Set paths on both the orchestrator and the state manager
+        orch.state_dir = temp_dir
+        orch.deployment_state_file = temp_dir / "deployment_state.json"
+        orch._state_manager.state_dir = temp_dir
+        orch._state_manager.deployment_state_file = temp_dir / "deployment_state.json"
+        # Clear any loaded state from default location
+        orch.deployments = {}
+        orch.pending_deployments = {}
+        orch.current_deployment = None
+        return orch
 
     def test_save_state_creates_file(self, orchestrator):
         """Test that save_state creates the state file."""
@@ -115,13 +120,16 @@ class TestDeploymentPersistence:
     def test_load_state_restores_deployments(self, temp_dir):
         """Test that load_state correctly restores deployments."""
         # Create orchestrator with temp dir
-        from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+        from ciris_manager.deployment import DeploymentOrchestrator
 
         # Mock the _load_state in __init__ to prevent loading existing state
         with patch.object(DeploymentOrchestrator, "_load_state"):
             orchestrator = DeploymentOrchestrator(manager=None)
+        # Set paths on both the orchestrator and the state manager
         orchestrator.state_dir = temp_dir
         orchestrator.deployment_state_file = temp_dir / "deployment_state.json"
+        orchestrator._state_manager.state_dir = temp_dir
+        orchestrator._state_manager.deployment_state_file = temp_dir / "deployment_state.json"
         # Clear any state that might have been loaded
         orchestrator.deployments = {}
         orchestrator.current_deployment = None
@@ -369,13 +377,16 @@ class TestDeploymentPersistence:
     def test_state_persistence_across_restarts(self, temp_dir):
         """Test that state persists across orchestrator restarts."""
         # First orchestrator instance
-        from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+        from ciris_manager.deployment import DeploymentOrchestrator
 
         # Mock _load_state to prevent loading existing state
         with patch.object(DeploymentOrchestrator, "_load_state"):
             orch1 = DeploymentOrchestrator(manager=None)
+        # Set paths on both the orchestrator and the state manager
         orch1.state_dir = temp_dir
         orch1.deployment_state_file = temp_dir / "deployment_state.json"
+        orch1._state_manager.state_dir = temp_dir
+        orch1._state_manager.deployment_state_file = temp_dir / "deployment_state.json"
         # Clear any loaded state
         orch1.deployments = {}
         orch1.current_deployment = None
@@ -419,8 +430,11 @@ class TestDeploymentPersistence:
         # Create new orchestrator instance
         with patch.object(DeploymentOrchestrator, "_load_state"):
             orch2 = DeploymentOrchestrator(manager=None)
+        # Set paths on both the orchestrator and the state manager
         orch2.state_dir = temp_dir
         orch2.deployment_state_file = temp_dir / "deployment_state.json"
+        orch2._state_manager.state_dir = temp_dir
+        orch2._state_manager.deployment_state_file = temp_dir / "deployment_state.json"
         # Clear any existing state before loading
         orch2.deployments = {}
         orch2.current_deployment = None

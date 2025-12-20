@@ -10,7 +10,7 @@ from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone
 import httpx
 
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.models import (
     UpdateNotification,
     AgentInfo,

@@ -5,7 +5,7 @@ Test no-op deployment handling in deployment orchestrator.
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.models import UpdateNotification, AgentInfo
 
 
@@ -28,7 +28,7 @@ class TestNoOpDeployment:
     @pytest.fixture
     def mock_registry_client(self):
         """Create mock Docker registry client."""
-        with patch("ciris_manager.deployment_orchestrator.DockerRegistryClient") as mock_class:
+        with patch("ciris_manager.deployment.orchestrator.DockerRegistryClient") as mock_class:
             client = Mock()
             # Mock resolve_image_digest to return same digests (no change)
             client.resolve_image_digest = AsyncMock(

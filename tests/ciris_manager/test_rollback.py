@@ -11,7 +11,7 @@ from ciris_manager.models import (
     DeploymentStatus,
     AgentInfo,
 )
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 
 
 class TestRollbackProposal:

@@ -231,7 +231,7 @@ async def execute_rollback(
         raise HTTPException(status_code=400, detail=f"Invalid component: {request.component}")
 
     # Get deployment orchestrator
-    from ciris_manager.deployment_orchestrator import get_deployment_orchestrator
+    from ciris_manager.deployment import get_deployment_orchestrator
 
     orchestrator = get_deployment_orchestrator()
 

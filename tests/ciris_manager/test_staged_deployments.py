@@ -282,7 +282,7 @@ class TestDeploymentOrchestratorStaging:
     @pytest.fixture
     def orchestrator(self, tmp_path):
         """Create deployment orchestrator with staging support."""
-        from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+        from ciris_manager.deployment import DeploymentOrchestrator
         from ciris_manager.agent_registry import AgentRegistry
 
         mock_manager = Mock()

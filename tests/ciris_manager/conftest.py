@@ -255,7 +255,7 @@ def mock_manager(tmp_path):
 @pytest.fixture
 def orchestrator(mock_manager, tmp_path):
     """Create deployment orchestrator with mocked dependencies."""
-    from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+    from ciris_manager.deployment import DeploymentOrchestrator
     from unittest.mock import AsyncMock
 
     orchestrator = DeploymentOrchestrator(manager=mock_manager)

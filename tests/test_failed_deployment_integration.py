@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 import tempfile
 
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.models import (
     UpdateNotification,
     DeploymentStatus,
@@ -31,12 +31,17 @@ class TestFailedDeploymentIntegration:
     @pytest.fixture
     def orchestrator(self, temp_dir):
         """Create an orchestrator with temp state directory."""
-        with patch("ciris_manager.deployment_orchestrator.Path") as mock_path:
-            mock_path.return_value = temp_dir
-            orch = DeploymentOrchestrator()
-            orch.state_dir = temp_dir
-            orch.deployment_state_file = temp_dir / "deployment_state.json"
-            return orch
+        orch = DeploymentOrchestrator()
+        # Set paths on both the orchestrator and the state manager
+        orch.state_dir = temp_dir
+        orch.deployment_state_file = temp_dir / "deployment_state.json"
+        orch._state_manager.state_dir = temp_dir
+        orch._state_manager.deployment_state_file = temp_dir / "deployment_state.json"
+        # Clear any loaded state from default location
+        orch.deployments = {}
+        orch.pending_deployments = {}
+        orch.current_deployment = None
+        return orch
 
     @pytest.mark.asyncio
     async def test_complete_failed_deployment_flow(self, orchestrator):
@@ -163,12 +168,15 @@ class TestFailedDeploymentIntegration:
         """Test that failed deployments persist and block after manager restart."""
 
         # Create first orchestrator instance with failed deployment
-        from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+        from ciris_manager.deployment import DeploymentOrchestrator
 
         with patch.object(DeploymentOrchestrator, "_load_state"):
             orch1 = DeploymentOrchestrator(manager=None)
+        # Set paths on both the orchestrator and the state manager
         orch1.state_dir = temp_dir
         orch1.deployment_state_file = temp_dir / "deployment_state.json"
+        orch1._state_manager.state_dir = temp_dir
+        orch1._state_manager.deployment_state_file = temp_dir / "deployment_state.json"
         orch1.deployments = {}
         orch1.current_deployment = None
 
@@ -198,8 +206,11 @@ class TestFailedDeploymentIntegration:
         # Create new orchestrator instance (simulating restart)
         with patch.object(DeploymentOrchestrator, "_load_state"):
             orch2 = DeploymentOrchestrator(manager=None)
+        # Set paths on both the orchestrator and the state manager
         orch2.state_dir = temp_dir
         orch2.deployment_state_file = temp_dir / "deployment_state.json"
+        orch2._state_manager.state_dir = temp_dir
+        orch2._state_manager.deployment_state_file = temp_dir / "deployment_state.json"
         orch2.deployments = {}
         orch2.current_deployment = None
         orch2._load_state()

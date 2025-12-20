@@ -7,7 +7,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from pathlib import Path
 
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.models import UpdateNotification
 
 
@@ -103,7 +103,7 @@ class TestGuiNginxDeployment:
                 return version_file
             return original_path(path_str)
 
-        with patch("ciris_manager.deployment_orchestrator.Path", side_effect=mock_path_constructor):
+        with patch("ciris_manager.deployment.orchestrator.Path", side_effect=mock_path_constructor):
             # First deployment
             await orchestrator._store_container_version("gui", "gui:v1.0.0")
 
@@ -160,7 +160,7 @@ class TestGuiNginxDeployment:
                 return original_path(path_str)
 
             with patch(
-                "ciris_manager.deployment_orchestrator.Path", side_effect=mock_path_constructor
+                "ciris_manager.deployment.orchestrator.Path", side_effect=mock_path_constructor
             ):
                 result = await orchestrator._rollback_gui_container("n-1")
 
@@ -208,7 +208,7 @@ class TestGuiNginxDeployment:
                 return original_path(path_str)
 
             with patch(
-                "ciris_manager.deployment_orchestrator.Path", side_effect=mock_path_constructor
+                "ciris_manager.deployment.orchestrator.Path", side_effect=mock_path_constructor
             ):
                 result = await orchestrator._rollback_nginx_container("n-1")
 
@@ -268,7 +268,7 @@ class TestGuiNginxDeployment:
                 mock_path.exists.return_value = False
                 return mock_path
 
-        with patch("ciris_manager.deployment_orchestrator.Path", side_effect=path_side_effect):
+        with patch("ciris_manager.deployment.orchestrator.Path", side_effect=path_side_effect):
             # Mock audit
             with patch("ciris_manager.audit.audit_deployment_action"):
                 await orchestrator._propose_rollback(

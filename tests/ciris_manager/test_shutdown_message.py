@@ -4,7 +4,7 @@ Test shutdown message formatting in deployment orchestrator.
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
-from ciris_manager.deployment_orchestrator import DeploymentOrchestrator
+from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.models import UpdateNotification, AgentInfo
 
 
