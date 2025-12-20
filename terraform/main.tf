@@ -35,12 +35,13 @@ resource "vultr_vpc" "research" {
 
 # Manager VM - runs CIRISManager service, nginx routing, manager GUI
 resource "vultr_instance" "manager" {
-  region    = var.region
-  plan      = var.manager_plan
-  os_id     = var.os_id
-  hostname  = var.manager_hostname
-  label     = var.manager_label
-  ssh_key_ids = var.ssh_key_ids
+  region            = var.region
+  plan              = var.manager_plan
+  os_id             = var.os_id
+  hostname          = var.manager_hostname
+  label             = var.manager_label
+  ssh_key_ids       = var.ssh_key_ids
+  firewall_group_id = vultr_firewall_group.manager.id
 
   vpc_ids = [vultr_vpc.research.id]
 
@@ -64,28 +65,36 @@ resource "vultr_instance" "manager" {
     # Install Python 3.11+ for CIRISManager
     apt-get install -y python3.11 python3.11-venv python3-pip
 
+    # Install certbot for TLS certificates (used by Cloudflare Full SSL mode)
+    apt-get install -y certbot
+
     # Create ciris user
     useradd -m -s /bin/bash ciris || true
     usermod -aG docker ciris
 
     # Create directories
-    mkdir -p /opt/ciris-manager /opt/ciris/agents /opt/ciris/nginx
-    chown -R ciris:ciris /opt/ciris /opt/ciris-manager
+    mkdir -p /opt/ciris-manager /opt/ciris/agents /opt/ciris/nginx /home/ciris/nginx /home/ciris/static
+    mkdir -p /etc/ciris-manager/docker-certs
+    chown -R ciris:ciris /opt/ciris /opt/ciris-manager /home/ciris
 
     # Enable Docker
     systemctl enable docker
     systemctl start docker
+
+    # Note: Manager API is proxied through agents server via VPC
+    # TLS certs for remote Docker connections stored in /etc/ciris-manager/docker-certs/
   EOF
 }
 
 # Agents VM - runs agent containers, GUI container, nginx
 resource "vultr_instance" "agents" {
-  region    = var.region
-  plan      = var.agents_plan
-  os_id     = var.os_id
-  hostname  = var.agents_hostname
-  label     = var.agents_label
-  ssh_key_ids = var.ssh_key_ids
+  region            = var.region
+  plan              = var.agents_plan
+  os_id             = var.os_id
+  hostname          = var.agents_hostname
+  label             = var.agents_label
+  ssh_key_ids       = var.ssh_key_ids
+  firewall_group_id = vultr_firewall_group.agents.id
 
   vpc_ids = [vultr_vpc.research.id]
 
@@ -106,13 +115,16 @@ resource "vultr_instance" "agents" {
     # Install Docker
     curl -fsSL https://get.docker.com | sh
 
+    # Install certbot for Let's Encrypt certificates
+    apt-get install -y certbot
+
     # Create ciris user
     useradd -m -s /bin/bash ciris || true
     usermod -aG docker ciris
 
-    # Create directories
-    mkdir -p /opt/ciris/agents /opt/ciris/nginx
-    chown -R ciris:ciris /opt/ciris
+    # Create directories (including static for nginx volume mount)
+    mkdir -p /opt/ciris/agents /opt/ciris/nginx /home/ciris/nginx /home/ciris/static
+    chown -R ciris:ciris /opt/ciris /home/ciris
 
     # Enable Docker
     systemctl enable docker
@@ -121,6 +133,9 @@ resource "vultr_instance" "agents" {
     # Configure Docker daemon for TLS (manager will connect remotely)
     # TLS certs must be provisioned separately after instance creation
     mkdir -p /etc/docker/certs
+
+    # Note: After provisioning, run certbot to obtain certificates:
+    # certbot certonly --standalone -d agents.ciris.ai --non-interactive --agree-tos -m admin@ciris.ai
   EOF
 }
 

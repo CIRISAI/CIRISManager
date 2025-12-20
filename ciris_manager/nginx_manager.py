@@ -641,7 +641,7 @@ http {
         # Manager UI static files (HTML, JS, CSS)
         location /manager/ {
             root /home/ciris/static;
-            try_files $uri $uri/ /manager/index.html;
+            try_files $uri $uri/index.html =404;
 
             # Add appropriate headers
             add_header X-Frame-Options "SAMEORIGIN";
@@ -651,7 +651,7 @@ http {
         # Jailbreaker static files (HTML, JS, CSS)
         location /jailbreaker/ {
             root /home/ciris/static;
-            try_files $uri $uri/ /jailbreaker/index.html;
+            try_files $uri $uri/index.html =404;
 
             # Add appropriate headers
             add_header X-Frame-Options "SAMEORIGIN";
