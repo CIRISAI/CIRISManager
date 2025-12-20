@@ -61,8 +61,8 @@ class TestNginxHealth:
         assert "return 301 https://$server_name$request_uri;" in config
 
     def test_http_only_config_structure(self, temp_nginx_dir):
-        """Test the HTTP-only nginx config structure (Cloudflare mode)."""
-        manager = NginxManager(temp_nginx_dir)  # use_ssl=False by default
+        """Test the HTTP-only nginx config structure (Cloudflare Flexible SSL mode)."""
+        manager = NginxManager(temp_nginx_dir, use_ssl=False)
 
         # Create a test agent
         agent = AgentInfo(
