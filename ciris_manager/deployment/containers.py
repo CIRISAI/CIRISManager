@@ -84,9 +84,7 @@ class ContainerOperations:
 
         return results
 
-    async def pull_single_image_with_retry(
-        self, image: str, image_type: str
-    ) -> Dict[str, Any]:
+    async def pull_single_image_with_retry(self, image: str, image_type: str) -> Dict[str, Any]:
         """
         Pull a single Docker image with retry logic for authentication failures.
 
@@ -264,9 +262,7 @@ class ContainerOperations:
             logger.error(f"Error getting container image digest for {container_name}: {e}")
             return None
 
-    async def wait_for_container_stop(
-        self, container_name: str, timeout: int = 60
-    ) -> bool:
+    async def wait_for_container_stop(self, container_name: str, timeout: int = 60) -> bool:
         """
         Wait for a container to stop.
 
@@ -352,6 +348,7 @@ class ContainerOperations:
                 except PermissionError:
                     # Fall back to temp directory
                     import tempfile
+
                     state_dir = Path(tempfile.gettempdir()) / "ciris-manager"
                     state_dir.mkdir(parents=True, exist_ok=True)
 

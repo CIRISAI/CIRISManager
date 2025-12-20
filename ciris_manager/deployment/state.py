@@ -128,7 +128,9 @@ class DeploymentState:
                         )
                         deployment.status = "failed"
                         deployment.completed_at = datetime.now(timezone.utc).isoformat()
-                        deployment.message = "Deployment marked as failed - stale after manager restart"
+                        deployment.message = (
+                            "Deployment marked as failed - stale after manager restart"
+                        )
                         self.save_sync(deployments, pending_deployments, current_deployment)
 
         except Exception as e:
