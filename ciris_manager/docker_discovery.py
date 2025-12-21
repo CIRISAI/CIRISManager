@@ -301,13 +301,20 @@ class DockerAgentDiscovery:
                 return None
 
             # Build URL based on server location
-            if server_id == "main" or not self.docker_client_manager:
-                # Local server - use localhost
+            # Check if server is local using config, not just server_id
+            if not self.docker_client_manager:
+                # No multi-server setup - use localhost
                 base_url = "localhost"
             else:
-                # Remote server - get VPC IP from server config
                 server_config = self.docker_client_manager.get_server_config(server_id)
-                base_url = server_config.vpc_ip if server_config.vpc_ip else server_config.hostname
+                if server_config.is_local:
+                    # Local server - use localhost
+                    base_url = "localhost"
+                else:
+                    # Remote server - use VPC IP for internal communication
+                    base_url = (
+                        server_config.vpc_ip if server_config.vpc_ip else server_config.hostname
+                    )
 
             url = f"http://{base_url}:{port}/v1/agent/status"
             logger.debug(f"Querying agent version at {url}")
