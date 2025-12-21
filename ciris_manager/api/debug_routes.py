@@ -173,7 +173,11 @@ def create_debug_routes(manager: Any) -> APIRouter:
             except json.JSONDecodeError:
                 # Fallback: try to parse as plain text
                 lines = output.split("\n")
-                return {"columns": ["result"], "rows": [[line] for line in lines if line], "row_count": len(lines)}
+                return {
+                    "columns": ["result"],
+                    "rows": [[line] for line in lines if line],
+                    "row_count": len(lines),
+                }
 
         except Exception as e:
             logger.error(f"SQLite query execution failed: {e}")
@@ -213,7 +217,11 @@ def create_debug_routes(manager: Any) -> APIRouter:
 
             # First line might be headers if we use -H flag, otherwise infer
             rows = [line.split(",") for line in lines]
-            return {"columns": [f"col{i}" for i in range(len(rows[0]))], "rows": rows, "row_count": len(rows)}
+            return {
+                "columns": [f"col{i}" for i in range(len(rows[0]))],
+                "rows": rows,
+                "row_count": len(rows),
+            }
 
         except Exception as e:
             logger.error(f"PostgreSQL query execution failed: {e}")
@@ -252,7 +260,9 @@ def create_debug_routes(manager: Any) -> APIRouter:
     @router.get("/agents/{agent_id}/tasks", response_model=List[TaskSummary])
     async def list_tasks(
         agent_id: str,
-        status: Optional[str] = Query(None, description="Filter by status (pending, active, completed, deferred)"),
+        status: Optional[str] = Query(
+            None, description="Filter by status (pending, active, completed, deferred)"
+        ),
         limit: int = Query(50, description="Maximum number of tasks to return"),
         occurrence_id: Optional[str] = None,
         server_id: Optional[str] = None,
@@ -343,7 +353,9 @@ def create_debug_routes(manager: Any) -> APIRouter:
             if dialect == "sqlite":
                 task_result = _exec_sqlite_query(container_name, docker_client, task_query, db_path)
             else:
-                task_result = _exec_postgres_query(container_name, docker_client, task_query, db_path)
+                task_result = _exec_postgres_query(
+                    container_name, docker_client, task_query, db_path
+                )
 
             if not task_result["rows"]:
                 raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
@@ -359,9 +371,13 @@ def create_debug_routes(manager: Any) -> APIRouter:
             """
 
             if dialect == "sqlite":
-                thoughts_result = _exec_sqlite_query(container_name, docker_client, thoughts_query, db_path)
+                thoughts_result = _exec_sqlite_query(
+                    container_name, docker_client, thoughts_query, db_path
+                )
             else:
-                thoughts_result = _exec_postgres_query(container_name, docker_client, thoughts_query, db_path)
+                thoughts_result = _exec_postgres_query(
+                    container_name, docker_client, thoughts_query, db_path
+                )
 
             thoughts = []
             for t_row in thoughts_result["rows"]:
@@ -580,8 +596,17 @@ def create_debug_routes(manager: Any) -> APIRouter:
 
             # Block dangerous patterns
             dangerous_patterns = [
-                "DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE",
-                "TRUNCATE", "GRANT", "REVOKE", "EXEC", "EXECUTE",
+                "DROP",
+                "DELETE",
+                "INSERT",
+                "UPDATE",
+                "ALTER",
+                "CREATE",
+                "TRUNCATE",
+                "GRANT",
+                "REVOKE",
+                "EXEC",
+                "EXECUTE",
             ]
             for pattern in dangerous_patterns:
                 if pattern in query_upper:
@@ -643,7 +668,9 @@ def create_debug_routes(manager: Any) -> APIRouter:
             if dialect == "sqlite":
                 # Get tables
                 tables_query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-                tables_result = _exec_sqlite_query(container_name, docker_client, tables_query, db_path)
+                tables_result = _exec_sqlite_query(
+                    container_name, docker_client, tables_query, db_path
+                )
                 for row in tables_result["rows"]:
                     table_name = row[0]
                     if table_name.startswith("sqlite_"):
@@ -651,16 +678,20 @@ def create_debug_routes(manager: Any) -> APIRouter:
 
                     # Get columns for each table
                     cols_query = f"PRAGMA table_info('{table_name}')"
-                    cols_result = _exec_sqlite_query(container_name, docker_client, cols_query, db_path)
+                    cols_result = _exec_sqlite_query(
+                        container_name, docker_client, cols_query, db_path
+                    )
 
                     columns = []
                     for col_row in cols_result["rows"]:
-                        columns.append({
-                            "name": col_row[1],
-                            "type": col_row[2],
-                            "nullable": not col_row[3],
-                            "primary_key": bool(col_row[5]),
-                        })
+                        columns.append(
+                            {
+                                "name": col_row[1],
+                                "type": col_row[2],
+                                "nullable": not col_row[3],
+                                "primary_key": bool(col_row[5]),
+                            }
+                        )
 
                     schema["tables"][table_name] = columns
 
@@ -670,7 +701,9 @@ def create_debug_routes(manager: Any) -> APIRouter:
                     SELECT table_name FROM information_schema.tables
                     WHERE table_schema = 'public' ORDER BY table_name
                 """
-                tables_result = _exec_postgres_query(container_name, docker_client, tables_query, db_path)
+                tables_result = _exec_postgres_query(
+                    container_name, docker_client, tables_query, db_path
+                )
 
                 for row in tables_result["rows"]:
                     table_name = row[0]
@@ -680,15 +713,19 @@ def create_debug_routes(manager: Any) -> APIRouter:
                         FROM information_schema.columns
                         WHERE table_name = '{table_name}' AND table_schema = 'public'
                     """
-                    cols_result = _exec_postgres_query(container_name, docker_client, cols_query, db_path)
+                    cols_result = _exec_postgres_query(
+                        container_name, docker_client, cols_query, db_path
+                    )
 
                     columns = []
                     for col_row in cols_result["rows"]:
-                        columns.append({
-                            "name": col_row[0],
-                            "type": col_row[1],
-                            "nullable": col_row[2] == "YES",
-                        })
+                        columns.append(
+                            {
+                                "name": col_row[0],
+                                "type": col_row[1],
+                                "nullable": col_row[2] == "YES",
+                            }
+                        )
 
                     schema["tables"][table_name] = columns
 
