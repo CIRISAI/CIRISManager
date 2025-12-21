@@ -64,7 +64,7 @@ class TestRestartAgent:
 
     def test_restart_existing_agent(self, client, mock_manager):
         """Test restarting an existing agent."""
-        with patch("ciris_manager.api.routes.DockerAgentDiscovery") as MockDiscovery:
+        with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as MockDiscovery:
             # Setup discovered agent with container_name
             mock_agent = Mock()
             mock_agent.agent_id = "test-agent"
@@ -99,7 +99,7 @@ class TestRestartAgent:
         mock_manager.agent_registry.get_agent.return_value = None
         mock_manager.agent_registry.get_agents_by_agent_id.return_value = []
 
-        with patch("ciris_manager.api.routes.DockerAgentDiscovery") as MockDiscovery:
+        with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as MockDiscovery:
             # No discovered agents either
             mock_discovery = MockDiscovery.return_value
             mock_discovery.discover_agents.return_value = []
@@ -113,7 +113,7 @@ class TestRestartAgent:
         """Test restarting when container doesn't exist."""
         import docker.errors
 
-        with patch("ciris_manager.api.routes.DockerAgentDiscovery") as MockDiscovery:
+        with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as MockDiscovery:
             # Setup discovered agent with container_name
             mock_agent = Mock()
             mock_agent.agent_id = "test-agent"
@@ -138,7 +138,7 @@ class TestRestartAgent:
         """Test handling Docker API errors during restart."""
         import docker.errors
 
-        with patch("ciris_manager.api.routes.DockerAgentDiscovery") as MockDiscovery:
+        with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as MockDiscovery:
             # Setup discovered agent with container_name
             mock_agent = Mock()
             mock_agent.agent_id = "test-agent"
@@ -163,7 +163,7 @@ class TestRestartAgent:
 
     def test_restart_with_alternate_container_name(self, client, mock_manager):
         """Test restarting with alternate container naming scheme (e.g., ciris-datum)."""
-        with patch("ciris_manager.api.routes.DockerAgentDiscovery") as MockDiscovery:
+        with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as MockDiscovery:
             # Setup discovered agent with alternate container_name (ciris-test-agent instead of ciris-agent-test-agent)
             mock_agent = Mock()
             mock_agent.agent_id = "test-agent"
@@ -196,7 +196,7 @@ class TestRestartAgent:
         mock_manager.agent_registry.get_agent.return_value = None
         mock_manager.agent_registry.get_agents_by_agent_id.return_value = []
 
-        with patch("ciris_manager.api.routes.DockerAgentDiscovery") as MockDiscovery:
+        with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as MockDiscovery:
             # But found via discovery with proper container_name
             mock_discovery = MockDiscovery.return_value
             mock_agent = Mock()
