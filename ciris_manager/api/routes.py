@@ -793,14 +793,34 @@ def create_routes(manager: Any) -> APIRouter:
             server_id: Optional server ID for multi-server deployments
         """
         try:
-            # Resolve the agent
-            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+            # Discover agents to get actual container name
+            from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            # Get container name
-            container_name = f"ciris-agent-{agent_id}"
+            discovery = DockerAgentDiscovery(
+                manager.agent_registry, docker_client_manager=manager.docker_client
+            )
+            agents = discovery.discover_agents()
+
+            # Find matching agent with composite key support
+            discovered_agent = next(
+                (
+                    a
+                    for a in agents
+                    if a.agent_id == agent_id
+                    and (occurrence_id is None or a.occurrence_id == occurrence_id)
+                    and (server_id is None or a.server_id == server_id)
+                ),
+                None,
+            )
+
+            if not discovered_agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            # Use actual container name from discovery
+            container_name = discovered_agent.container_name
 
             # Get the correct Docker client for this agent's server
-            client = manager.docker_client.get_client(agent.server_id)
+            client = manager.docker_client.get_client(discovered_agent.server_id)
 
             try:
                 container = client.containers.get(container_name)
@@ -909,17 +929,42 @@ def create_routes(manager: Any) -> APIRouter:
         Supports composite keys for multi-instance deployments.
         """
         try:
-            # Check if agent exists in registry
-            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+            # Discover agents to get actual container name
+            from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            # Get container name
-            container_name = f"ciris-agent-{agent_id}"
+            discovery = DockerAgentDiscovery(
+                manager.agent_registry, docker_client_manager=manager.docker_client
+            )
+            agents = discovery.discover_agents()
+
+            # Find matching agent with composite key support
+            discovered_agent = next(
+                (
+                    a
+                    for a in agents
+                    if a.agent_id == agent_id
+                    and (occurrence_id is None or a.occurrence_id == occurrence_id)
+                    and (server_id is None or a.server_id == server_id)
+                ),
+                None,
+            )
+
+            if not discovered_agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            # Use actual container name from discovery
+            container_name = discovered_agent.container_name
+
+            # Also get registry agent for compose file info
+            registry_agent = manager.agent_registry.get_agent(
+                agent_id, occurrence_id=occurrence_id, server_id=discovered_agent.server_id
+            )
 
             # Use Docker API to check container state
             import docker
 
             # Get the correct Docker client for this agent's server
-            client = manager.docker_client.get_client(agent.server_id)
+            client = manager.docker_client.get_client(discovered_agent.server_id)
 
             try:
                 container = client.containers.get(container_name)
@@ -940,14 +985,16 @@ def create_routes(manager: Any) -> APIRouter:
                     container_image = container.image.tags[0]
 
                 # If image has changed or we have a compose file, recreate the container
-                if container_image != expected_image or (agent and agent.compose_file):
+                if container_image != expected_image or (
+                    registry_agent and registry_agent.compose_file
+                ):
                     logger.info(
                         f"Container image changed from {container_image} to {expected_image}, recreating container"
                     )
 
                     # Use docker-compose to recreate with new image
-                    if agent and agent.compose_file:
-                        compose_path = Path(agent.compose_file)
+                    if registry_agent and registry_agent.compose_file:
+                        compose_path = Path(registry_agent.compose_file)
                         if compose_path.exists():
                             result = await asyncio.create_subprocess_exec(
                                 "docker-compose",
@@ -1005,8 +1052,8 @@ def create_routes(manager: Any) -> APIRouter:
                     }
                 except docker.errors.NotFound:
                     # If container doesn't exist, try using docker-compose
-                    if agent and agent.compose_file:
-                        compose_path = Path(agent.compose_file)
+                    if registry_agent and registry_agent.compose_file:
+                        compose_path = Path(registry_agent.compose_file)
                         if compose_path.exists():
                             result = await asyncio.create_subprocess_exec(
                                 "docker-compose",
@@ -1054,17 +1101,37 @@ def create_routes(manager: Any) -> APIRouter:
         Supports composite keys for multi-instance deployments.
         """
         try:
-            # Check if agent exists in registry
-            agent = resolve_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
+            # Discover agents to get actual container name
+            from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            # Get container name
-            container_name = f"ciris-agent-{agent_id}"
+            discovery = DockerAgentDiscovery(
+                manager.agent_registry, docker_client_manager=manager.docker_client
+            )
+            agents = discovery.discover_agents()
+
+            # Find matching agent with composite key support
+            discovered_agent = next(
+                (
+                    a
+                    for a in agents
+                    if a.agent_id == agent_id
+                    and (occurrence_id is None or a.occurrence_id == occurrence_id)
+                    and (server_id is None or a.server_id == server_id)
+                ),
+                None,
+            )
+
+            if not discovered_agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+            # Use actual container name from discovery
+            container_name = discovered_agent.container_name
 
             # Use Docker API to stop the container
             import docker
 
             # Get the correct Docker client for this agent's server
-            client = manager.docker_client.get_client(agent.server_id)
+            client = manager.docker_client.get_client(discovered_agent.server_id)
 
             try:
                 container = client.containers.get(container_name)
@@ -1079,9 +1146,10 @@ def create_routes(manager: Any) -> APIRouter:
                     "container": container_name,
                 }
             except docker.errors.NotFound:
-                # Try alternative container name
+                # Container not found with discovered name
                 try:
-                    container = client.containers.get(f"ciris-{agent_id}")
+                    # Fallback: try alternative container name pattern
+                    container = client.containers.get(f"ciris-agent-{agent_id}")
                     container.stop(timeout=10)
                     return {
                         "status": "success",
@@ -1191,42 +1259,32 @@ def create_routes(manager: Any) -> APIRouter:
         Supports composite keys for multi-instance deployments.
         """
         try:
-            # Check if agent exists in registry
-            try:
-                agent = resolve_agent(
-                    agent_id, occurrence_id=occurrence_id, server_id=server_id_param
-                )
-                server_id = agent.server_id
-            except HTTPException as e:
-                if e.status_code != 404:
-                    raise
-                agent = None
-                server_id = "main"  # Default to main server
+            # Discover agents to get actual container name
+            from ciris_manager.docker_discovery import DockerAgentDiscovery
 
-            if not agent:
-                # Check if it's a discovered agent
-                from ciris_manager.docker_discovery import DockerAgentDiscovery
+            discovery = DockerAgentDiscovery(
+                manager.agent_registry, docker_client_manager=manager.docker_client
+            )
+            agents = discovery.discover_agents()
 
-                discovery = DockerAgentDiscovery(
-                    manager.agent_registry, docker_client_manager=manager.docker_client
-                )
-                discovered_agents = discovery.discover_agents()
+            # Find matching agent with composite key support
+            discovered_agent = next(
+                (
+                    a
+                    for a in agents
+                    if a.agent_id == agent_id
+                    and (occurrence_id is None or a.occurrence_id == occurrence_id)
+                    and (server_id_param is None or a.server_id == server_id_param)
+                ),
+                None,
+            )
 
-                discovered_agent = next(
-                    (a for a in discovered_agents if a.agent_id == agent_id), None
-                )
-                if not discovered_agent:
-                    raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+            if not discovered_agent:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
 
-                # Use server_id from discovered agent if available
-                if hasattr(discovered_agent, "server_id"):
-                    server_id = discovered_agent.server_id
-            else:
-                # Use server_id from registered agent
-                server_id = agent.server_id
-
-            # Get container name
-            container_name = f"ciris-agent-{agent_id}"
+            # Use actual container name and server_id from discovery
+            container_name = discovered_agent.container_name
+            server_id = discovered_agent.server_id
 
             # Use Docker API to restart the container
             import docker
