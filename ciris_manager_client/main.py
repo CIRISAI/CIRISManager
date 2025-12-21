@@ -367,6 +367,59 @@ def setup_auth_parser(subparsers):
     auth_subparsers.add_parser("token", help="Print current token (for scripting)")
 
 
+def setup_debug_parser(subparsers):
+    """Set up debug command subparser."""
+    debug_parser = subparsers.add_parser(
+        "debug",
+        help="Debug agent persistence",
+        description="Query agent databases for debugging (tasks, thoughts, actions)",
+    )
+    debug_subparsers = debug_parser.add_subparsers(dest="debug_command", help="Debug commands")
+
+    # Common arguments for all debug commands
+    def add_common_args(parser):
+        parser.add_argument("--server", help="Server ID for multi-server deployments")
+        parser.add_argument("--occurrence", help="Occurrence ID for multi-instance agents")
+
+    # debug tasks
+    tasks_parser = debug_subparsers.add_parser("tasks", help="List tasks for an agent")
+    tasks_parser.add_argument("agent_id", help="Agent ID")
+    tasks_parser.add_argument("--status", help="Filter by status (pending, active, completed, deferred)")
+    tasks_parser.add_argument("--limit", type=int, default=50, help="Maximum tasks to return (default: 50)")
+    add_common_args(tasks_parser)
+
+    # debug task
+    task_parser = debug_subparsers.add_parser("task", help="Get detailed task information")
+    task_parser.add_argument("agent_id", help="Agent ID")
+    task_parser.add_argument("task_id", help="Task ID")
+    add_common_args(task_parser)
+
+    # debug thoughts
+    thoughts_parser = debug_subparsers.add_parser("thoughts", help="List thoughts for an agent")
+    thoughts_parser.add_argument("agent_id", help="Agent ID")
+    thoughts_parser.add_argument("--status", help="Filter by status")
+    thoughts_parser.add_argument("--task-id", dest="task_id", help="Filter by task ID")
+    thoughts_parser.add_argument("--limit", type=int, default=50, help="Maximum thoughts to return (default: 50)")
+    add_common_args(thoughts_parser)
+
+    # debug thought
+    thought_parser = debug_subparsers.add_parser("thought", help="Get detailed thought information")
+    thought_parser.add_argument("agent_id", help="Agent ID")
+    thought_parser.add_argument("thought_id", help="Thought ID (can be partial prefix)")
+    add_common_args(thought_parser)
+
+    # debug query
+    query_parser = debug_subparsers.add_parser("query", help="Execute custom SQL query (read-only)")
+    query_parser.add_argument("agent_id", help="Agent ID")
+    query_parser.add_argument("query", help="SQL SELECT query to execute")
+    add_common_args(query_parser)
+
+    # debug schema
+    schema_parser = debug_subparsers.add_parser("schema", help="Get database schema")
+    schema_parser.add_argument("agent_id", help="Agent ID")
+    add_common_args(schema_parser)
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser."""
     parser = argparse.ArgumentParser(
@@ -432,6 +485,7 @@ Token File:
     setup_inspect_parser(subparsers)
     setup_deployment_parser(subparsers)
     setup_auth_parser(subparsers)
+    setup_debug_parser(subparsers)
 
     return parser
 
@@ -519,6 +573,21 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
             # Create a namespace with base_url for auth handler
             args.base_url = ctx.client.base_url if ctx.client else get_api_url()
             return handle_auth_command(args)
+
+        elif args.command == "debug":
+            from ciris_manager_client.commands.debug import DebugCommands
+
+            if not args.debug_command:
+                print("Error: No debug subcommand specified", file=sys.stderr)
+                print("Available commands: tasks, task, thoughts, thought, query, schema", file=sys.stderr)
+                return EXIT_INVALID_ARGS
+
+            handler = getattr(DebugCommands, args.debug_command.replace("-", "_"), None)
+            if handler:
+                return cast(int, handler(ctx, args))
+            else:
+                print(f"Error: Unknown debug command: {args.debug_command}", file=sys.stderr)
+                return EXIT_INVALID_ARGS
 
         else:
             print(f"Error: Unknown command: {args.command}", file=sys.stderr)

@@ -3069,6 +3069,16 @@ def create_routes(manager: Any) -> APIRouter:
         f"DEBUG: Environment check - DISCORD_CLIENT_SECRET exists: {bool(discord_client_secret)}"
     )
 
+    # Add debug routes for querying agent persistence
+    try:
+        from ciris_manager.api.debug_routes import create_debug_routes
+
+        debug_router = create_debug_routes(manager)
+        router.include_router(debug_router, prefix="", tags=["debug"])
+        logger.info("Debug routes added for agent persistence querying")
+    except Exception as e:
+        logger.warning(f"Failed to initialize debug routes: {e}")
+
     # Initialize jailbreaker service if configured
     try:
         print("CRITICAL DEBUG: Entering jailbreaker try block", flush=True)

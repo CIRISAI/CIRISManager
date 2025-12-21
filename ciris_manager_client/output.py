@@ -8,7 +8,7 @@ supporting table, JSON, and YAML formats.
 from typing import Any, List, Dict, Optional
 import json
 import yaml
-from tabulate import tabulate
+from tabulate import tabulate  # type: ignore[import-untyped]
 
 
 class OutputFormatterImpl:
@@ -65,7 +65,8 @@ class OutputFormatterImpl:
             table_data.append(row)
 
         # Format as table with headers
-        return tabulate(table_data, headers=columns, tablefmt="simple")
+        result: str = tabulate(table_data, headers=columns, tablefmt="simple")
+        return result
 
     def format_json(self, data: Any) -> str:
         """
