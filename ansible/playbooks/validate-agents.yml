@@ -132,6 +132,41 @@
       debug:
         msg: "{{ fail2ban_status.stdout_lines }}"
 
+    # Agent interactions (last 24 hours)
+    - name: Count API interactions last 24h
+      shell: |
+        for container in $(docker ps --filter 'name=ciris-' --format '{{ '{{' }}.Names{{ '}}' }}' | grep -v nginx); do
+          count=$(docker logs "$container" --since 24h 2>&1 | grep -E 'POST.*/v1/agent/message.* 200' | wc -l)
+          if [ "$count" -gt 0 ]; then
+            echo "$container: $count messages"
+          fi
+        done
+      register: interactions_24h
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Count unique users last 24h
+      shell: |
+        for container in $(docker ps --filter 'name=ciris-' --format '{{ '{{' }}.Names{{ '}}' }}' | grep -v nginx); do
+          # Count unique IPs that made auth or message requests (excluding health checks and localhost)
+          users=$(docker logs "$container" --since 24h 2>&1 | grep -E 'POST.*/v1/agent/message|/v1/auth/me' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | grep -v '127.0.0.1' | sort -u | wc -l)
+          if [ "$users" -gt 0 ]; then
+            echo "$container: $users unique sessions"
+          fi
+        done
+      register: unique_users_24h
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display interaction stats
+      debug:
+        msg: |
+          === Interactions (24h) ===
+          {{ interactions_24h.stdout if interactions_24h.stdout else 'No API interactions' }}
+          === Unique Users (24h) ===
+          {{ unique_users_24h.stdout if unique_users_24h.stdout else 'No unique users detected' }}
+      when: interactions_24h.stdout or unique_users_24h.stdout
+
     # Summary
     - name: Generate health summary
       set_fact:
