@@ -188,7 +188,7 @@ class TestDeviceAuthRoutes:
 
         assert token_data["access_token"] == "test-jwt-token"
         assert token_data["token_type"] == "Bearer"
-        assert token_data["expires_in"] == 3600
+        assert token_data["expires_in"] == 86400  # 24 hours
 
         # Check codes are cleaned up
         assert device_code not in _device_codes

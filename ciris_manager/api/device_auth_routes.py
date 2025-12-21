@@ -49,7 +49,7 @@ class DeviceTokenResponse(BaseModel):
 
     access_token: str
     token_type: str = "Bearer"
-    expires_in: int = 3600  # 60 minutes as requested
+    expires_in: int = 86400  # 24 hours
 
 
 # In-memory storage for device codes (in production, use Redis or database)
@@ -167,8 +167,8 @@ def create_device_auth_routes() -> APIRouter:
                 content={"error": "access_denied", "error_description": "Authorization denied"},
             )
         elif device_info["status"] == "authorized" and device_info["user"]:
-            # Generate token with 60 minute expiry
-            auth_service.jwt_expiration_hours = 1  # Override to 1 hour
+            # Generate token with 24 hour expiry
+            auth_service.jwt_expiration_hours = 24
             token = auth_service.create_jwt_token(
                 {
                     "sub": device_info["user"]["email"],
@@ -194,7 +194,7 @@ def create_device_auth_routes() -> APIRouter:
                 content={
                     "access_token": token,
                     "token_type": "Bearer",
-                    "expires_in": 3600,
+                    "expires_in": 86400,
                 },
             )
         else:
