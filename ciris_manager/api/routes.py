@@ -2393,9 +2393,7 @@ def create_routes(manager: Any) -> APIRouter:
             original.notification, agents
         )
 
-        logger.info(
-            f"Retrying deployment {deployment_id} as new deployment {new_deployment_id}"
-        )
+        logger.info(f"Retrying deployment {deployment_id} as new deployment {new_deployment_id}")
 
         return {
             "status": "staged",
