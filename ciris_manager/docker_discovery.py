@@ -4,12 +4,27 @@ Discovers running CIRIS agents by querying Docker directly.
 """
 
 import docker
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import logging
+import time
+import threading
 
 from ciris_manager.models import AgentInfo
 
 logger = logging.getLogger("ciris_manager.docker_discovery")
+
+# Module-level cache for discovery results
+_discovery_cache: Dict[str, Tuple[List[AgentInfo], float]] = {}
+_cache_lock = threading.Lock()
+CACHE_TTL_SECONDS = 10  # Cache discovery results for 10 seconds
+
+
+def invalidate_discovery_cache() -> None:
+    """Invalidate the discovery cache. Call after agent state changes."""
+    global _discovery_cache
+    with _cache_lock:
+        _discovery_cache.clear()
+    logger.debug("Discovery cache invalidated")
 
 
 class DockerAgentDiscovery:
@@ -39,17 +54,45 @@ class DockerAgentDiscovery:
 
         self.agent_registry = agent_registry
 
-    def discover_agents(self) -> List[AgentInfo]:
-        """Discover all CIRIS agent containers across all servers."""
+    def discover_agents(self, force_refresh: bool = False) -> List[AgentInfo]:
+        """
+        Discover all CIRIS agent containers across all servers.
+
+        Results are cached for CACHE_TTL_SECONDS to avoid hitting Docker APIs on every request.
+
+        Args:
+            force_refresh: If True, bypass cache and query Docker directly
+        """
+        global _discovery_cache
+
+        cache_key = "multi" if self.docker_client_manager else "local"
+
+        # Check cache first (unless force_refresh)
+        if not force_refresh:
+            with _cache_lock:
+                if cache_key in _discovery_cache:
+                    cached_agents, cached_time = _discovery_cache[cache_key]
+                    age = time.time() - cached_time
+                    if age < CACHE_TTL_SECONDS:
+                        logger.debug(
+                            f"Returning cached discovery results ({len(cached_agents)} agents, {age:.1f}s old)"
+                        )
+                        return cached_agents
+
+        # Cache miss or expired - do actual discovery
         if self.docker_client_manager:
-            # Multi-server mode: discover from all servers
-            return self._discover_multi_server()
+            agents = self._discover_multi_server()
         elif self.client:
-            # Legacy mode: local Docker only
-            return self._discover_local()
+            agents = self._discover_local()
         else:
             logger.warning("No Docker client available, returning empty agent list")
             return []
+
+        # Update cache
+        with _cache_lock:
+            _discovery_cache[cache_key] = (agents, time.time())
+
+        return agents
 
     def _discover_local(self) -> List[AgentInfo]:
         """Discover agents from local Docker daemon (legacy mode)."""
