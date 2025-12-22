@@ -97,7 +97,7 @@ class AuthManager:
 
     def save_token(self, token: str, email: str) -> None:
         """Save token to disk."""
-        expires_at = datetime.utcnow() + timedelta(hours=1)
+        expires_at = datetime.utcnow() + timedelta(hours=24)
 
         token_data = {
             "token": token,
