@@ -5,11 +5,12 @@ Provides endpoints for agent creation, discovery, and management.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Header, Response, Request
-from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List, Union
 import asyncio
 import httpx
+import json
 import logging
 import os  # noqa: F401 - used in jailbreaker section
 import aiofiles  # type: ignore
@@ -2039,6 +2040,83 @@ def create_routes(manager: Any) -> APIRouter:
             "started_at": deployment.started_at,
             "completed_at": deployment.completed_at,
         }
+
+    @router.get("/updates/events/{deployment_id}/stream")
+    async def stream_deployment_events(
+        deployment_id: str, _user: Dict[str, str] = auth_dependency
+    ) -> StreamingResponse:
+        """
+        Stream deployment events via Server-Sent Events (SSE).
+
+        Streams real-time events as they occur during deployment.
+        Automatically closes when deployment completes or fails.
+        """
+
+        async def event_generator():
+            """Generate SSE events for deployment status updates."""
+            last_event_count = 0
+            terminal_statuses = {"completed", "failed", "cancelled", "rejected", "rolled_back"}
+
+            while True:
+                # Get current deployment state
+                deployment = deployment_orchestrator.deployments.get(
+                    deployment_id
+                ) or deployment_orchestrator.pending_deployments.get(deployment_id)
+
+                if not deployment:
+                    # Deployment not found - send error and close
+                    error_event = {
+                        "type": "error",
+                        "message": f"Deployment {deployment_id} not found",
+                        "timestamp": asyncio.get_event_loop().time(),
+                    }
+                    yield f"data: {json.dumps(error_event)}\n\n"
+                    return
+
+                # Get current events
+                events = deployment.events if hasattr(deployment, "events") else []
+                current_event_count = len(events)
+
+                # Send any new events
+                if current_event_count > last_event_count:
+                    for event in events[last_event_count:]:
+                        yield f"data: {json.dumps(event)}\n\n"
+                    last_event_count = current_event_count
+
+                # Send periodic status update
+                status_event = {
+                    "type": "status",
+                    "deployment_id": deployment_id,
+                    "status": deployment.status,
+                    "agents_updated": getattr(deployment, "agents_updated", 0),
+                    "agents_failed": getattr(deployment, "agents_failed", 0),
+                    "agents_total": getattr(deployment, "agents_total", 0),
+                    "canary_phase": getattr(deployment, "canary_phase", None),
+                }
+                yield f"data: {json.dumps(status_event)}\n\n"
+
+                # Check if deployment reached terminal state
+                if deployment.status in terminal_statuses:
+                    close_event = {
+                        "type": "close",
+                        "status": deployment.status,
+                        "message": f"Deployment {deployment.status}",
+                    }
+                    yield f"data: {json.dumps(close_event)}\n\n"
+                    return
+
+                # Wait before next poll
+                await asyncio.sleep(2)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            },
+        )
 
     @router.get("/updates/status", response_model=Optional[DeploymentStatus])
     async def get_deployment_status(

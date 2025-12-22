@@ -343,6 +343,14 @@ def setup_deployment_parser(subparsers):
     start_parser = deployment_subparsers.add_parser("start", help="Start a pending deployment")
     start_parser.add_argument("deployment_id", help="Deployment ID to start")
 
+    # deployment watch
+    watch_parser = deployment_subparsers.add_parser(
+        "watch",
+        help="Watch deployment events in real-time",
+        description="Stream deployment events via SSE and exit on completion/failure",
+    )
+    watch_parser.add_argument("deployment_id", help="Deployment ID to watch")
+
 
 def setup_auth_parser(subparsers):
     """Set up auth command subparser."""

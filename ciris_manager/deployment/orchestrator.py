@@ -3405,9 +3405,20 @@ class DeploymentOrchestrator:
                 )
 
             old_config = None
+            docker_client = None
 
-            # For remote servers, use Docker API
-            if server_id != "main":
+            # Check if this is truly a local server (manager running on same host)
+            is_local_server = False
+            if self.manager and hasattr(self.manager, "docker_client") and self.manager.docker_client:
+                try:
+                    server_config = self.manager.docker_client.get_server_config(server_id)
+                    is_local_server = server_config.is_local
+                except Exception:
+                    # If we can't get config, assume not local for safety
+                    is_local_server = False
+
+            # For remote servers (including "main" when manager is on separate host), use Docker API
+            if not is_local_server:
                 # Get Docker client for remote server via manager
                 if not (
                     self.manager
@@ -3458,7 +3469,7 @@ class DeploymentOrchestrator:
                     return False
 
             # For local server, use docker-compose as before
-            if server_id == "main":
+            if is_local_server:
                 # Find the agent's docker-compose file
                 agent_dir = Path("/opt/ciris/agents") / agent_id
                 compose_file = agent_dir / "docker-compose.yml"

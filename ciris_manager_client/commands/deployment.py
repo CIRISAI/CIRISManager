@@ -5,8 +5,12 @@ This module provides commands for managing deployments including
 status checking, cancellation, and deployment history.
 """
 
+import json
 import sys
 from argparse import Namespace
+from datetime import datetime
+
+import httpx
 
 from ciris_manager_sdk import APIError, AuthenticationError
 from ciris_manager_client.protocols import (
@@ -240,6 +244,176 @@ class DeploymentCommands:
             return EXIT_API_ERROR
         except Exception as e:
             print(f"Error starting deployment: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
+    def watch(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Watch deployment events in real-time via SSE stream.
+
+        Streams deployment events as they happen and exits when
+        deployment completes, fails, or is cancelled.
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments (deployment_id)
+
+        Returns:
+            Exit code (0 for success/completed, non-zero for failures)
+        """
+        deployment_id = args.deployment_id
+
+        if not ctx.quiet:
+            print(f"Watching deployment {deployment_id}...")
+            print("=" * 60)
+            print()
+
+        # Build the SSE stream URL
+        base_url = ctx.client.base_url.rstrip("/")
+        stream_url = f"{base_url}/updates/events/{deployment_id}/stream"
+
+        # Get auth headers from the client
+        headers = {
+            "Accept": "text/event-stream",
+            "Cache-Control": "no-cache",
+        }
+        if hasattr(ctx.client, "_get_headers"):
+            headers.update(ctx.client._get_headers())
+        elif hasattr(ctx.client, "token") and ctx.client.token:
+            headers["Authorization"] = f"Bearer {ctx.client.token}"
+
+        try:
+            with httpx.stream(
+                "GET",
+                stream_url,
+                headers=headers,
+                timeout=httpx.Timeout(connect=10.0, read=None, write=10.0, pool=10.0),
+            ) as response:
+                if response.status_code == 401:
+                    print("Authentication error: Invalid or expired token", file=sys.stderr)
+                    return EXIT_AUTH_ERROR
+                elif response.status_code == 404:
+                    print(f"Deployment {deployment_id} not found", file=sys.stderr)
+                    return EXIT_NOT_FOUND
+                elif response.status_code != 200:
+                    print(f"Error: HTTP {response.status_code}", file=sys.stderr)
+                    return EXIT_API_ERROR
+
+                # Track last status for change detection
+                last_status = None
+                error_occurred = False
+
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+
+                    # SSE format: "data: {json}"
+                    if line.startswith("data: "):
+                        try:
+                            event = json.loads(line[6:])
+                        except json.JSONDecodeError:
+                            continue
+
+                        event_type = event.get("type", "unknown")
+
+                        if event_type == "error":
+                            print(f"\n❌ ERROR: {event.get('message', 'Unknown error')}")
+                            error_occurred = True
+                            return EXIT_ERROR
+
+                        elif event_type == "status":
+                            # Only print status if it changed
+                            status = event.get("status")
+                            if status != last_status:
+                                last_status = status
+                                updated = event.get("agents_updated", 0)
+                                failed = event.get("agents_failed", 0)
+                                total = event.get("agents_total", 0)
+                                phase = event.get("canary_phase", "")
+
+                                status_line = f"[{status.upper()}]"
+                                if phase:
+                                    status_line += f" Phase: {phase}"
+                                status_line += f" | Progress: {updated}/{total}"
+                                if failed > 0:
+                                    status_line += f" (❌ {failed} failed)"
+
+                                print(f"\n📊 {status_line}")
+
+                        elif event_type == "close":
+                            status = event.get("status", "unknown")
+                            message = event.get("message", "")
+                            print(f"\n{'=' * 60}")
+
+                            if status == "completed":
+                                print("✅ Deployment completed successfully")
+                                return EXIT_SUCCESS
+                            elif status == "failed":
+                                print(f"❌ Deployment failed: {message}")
+                                return EXIT_ERROR
+                            elif status in ("cancelled", "rejected"):
+                                print(f"⚠️  Deployment {status}: {message}")
+                                return EXIT_ERROR
+                            elif status == "rolled_back":
+                                print(f"↩️  Deployment rolled back: {message}")
+                                return EXIT_ERROR
+                            else:
+                                print(f"Deployment ended: {status}")
+                                return EXIT_SUCCESS
+
+                        else:
+                            # Regular event - print it
+                            timestamp = event.get("timestamp", "")
+                            if timestamp:
+                                try:
+                                    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                                    timestamp = dt.strftime("%H:%M:%S")
+                                except (ValueError, AttributeError):
+                                    timestamp = timestamp[:19]
+
+                            message = event.get("message", "")
+                            details = event.get("details", {})
+
+                            # Format based on event type
+                            if event_type == "agent_updated":
+                                agent = details.get("agent_id", "unknown")
+                                print(f"  [{timestamp}] ✓ Agent updated: {agent}")
+                            elif event_type == "agent_failed":
+                                agent = details.get("agent_id", "unknown")
+                                error = details.get("error", "unknown error")
+                                print(f"  [{timestamp}] ❌ Agent failed: {agent} - {error}")
+                                error_occurred = True
+                            elif event_type == "phase_started":
+                                phase = details.get("phase", "unknown")
+                                print(f"\n  [{timestamp}] 🚀 Starting phase: {phase}")
+                            elif event_type == "phase_completed":
+                                phase = details.get("phase", "unknown")
+                                print(f"  [{timestamp}] ✅ Phase completed: {phase}")
+                            elif event_type == "rollback_initiated":
+                                print(f"  [{timestamp}] ↩️  Rollback initiated: {message}")
+                            else:
+                                print(f"  [{timestamp}] {event_type}: {message}")
+
+                # Stream ended without close event
+                if error_occurred:
+                    return EXIT_ERROR
+                return EXIT_SUCCESS
+
+        except httpx.ConnectError as e:
+            print(f"Connection error: {e}", file=sys.stderr)
+            return EXIT_ERROR
+        except httpx.TimeoutException as e:
+            print(f"Connection timeout: {e}", file=sys.stderr)
+            return EXIT_ERROR
+        except KeyboardInterrupt:
+            print("\n\nWatch cancelled by user")
+            return EXIT_SUCCESS
+        except Exception as e:
+            print(f"Error watching deployment: {e}", file=sys.stderr)
             if ctx.verbose:
                 import traceback
 
