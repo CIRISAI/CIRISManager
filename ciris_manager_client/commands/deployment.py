@@ -332,9 +332,9 @@ class DeploymentCommands:
             print("=" * 60)
             print()
 
-        # Build the SSE stream URL
+        # Build the SSE stream URL (must include /manager/v1 prefix)
         base_url = ctx.client.base_url.rstrip("/")
-        stream_url = f"{base_url}/updates/events/{deployment_id}/stream"
+        stream_url = f"{base_url}/manager/v1/updates/events/{deployment_id}/stream"
 
         # Get auth headers from the client
         headers = {
