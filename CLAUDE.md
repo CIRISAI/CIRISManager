@@ -188,6 +188,43 @@ The **CIRISManager CLI client** is a comprehensive command-line tool for managin
    ciris-manager-client inspect system
    ```
 
+4. **Deployment Management** (`ciris-manager-client deployment <command>`)
+   ```bash
+   # View all pending deployments
+   ciris-manager-client deployment status
+
+   # Start a staged deployment
+   ciris-manager-client deployment start <deployment-id>
+
+   # Cancel/reject a deployment
+   ciris-manager-client deployment cancel <deployment-id> --reason "Superseded"
+
+   # Watch deployment progress in real-time (SSE stream)
+   # Exits automatically on completion/failure with appropriate exit code
+   ciris-manager-client deployment watch <deployment-id>
+   ```
+
+5. **Debug Commands** (`ciris-manager-client debug <command>`)
+   ```bash
+   # List tasks for an agent
+   ciris-manager-client debug tasks <agent-id> [--status pending|active|completed]
+
+   # Get detailed task info
+   ciris-manager-client debug task <agent-id> <task-id>
+
+   # List thoughts for an agent
+   ciris-manager-client debug thoughts <agent-id> [--task-id <id>]
+
+   # Get detailed thought info
+   ciris-manager-client debug thought <agent-id> <thought-id>
+
+   # Execute custom SQL query (SELECT only)
+   ciris-manager-client debug query <agent-id> "SELECT * FROM tasks LIMIT 5"
+
+   # Get database schema
+   ciris-manager-client debug schema <agent-id>
+   ```
+
 **Output Formats:**
 - `--format table` (default): Pretty-printed tables
 - `--format json`: Machine-readable JSON
