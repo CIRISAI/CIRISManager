@@ -251,6 +251,66 @@ class DeploymentCommands:
             return EXIT_ERROR
 
     @staticmethod
+    def retry(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Retry a failed/cancelled deployment.
+
+        Creates a new deployment using the original notification and optionally starts it.
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments (deployment_id, --start)
+
+        Returns:
+            Exit code
+        """
+        try:
+            deployment_id = args.deployment_id
+            auto_start = getattr(args, "start", False)
+
+            if not ctx.quiet:
+                print(f"Retrying deployment {deployment_id}...")
+
+            result = ctx.client.retry_deployment(deployment_id)
+
+            new_deployment_id = result.get("new_deployment_id")
+            if not ctx.quiet:
+                print(f"✓ New deployment staged: {new_deployment_id}")
+                print(f"  Original: {result.get('original_deployment_id')}")
+
+            # Optionally start the new deployment
+            if auto_start and new_deployment_id:
+                if not ctx.quiet:
+                    print(f"\nStarting deployment {new_deployment_id}...")
+                start_result = ctx.client.start_deployment(new_deployment_id)
+                if not ctx.quiet:
+                    print("✓ Deployment started")
+                    if start_result.get("message"):
+                        print(f"  Message: {start_result['message']}")
+
+            return EXIT_SUCCESS
+
+        except AuthenticationError as e:
+            print(f"Authentication error: {e}", file=sys.stderr)
+            return EXIT_AUTH_ERROR
+        except APIError as e:
+            if e.status_code == 404:
+                print(f"Deployment {args.deployment_id} not found", file=sys.stderr)
+                return EXIT_NOT_FOUND
+            elif e.status_code == 400:
+                print(f"Cannot retry: {e}", file=sys.stderr)
+                return EXIT_ERROR
+            print(f"API error: {e}", file=sys.stderr)
+            return EXIT_API_ERROR
+        except Exception as e:
+            print(f"Error retrying deployment: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
     def watch(ctx: CommandContext, args: Namespace) -> int:
         """
         Watch deployment events in real-time via SSE stream.

@@ -439,6 +439,22 @@ class CIRISManagerClient:
         response = self._request("POST", "/manager/v1/updates/launch", json=payload)
         return response.json()
 
+    def retry_deployment(self, deployment_id: str) -> Dict[str, Any]:
+        """
+        Retry a failed/cancelled deployment.
+
+        Creates a new deployment using the original notification from the failed deployment.
+
+        Args:
+            deployment_id: ID of the failed deployment to retry
+
+        Returns:
+            Response with new_deployment_id and status
+        """
+        payload = {"deployment_id": deployment_id}
+        response = self._request("POST", "/manager/v1/updates/retry", json=payload)
+        return response.json()
+
     def get_deployment_status(
         self, deployment_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:

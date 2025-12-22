@@ -2344,6 +2344,66 @@ def create_routes(manager: Any) -> APIRouter:
         else:
             raise HTTPException(status_code=404, detail="Deployment not found or not pending")
 
+    @router.post("/updates/retry")
+    async def retry_deployment(
+        request: Dict[str, str], _user: Dict[str, str] = auth_dependency
+    ) -> Dict[str, Any]:
+        """
+        Retry a failed/cancelled deployment.
+
+        Creates a new deployment using the original notification from the failed deployment.
+        """
+        deployment_id = request.get("deployment_id")
+        if not deployment_id:
+            raise HTTPException(status_code=400, detail="deployment_id required")
+
+        # Find the original deployment (check both active and pending)
+        original = deployment_orchestrator.deployments.get(
+            deployment_id
+        ) or deployment_orchestrator.pending_deployments.get(deployment_id)
+
+        if not original:
+            raise HTTPException(status_code=404, detail="Original deployment not found")
+
+        if not original.notification:
+            raise HTTPException(
+                status_code=400,
+                detail="Original deployment has no notification data to retry",
+            )
+
+        # Check if deployment can be retried (must be in terminal failed state)
+        retryable_statuses = {"failed", "cancelled", "rejected", "rolled_back"}
+        if original.status not in retryable_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot retry deployment in '{original.status}' state. "
+                f"Only {retryable_statuses} deployments can be retried.",
+            )
+
+        # Get current agents
+        from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+        discovery = DockerAgentDiscovery(
+            manager.agent_registry, docker_client_manager=manager.docker_client
+        )
+        agents = discovery.discover_agents()
+
+        # Stage a new deployment with the same notification
+        new_deployment_id = await deployment_orchestrator.stage_deployment(
+            original.notification, agents
+        )
+
+        logger.info(
+            f"Retrying deployment {deployment_id} as new deployment {new_deployment_id}"
+        )
+
+        return {
+            "status": "staged",
+            "original_deployment_id": deployment_id,
+            "new_deployment_id": new_deployment_id,
+            "message": "New deployment staged from original. Use /updates/launch to start.",
+        }
+
     @router.post("/updates/pause")
     async def pause_deployment(
         request: Dict[str, str], _user: Dict[str, str] = auth_dependency

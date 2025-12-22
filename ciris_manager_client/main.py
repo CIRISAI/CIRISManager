@@ -351,6 +351,17 @@ def setup_deployment_parser(subparsers):
     )
     watch_parser.add_argument("deployment_id", help="Deployment ID to watch")
 
+    # deployment retry
+    retry_parser = deployment_subparsers.add_parser(
+        "retry",
+        help="Retry a failed deployment",
+        description="Create a new deployment from a failed/cancelled deployment's original notification",
+    )
+    retry_parser.add_argument("deployment_id", help="Failed deployment ID to retry")
+    retry_parser.add_argument(
+        "--start", action="store_true", help="Automatically start the new deployment"
+    )
+
 
 def setup_auth_parser(subparsers):
     """Set up auth command subparser."""
