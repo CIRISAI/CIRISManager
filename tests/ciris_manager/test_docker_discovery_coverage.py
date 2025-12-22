@@ -2,9 +2,18 @@
 Additional tests for Docker discovery module to improve coverage.
 """
 
+import pytest
 from unittest.mock import Mock, patch
-from ciris_manager.docker_discovery import DockerAgentDiscovery
+from ciris_manager.docker_discovery import DockerAgentDiscovery, invalidate_discovery_cache
 import docker.errors
+
+
+@pytest.fixture(autouse=True)
+def clear_discovery_cache():
+    """Clear discovery cache before each test."""
+    invalidate_discovery_cache()
+    yield
+    invalidate_discovery_cache()
 
 
 class TestDockerDiscoveryCoverage:
@@ -20,6 +29,7 @@ class TestDockerDiscoveryCoverage:
         """Test discover_agents when no Docker client is available."""
         discovery = DockerAgentDiscovery()
         discovery.client = None
+        discovery.docker_client_manager = None  # Ensure no multi-server mode
 
         agents = discovery.discover_agents()
         assert agents == []
@@ -179,6 +189,7 @@ class TestDockerDiscoveryCoverage:
         discovery = DockerAgentDiscovery()
         mock_client = Mock()
         discovery.client = mock_client
+        discovery.docker_client_manager = None  # Ensure local mode
 
         mock_client.containers.list.side_effect = Exception("Docker API error")
 
