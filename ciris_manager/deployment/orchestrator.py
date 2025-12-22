@@ -3548,6 +3548,9 @@ class DeploymentOrchestrator:
                 # Determine which image to use
                 target_image = new_image if new_image else old_config["image"]
 
+                # docker_client is guaranteed to be set when not is_local_server
+                assert docker_client is not None, "docker_client should be set for remote servers"
+
                 # Pull the new image first
                 logger.info(f"Pulling image {target_image} on remote server {server_id}...")
                 try:
@@ -3580,7 +3583,7 @@ class DeploymentOrchestrator:
                     return False
 
             # Fix permissions on agent directories (local server only)
-            if server_id == "main":
+            if is_local_server:
                 agent_dir = Path("/opt/ciris/agents") / agent_id
                 logger.info(f"Fixing permissions for agent {agent_id} directories...")
                 helper_script = Path("/usr/local/bin/ciris-fix-permissions")
@@ -3608,8 +3611,9 @@ class DeploymentOrchestrator:
             await asyncio.sleep(5)
 
             # Verify container is running
-            if server_id != "main":
+            if not is_local_server:
                 # For remote servers, use Docker API to verify
+                assert docker_client is not None, "docker_client should be set for remote servers"
                 try:
                     new_container = docker_client.containers.get(container_name)
                     status = new_container.status
