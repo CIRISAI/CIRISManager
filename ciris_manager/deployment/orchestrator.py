@@ -3383,7 +3383,8 @@ class DeploymentOrchestrator:
                         raise RuntimeError(f"Cannot get Docker client for server {server_id}")
 
                 # List containers that match the agent_id pattern
-                containers = docker_client_for_search.containers.list(all=False)
+                # Use all=True to include stopped/exited containers (important for recreation)
+                containers = docker_client_for_search.containers.list(all=True)
                 for container in containers:
                     # Check if this container belongs to our agent
                     env_vars = container.attrs.get("Config", {}).get("Env", [])
