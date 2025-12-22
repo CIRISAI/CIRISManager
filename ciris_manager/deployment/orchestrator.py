@@ -3409,7 +3409,11 @@ class DeploymentOrchestrator:
 
             # Check if this is truly a local server (manager running on same host)
             is_local_server = False
-            if self.manager and hasattr(self.manager, "docker_client") and self.manager.docker_client:
+            if (
+                self.manager
+                and hasattr(self.manager, "docker_client")
+                and self.manager.docker_client
+            ):
                 try:
                     server_config = self.manager.docker_client.get_server_config(server_id)
                     is_local_server = server_config.is_local
