@@ -97,12 +97,14 @@ class MultiServerDockerClient:
             ConnectionError: If server is in circuit breaker cooldown
         """
         if server_id not in self.servers:
-            available = ", ".join(self.servers.keys())
-            raise ValueError(f"Unknown server '{server_id}'. Available servers: {available}")
+            available_servers = ", ".join(self.servers.keys())
+            raise ValueError(
+                f"Unknown server '{server_id}'. Available servers: {available_servers}"
+            )
 
         # Check circuit breaker
-        available, error = self.is_server_available(server_id)
-        if not available:
+        is_available, error = self.is_server_available(server_id)
+        if not is_available:
             raise ConnectionError(f"Server {server_id} unavailable: {error}")
 
         # Return cached client if available
