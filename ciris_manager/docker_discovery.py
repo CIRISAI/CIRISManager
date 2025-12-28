@@ -142,6 +142,12 @@ class DockerAgentDiscovery:
         logger.debug(f"Discovering agents from {len(server_ids)} servers: {server_ids}")
 
         for server_id in server_ids:
+            # Check circuit breaker before attempting connection
+            available, skip_reason = self.docker_client_manager.is_server_available(server_id)
+            if not available:
+                logger.debug(f"Skipping server {server_id}: {skip_reason}")
+                continue
+
             try:
                 # Get Docker client for this server
                 client = self.docker_client_manager.get_client(server_id)
@@ -152,6 +158,9 @@ class DockerAgentDiscovery:
                 logger.debug(
                     f"Found {len(containers)} total containers on server {server_id} ({server_config.hostname})"
                 )
+
+                # Server is reachable, mark as healthy
+                self.docker_client_manager.mark_server_healthy(server_id)
 
                 for container in containers:
                     # Check if this is a CIRIS agent
@@ -180,7 +189,14 @@ class DockerAgentDiscovery:
                                 f"Could not extract agent info from container {container.name} on {server_id}"
                             )
 
+            except ConnectionError as e:
+                # Circuit breaker already open
+                logger.debug(f"Server {server_id} unavailable (circuit breaker): {e}")
+                continue
             except Exception as e:
+                # Mark server as failed for circuit breaker
+                error_msg = str(e)[:100]  # Truncate long error messages
+                self.docker_client_manager.mark_server_failed(server_id, error_msg)
                 logger.error(f"Error discovering agents on server {server_id}: {e}")
                 continue
 
