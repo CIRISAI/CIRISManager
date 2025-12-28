@@ -143,9 +143,7 @@ class MultiServerDockerClient:
 
             # Use short timeout to fail fast on unreachable servers
             client = DockerClient(
-                base_url=server.docker_host,
-                tls=tls_config,
-                timeout=DOCKER_CONNECTION_TIMEOUT
+                base_url=server.docker_host, tls=tls_config, timeout=DOCKER_CONNECTION_TIMEOUT
             )
 
         # Cache and return
