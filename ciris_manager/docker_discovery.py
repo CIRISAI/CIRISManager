@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any, Tuple
 import logging
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ciris_manager.models import AgentInfo
 
@@ -16,7 +17,7 @@ logger = logging.getLogger("ciris_manager.docker_discovery")
 # Module-level cache for discovery results
 _discovery_cache: Dict[str, Tuple[List[AgentInfo], float]] = {}
 _cache_lock = threading.Lock()
-CACHE_TTL_SECONDS = 10  # Cache discovery results for 10 seconds
+CACHE_TTL_SECONDS = 30  # Cache discovery results for 30 seconds
 
 
 def invalidate_discovery_cache() -> None:
@@ -134,74 +135,97 @@ class DockerAgentDiscovery:
         return agents
 
     def _discover_multi_server(self) -> List[AgentInfo]:
-        """Discover agents from all configured Docker servers."""
-        all_agents = []
+        """Discover agents from all configured Docker servers in parallel."""
+        all_agents: List[AgentInfo] = []
 
         # Get all server IDs
         server_ids = self.docker_client_manager.list_servers()
         logger.debug(f"Discovering agents from {len(server_ids)} servers: {server_ids}")
 
+        # Filter to available servers
+        available_servers = []
         for server_id in server_ids:
-            # Check circuit breaker before attempting connection
             available, skip_reason = self.docker_client_manager.is_server_available(server_id)
-            if not available:
+            if available:
+                available_servers.append(server_id)
+            else:
                 logger.debug(f"Skipping server {server_id}: {skip_reason}")
-                continue
 
-            try:
-                # Get Docker client for this server
-                client = self.docker_client_manager.get_client(server_id)
-                server_config = self.docker_client_manager.get_server_config(server_id)
+        if not available_servers:
+            logger.warning("No servers available for discovery")
+            return []
 
-                # Find all containers on this server
-                containers = client.containers.list(all=True)
-                logger.debug(
-                    f"Found {len(containers)} total containers on server {server_id} ({server_config.hostname})"
-                )
+        # Query all servers in parallel
+        with ThreadPoolExecutor(max_workers=len(available_servers)) as executor:
+            futures = {
+                executor.submit(self._discover_from_server, server_id): server_id
+                for server_id in available_servers
+            }
 
-                # Server is reachable, mark as healthy
-                self.docker_client_manager.mark_server_healthy(server_id)
-
-                for container in containers:
-                    # Check if this is a CIRIS agent
-                    env_vars = container.attrs.get("Config", {}).get("Env", [])
-                    env_dict = {}
-                    for env in env_vars:
-                        if "=" in env:
-                            key, value = env.split("=", 1)
-                            env_dict[key] = value
-
-                    # Is this a CIRIS agent?
-                    if "CIRIS_AGENT_ID" in env_dict:
-                        logger.debug(
-                            f"Found CIRIS agent on {server_id}: {container.name} (ID: {env_dict.get('CIRIS_AGENT_ID')})"
-                        )
-                        agent_info = self._extract_agent_info(
-                            container, env_dict, server_id=server_id
-                        )
-                        if agent_info:
-                            logger.debug(
-                                f"Extracted agent info from {server_id}: {agent_info.agent_id} on port {agent_info.api_port}"
-                            )
-                            all_agents.append(agent_info)
-                        else:
-                            logger.warning(
-                                f"Could not extract agent info from container {container.name} on {server_id}"
-                            )
-
-            except ConnectionError as e:
-                # Circuit breaker already open
-                logger.debug(f"Server {server_id} unavailable (circuit breaker): {e}")
-                continue
-            except Exception as e:
-                # Mark server as failed for circuit breaker
-                error_msg = str(e)[:100]  # Truncate long error messages
-                self.docker_client_manager.mark_server_failed(server_id, error_msg)
-                logger.error(f"Error discovering agents on server {server_id}: {e}")
-                continue
+            for future in as_completed(futures):
+                server_id = futures[future]
+                try:
+                    agents = future.result()
+                    all_agents.extend(agents)
+                except Exception as e:
+                    logger.error(f"Error discovering agents on server {server_id}: {e}")
 
         logger.info(f"Discovered {len(all_agents)} agents across all servers")
         return all_agents
+
+    def _discover_from_server(self, server_id: str) -> List[AgentInfo]:
+        """Discover agents from a single server. Called in parallel."""
+        agents: List[AgentInfo] = []
+
+        try:
+            # Get Docker client for this server
+            client = self.docker_client_manager.get_client(server_id)
+            server_config = self.docker_client_manager.get_server_config(server_id)
+
+            # Find all containers on this server
+            containers = client.containers.list(all=True)
+            logger.debug(
+                f"Found {len(containers)} total containers on server {server_id} ({server_config.hostname})"
+            )
+
+            # Server is reachable, mark as healthy
+            self.docker_client_manager.mark_server_healthy(server_id)
+
+            for container in containers:
+                # Check if this is a CIRIS agent
+                env_vars = container.attrs.get("Config", {}).get("Env", [])
+                env_dict = {}
+                for env in env_vars:
+                    if "=" in env:
+                        key, value = env.split("=", 1)
+                        env_dict[key] = value
+
+                # Is this a CIRIS agent?
+                if "CIRIS_AGENT_ID" in env_dict:
+                    logger.debug(
+                        f"Found CIRIS agent on {server_id}: {container.name} (ID: {env_dict.get('CIRIS_AGENT_ID')})"
+                    )
+                    agent_info = self._extract_agent_info(container, env_dict, server_id=server_id)
+                    if agent_info:
+                        logger.debug(
+                            f"Extracted agent info from {server_id}: {agent_info.agent_id} on port {agent_info.api_port}"
+                        )
+                        agents.append(agent_info)
+                    else:
+                        logger.warning(
+                            f"Could not extract agent info from container {container.name} on {server_id}"
+                        )
+
+        except ConnectionError as e:
+            # Circuit breaker already open
+            logger.debug(f"Server {server_id} unavailable (circuit breaker): {e}")
+        except Exception as e:
+            # Mark server as failed for circuit breaker
+            error_msg = str(e)[:100]  # Truncate long error messages
+            self.docker_client_manager.mark_server_failed(server_id, error_msg)
+            raise  # Re-raise to be caught by the future handler
+
+        return agents
 
     def _extract_agent_info(
         self, container: Any, env_dict: Dict[str, str], server_id: str = "main"
