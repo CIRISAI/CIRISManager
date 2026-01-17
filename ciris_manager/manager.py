@@ -619,6 +619,96 @@ class CIRISManager:
             "status": "starting",
         }
 
+    async def regenerate_agent_compose(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Regenerate docker-compose.yml for an existing agent.
+
+        Used to apply adapter configuration changes from the wizard.
+        Preserves existing environment variables while adding adapter env vars.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Occurrence ID for multi-instance agents
+            server_id: Server ID
+
+        Returns:
+            Dict with regeneration status
+
+        Raises:
+            ValueError: If agent not found
+        """
+        # Get the registered agent
+        target_server_id = server_id or "main"
+        agent = self.agent_registry.get_agent(
+            agent_id, occurrence_id=occurrence_id, server_id=target_server_id
+        )
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+
+        compose_path = Path(agent.compose_file)
+        if not compose_path.exists():
+            raise ValueError(f"Compose file not found: {compose_path}")
+
+        # Read current compose to extract environment
+        import yaml
+
+        with open(compose_path) as f:
+            current_compose = yaml.safe_load(f)
+
+        # Get the service config (agent_id is the service name)
+        services = current_compose.get("services", {})
+        service_config = services.get(agent_id, {})
+        current_env = service_config.get("environment", {})
+
+        # Get server config for hostname
+        server_config = self.docker_client.get_server_config(target_server_id)
+
+        # Get adapter configs from registry
+        adapter_configs = agent.adapter_configs or {}
+
+        # Check if discord was originally enabled (before adapter_configs)
+        enable_discord = "discord" in current_env.get("CIRIS_ADAPTER", "").split(",")
+
+        # Regenerate compose with adapter_configs
+        agent_dir = compose_path.parent
+        new_compose = self.compose_generator.generate_compose(
+            agent_id=agent_id,
+            agent_name=agent.name,
+            port=agent.port,
+            template=agent.template,
+            agent_dir=agent_dir,
+            environment=current_env,
+            use_mock_llm=current_env.get("CIRIS_MOCK_LLM") == "true",
+            enable_discord=enable_discord,
+            billing_enabled=current_env.get("CIRIS_BILLING_ENABLED") == "true",
+            billing_api_key=current_env.get("CIRIS_BILLING_API_KEY"),
+            database_url=current_env.get("CIRIS_DB_URL"),
+            database_ssl_cert_path=current_env.get("PGSSLROOTCERT"),
+            agent_occurrence_id=current_env.get("AGENT_OCCURRENCE_ID"),
+            oauth_callback_hostname=server_config.hostname,
+            adapter_configs=adapter_configs,
+        )
+
+        # Write updated compose file
+        self.compose_generator.write_compose_file(new_compose, compose_path)
+
+        logger.info(
+            f"Regenerated compose file for agent {agent_id} with "
+            f"{len(adapter_configs)} adapter config(s)"
+        )
+
+        return {
+            "agent_id": agent_id,
+            "compose_file": str(compose_path),
+            "adapter_configs_applied": list(adapter_configs.keys()),
+            "message": "Compose file regenerated. Restart agent to apply changes.",
+        }
+
     async def update_nginx_config(self) -> bool:
         """Update nginx configuration with all current agents across all servers."""
         try:

@@ -44,6 +44,7 @@ class ComposeGenerator:
         database_ssl_cert_path: Optional[str] = None,
         agent_occurrence_id: Optional[str] = None,
         oauth_callback_hostname: str = "agents.ciris.ai",
+        adapter_configs: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Generate docker-compose configuration for an agent.
@@ -64,6 +65,8 @@ class ComposeGenerator:
             database_ssl_cert_path: Path to SSL certificate for database connection
             agent_occurrence_id: Unique occurrence ID for database isolation
             oauth_callback_hostname: Hostname for OAuth callbacks (default: agents.ciris.ai)
+            adapter_configs: Adapter configurations from wizard (stored in registry).
+                Each adapter_type maps to a config dict with 'enabled', 'env_vars', etc.
 
         Returns:
             Docker compose configuration dict
@@ -132,6 +135,23 @@ class ComposeGenerator:
         # if enable_slack and "SLACK_BOT_TOKEN" in base_env:
         #     channels.append("slack")
         #     logger.info("Communication channel enabled: Slack")
+
+        # Apply adapter configurations from wizard (stored in registry)
+        # This is additive to the enable_discord flag above - existing flow still works
+        if adapter_configs:
+            for adapter_type, config in adapter_configs.items():
+                if config.get("enabled", True):
+                    # Add adapter to channels if not already present
+                    if adapter_type not in channels:
+                        channels.append(adapter_type)
+                        logger.info(f"Communication channel enabled via wizard: {adapter_type}")
+
+                    # Apply environment variables from config
+                    env_vars = config.get("env_vars", {})
+                    for key, value in env_vars.items():
+                        if value:  # Only set non-empty values
+                            base_env[key] = str(value)
+                            logger.debug(f"Applied env var from {adapter_type} config: {key}")
 
         # Set the final adapter configuration
         base_env["CIRIS_ADAPTER"] = ",".join(channels)

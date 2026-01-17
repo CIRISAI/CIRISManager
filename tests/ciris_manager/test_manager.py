@@ -1148,3 +1148,235 @@ class TestCIRISManager:
         )
         result = manager._generate_occurrence_id(existing, "main")
         assert result == "011", f"Should be '011' (max + 1), got '{result}'"
+
+
+class TestRegenerateAgentCompose:
+    """Test cases for regenerate_agent_compose method."""
+
+    @pytest.fixture
+    def temp_dirs(self):
+        """Create temporary directories for testing."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_path = Path(temp_dir)
+            agents_dir = base_path / "agents"
+            agents_dir.mkdir()
+
+            # Create pre-approved manifest
+            manifest = {
+                "version": "1.0",
+                "templates": {
+                    "scout": {"checksum": "sha256:test_checksum", "description": "Scout template"}
+                },
+                "root_signature": "test_signature",
+                "root_public_key": "test_key",
+            }
+
+            templates_dir = base_path / "templates"
+            templates_dir.mkdir()
+
+            manifest_path = base_path / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest))
+
+            # Create a scout template file
+            (templates_dir / "scout.yaml").write_text("name: scout\nroles: [scout]")
+
+            yield {
+                "base": base_path,
+                "agents": agents_dir,
+                "templates": templates_dir,
+                "manifest": manifest_path,
+            }
+
+    @pytest.fixture
+    def config(self, temp_dirs):
+        """Create test configuration."""
+        nginx_config_dir = temp_dirs["base"] / "nginx"
+        nginx_config_dir.mkdir(exist_ok=True)
+
+        from ciris_manager.config.settings import ServerConfig
+
+        return CIRISManagerConfig(
+            manager={
+                "agents_directory": str(temp_dirs["agents"]),
+                "templates_directory": str(temp_dirs["templates"]),
+                "manifest_path": str(temp_dirs["manifest"]),
+                "port": 8888,
+                "host": "127.0.0.1",
+            },
+            docker={"compose_path": str(temp_dirs["base"])},
+            servers=[
+                ServerConfig(
+                    server_id="main",
+                    hostname="agents.ciris.ai",
+                    is_local=True,
+                    docker_host=None,
+                    nginx_config_path=str(nginx_config_dir / "nginx.conf"),
+                )
+            ],
+        )
+
+    @pytest.fixture
+    def manager(self, config):
+        """Create CIRISManager instance with mocks."""
+        with patch(
+            "ciris_manager.template_verifier.TemplateVerifier._verify_manifest_signature",
+            return_value=True,
+        ):
+            with patch("ciris_manager.manager.NginxManager") as mock_nginx_class:
+                with patch(
+                    "ciris_manager.multi_server_docker.MultiServerDockerClient"
+                ) as mock_docker_class:
+                    with patch("ciris_manager.manager.DockerImageCleanup") as mock_cleanup_class:
+                        # Configure nginx manager mock
+                        mock_nginx = Mock()
+                        mock_nginx.ensure_managed_sections = Mock(return_value=True)
+                        mock_nginx.add_agent_route = Mock(return_value=True)
+                        mock_nginx.remove_agent_route = Mock(return_value=True)
+                        mock_nginx.reload_nginx = Mock(return_value=True)
+                        mock_nginx_class.return_value = mock_nginx
+
+                        # Configure multi-server Docker client mock
+                        mock_docker_client = Mock()
+                        mock_docker_client.test_connection = Mock(return_value=True)
+                        mock_docker_client.get_client = Mock()
+                        mock_docker_client.get_server_config = Mock(return_value=config.servers[0])
+                        mock_docker_client.list_servers = Mock(return_value=["main"])
+                        mock_docker_class.return_value = mock_docker_client
+
+                        # Configure image cleanup mock
+                        mock_cleanup = Mock()
+                        mock_cleanup.run_periodic_cleanup = AsyncMock()
+                        mock_cleanup_class.return_value = mock_cleanup
+
+                        mgr = CIRISManager(config)
+                        mgr.nginx_manager = mock_nginx
+                        mgr.docker_client = mock_docker_client
+                        yield mgr
+
+    @pytest.mark.asyncio
+    async def test_regenerate_compose_basic(self, manager, temp_dirs):
+        """Test basic compose regeneration."""
+        # Create agent directory and compose file
+        agent_dir = temp_dirs["agents"] / "test-agent"
+        agent_dir.mkdir()
+        compose_path = agent_dir / "docker-compose.yml"
+
+        # Write initial compose file
+        initial_compose = {
+            "version": "3.8",
+            "services": {
+                "test-agent": {
+                    "environment": {
+                        "CIRIS_AGENT_ID": "test-agent",
+                        "CIRIS_ADAPTER": "api",
+                        "CIRIS_MANAGED": "true",
+                        "CIRIS_TEMPLATE": "scout",
+                    }
+                }
+            }
+        }
+        import yaml
+        with open(compose_path, "w") as f:
+            yaml.dump(initial_compose, f)
+
+        # Register the agent with adapter_configs
+        manager.agent_registry.register_agent(
+            agent_id="test-agent",
+            name="Test Agent",
+            port=8001,
+            template="scout",
+            compose_file=str(compose_path),
+        )
+
+        # Set adapter configs
+        manager.agent_registry.set_adapter_config(
+            "test-agent",
+            "discord",
+            {
+                "enabled": True,
+                "env_vars": {"DISCORD_BOT_TOKEN": "test_token_123"},
+            },
+        )
+
+        # Regenerate compose
+        result = await manager.regenerate_agent_compose("test-agent")
+
+        assert result["agent_id"] == "test-agent"
+        assert "discord" in result["adapter_configs_applied"]
+
+        # Verify compose file was updated
+        with open(compose_path) as f:
+            updated_compose = yaml.safe_load(f)
+
+        env = updated_compose["services"]["test-agent"]["environment"]
+        assert "discord" in env["CIRIS_ADAPTER"]
+        assert env["DISCORD_BOT_TOKEN"] == "test_token_123"
+
+    @pytest.mark.asyncio
+    async def test_regenerate_compose_agent_not_found(self, manager):
+        """Test error when agent is not found."""
+        with pytest.raises(ValueError, match="Agent nonexistent not found"):
+            await manager.regenerate_agent_compose("nonexistent")
+
+    @pytest.mark.asyncio
+    async def test_regenerate_compose_preserves_existing_settings(self, manager, temp_dirs):
+        """Test that regeneration preserves existing environment settings."""
+        # Create agent directory and compose file
+        agent_dir = temp_dirs["agents"] / "test-agent-2"
+        agent_dir.mkdir()
+        compose_path = agent_dir / "docker-compose.yml"
+
+        # Write initial compose with Discord enabled
+        initial_compose = {
+            "version": "3.8",
+            "services": {
+                "test-agent-2": {
+                    "environment": {
+                        "CIRIS_AGENT_ID": "test-agent-2",
+                        "CIRIS_ADAPTER": "api,discord",
+                        "CIRIS_MANAGED": "true",
+                        "CIRIS_TEMPLATE": "scout",
+                        "CIRIS_BILLING_ENABLED": "true",
+                        "DISCORD_BOT_TOKEN": "original_token",
+                    }
+                }
+            }
+        }
+        import yaml
+        with open(compose_path, "w") as f:
+            yaml.dump(initial_compose, f)
+
+        # Register the agent
+        manager.agent_registry.register_agent(
+            agent_id="test-agent-2",
+            name="Test Agent 2",
+            port=8002,
+            template="scout",
+            compose_file=str(compose_path),
+        )
+
+        # Set adapter configs for a new adapter
+        manager.agent_registry.set_adapter_config(
+            "test-agent-2",
+            "reddit",
+            {
+                "enabled": True,
+                "env_vars": {"REDDIT_CLIENT_ID": "reddit_client"},
+            },
+        )
+
+        # Regenerate compose
+        result = await manager.regenerate_agent_compose("test-agent-2")
+
+        # Verify compose file was updated
+        with open(compose_path) as f:
+            updated_compose = yaml.safe_load(f)
+
+        env = updated_compose["services"]["test-agent-2"]["environment"]
+
+        # Original discord should still be present
+        assert "discord" in env["CIRIS_ADAPTER"]
+        # New reddit should be added
+        assert "reddit" in env["CIRIS_ADAPTER"]
+        # Billing setting should be preserved
+        assert env["CIRIS_BILLING_ENABLED"] == "true"

@@ -35,6 +35,7 @@ class RegisteredAgent:
         do_not_autostart: Optional[bool] = None,
         server_id: Optional[str] = None,
         occurrence_id: Optional[str] = None,
+        adapter_configs: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -55,6 +56,7 @@ class RegisteredAgent:
         self.do_not_autostart = do_not_autostart or False
         self.server_id = server_id or "main"  # Default to main server for backward compatibility
         self.occurrence_id = occurrence_id  # For multi-instance deployments on same database
+        self.adapter_configs = adapter_configs or {}  # Adapter configurations from wizard
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -73,6 +75,7 @@ class RegisteredAgent:
             "version_transitions": self.version_transitions,
             "do_not_autostart": self.do_not_autostart,
             "server_id": self.server_id,
+            "adapter_configs": self.adapter_configs,
         }
         # Include occurrence_id if set
         if self.occurrence_id:
@@ -106,6 +109,7 @@ class RegisteredAgent:
             do_not_autostart=data.get("do_not_autostart", False),
             server_id=data.get("server_id", "main"),  # Default to main for backward compatibility
             occurrence_id=data.get("occurrence_id"),  # For multi-instance deployments
+            adapter_configs=data.get("adapter_configs", {}),  # Adapter configurations
         )
 
 
@@ -677,4 +681,102 @@ class AgentRegistry:
                         last_transition["work_state_at"] = now
 
             self._save_metadata()
+            return True
+
+    def get_adapter_configs(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get adapter configurations for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
+
+        Returns:
+            Dictionary of adapter configs, empty dict if agent not found
+        """
+        agent = self.get_agent(agent_id, occurrence_id, server_id)
+        if not agent:
+            return {}
+        return agent.adapter_configs
+
+    def set_adapter_config(
+        self,
+        agent_id: str,
+        adapter_type: str,
+        config: Dict[str, Any],
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Set or update configuration for a specific adapter.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_type: Type of adapter (e.g., 'home_assistant', 'reddit')
+            config: Adapter configuration dictionary containing:
+                - enabled: bool
+                - configured_at: ISO timestamp
+                - config: dict of adapter-specific settings
+                - env_vars: dict mapping to environment variables
+                - consent_given: bool (for consent-required adapters)
+                - consent_timestamp: ISO timestamp (for consent)
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
+
+        Returns:
+            True if successful, False if agent not found
+        """
+        with self._lock:
+            agent = self.get_agent(agent_id, occurrence_id, server_id)
+            if not agent:
+                logger.error(f"Agent {agent_id} not found for adapter config update")
+                return False
+
+            # Ensure configured_at is set
+            if "configured_at" not in config:
+                config["configured_at"] = datetime.now(timezone.utc).isoformat()
+
+            agent.adapter_configs[adapter_type] = config
+            self._save_metadata()
+            logger.info(f"Updated adapter config for {adapter_type} on agent {agent_id}")
+            return True
+
+    def remove_adapter_config(
+        self,
+        agent_id: str,
+        adapter_type: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Remove configuration for a specific adapter.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_type: Type of adapter to remove
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
+
+        Returns:
+            True if removed, False if agent or config not found
+        """
+        with self._lock:
+            agent = self.get_agent(agent_id, occurrence_id, server_id)
+            if not agent:
+                logger.error(f"Agent {agent_id} not found for adapter config removal")
+                return False
+
+            if adapter_type not in agent.adapter_configs:
+                logger.warning(f"Adapter {adapter_type} config not found for agent {agent_id}")
+                return False
+
+            del agent.adapter_configs[adapter_type]
+            self._save_metadata()
+            logger.info(f"Removed adapter config for {adapter_type} on agent {agent_id}")
             return True

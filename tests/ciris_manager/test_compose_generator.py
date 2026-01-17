@@ -363,3 +363,118 @@ class TestComposeGenerator:
 
         env = compose["services"]["agent-scout"]["environment"]
         assert env["OAUTH_CALLBACK_BASE_URL"] == "https://agents.ciris.ai"
+
+    def test_generate_compose_with_adapter_configs(self, generator, temp_agent_dir):
+        """Test compose generation with adapter_configs from wizard."""
+        adapter_configs = {
+            "home_assistant": {
+                "enabled": True,
+                "env_vars": {
+                    "HOME_ASSISTANT_URL": "http://192.168.1.100:8123",
+                    "HOME_ASSISTANT_TOKEN": "secret_token_123",
+                },
+            },
+            "covenant_metrics": {
+                "enabled": True,
+                "consent_given": True,
+                "env_vars": {
+                    "CIRIS_COVENANT_METRICS_CONSENT": "true",
+                },
+            },
+        }
+
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            adapter_configs=adapter_configs,
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+
+        # Check adapter channels are added
+        adapters = env["CIRIS_ADAPTER"].split(",")
+        assert "api" in adapters
+        assert "home_assistant" in adapters
+        assert "covenant_metrics" in adapters
+
+        # Check env vars are applied
+        assert env["HOME_ASSISTANT_URL"] == "http://192.168.1.100:8123"
+        assert env["HOME_ASSISTANT_TOKEN"] == "secret_token_123"
+        assert env["CIRIS_COVENANT_METRICS_CONSENT"] == "true"
+
+    def test_generate_compose_adapter_configs_with_discord(self, generator, temp_agent_dir):
+        """Test that adapter_configs works alongside enable_discord flag."""
+        adapter_configs = {
+            "reddit": {
+                "enabled": True,
+                "env_vars": {
+                    "REDDIT_CLIENT_ID": "my_client_id",
+                    "REDDIT_CLIENT_SECRET": "my_secret",
+                },
+            },
+        }
+
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            environment={"DISCORD_BOT_TOKEN": "test_discord_token"},
+            enable_discord=True,
+            adapter_configs=adapter_configs,
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+
+        # Check both Discord (from enable_discord) and Reddit (from adapter_configs) are enabled
+        adapters = env["CIRIS_ADAPTER"].split(",")
+        assert "api" in adapters
+        assert "discord" in adapters  # From enable_discord flag
+        assert "reddit" in adapters   # From adapter_configs
+
+        # Check env vars
+        assert env["DISCORD_BOT_TOKEN"] == "test_discord_token"
+        assert env["REDDIT_CLIENT_ID"] == "my_client_id"
+        assert env["REDDIT_CLIENT_SECRET"] == "my_secret"
+
+    def test_generate_compose_adapter_configs_disabled(self, generator, temp_agent_dir):
+        """Test that disabled adapters are not added."""
+        adapter_configs = {
+            "home_assistant": {
+                "enabled": False,  # Disabled
+                "env_vars": {
+                    "HOME_ASSISTANT_URL": "http://192.168.1.100:8123",
+                },
+            },
+            "reddit": {
+                "enabled": True,
+                "env_vars": {
+                    "REDDIT_CLIENT_ID": "my_id",
+                },
+            },
+        }
+
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            adapter_configs=adapter_configs,
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+
+        # home_assistant should NOT be in adapters (disabled)
+        adapters = env["CIRIS_ADAPTER"].split(",")
+        assert "home_assistant" not in adapters
+        assert "reddit" in adapters
+
+        # env vars for disabled adapter should NOT be applied
+        assert "HOME_ASSISTANT_URL" not in env
+        # env vars for enabled adapter should be applied
+        assert env["REDDIT_CLIENT_ID"] == "my_id"
