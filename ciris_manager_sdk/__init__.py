@@ -836,6 +836,206 @@ class CIRISManagerClient:
         )
         return response.json()
 
+    # LLM Configuration Methods
+
+    def get_llm_config(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get LLM configuration for an agent.
+
+        Returns configuration with API keys redacted for security.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server setups
+
+        Returns:
+            Dict with LLM config (keys redacted) or null if not configured
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/llm",
+            params=params if params else None,
+        )
+        return response.json()
+
+    def set_llm_config(
+        self,
+        agent_id: str,
+        primary_provider: str,
+        primary_api_key: str,
+        primary_model: str,
+        primary_api_base: Optional[str] = None,
+        backup_provider: Optional[str] = None,
+        backup_api_key: Optional[str] = None,
+        backup_model: Optional[str] = None,
+        backup_api_base: Optional[str] = None,
+        validate: bool = True,
+        restart: bool = True,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Set LLM configuration for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            primary_provider: Primary provider (openai, together, groq, openrouter, custom)
+            primary_api_key: Primary API key
+            primary_model: Primary model identifier
+            primary_api_base: Primary custom API base URL (optional)
+            backup_provider: Backup provider (optional)
+            backup_api_key: Backup API key (optional)
+            backup_model: Backup model (optional)
+            backup_api_base: Backup custom API base URL (optional)
+            validate: Validate API keys before saving (default: True)
+            restart: Restart container after update (default: True)
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server setups
+
+        Returns:
+            Dict with result including validation status
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {
+            "validate": str(validate).lower(),
+            "restart": str(restart).lower(),
+        }
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        payload = {
+            "primary_provider": primary_provider,
+            "primary_api_key": primary_api_key,
+            "primary_model": primary_model,
+        }
+        if primary_api_base:
+            payload["primary_api_base"] = primary_api_base
+        if backup_provider:
+            payload["backup_provider"] = backup_provider
+        if backup_api_key:
+            payload["backup_api_key"] = backup_api_key
+        if backup_model:
+            payload["backup_model"] = backup_model
+        if backup_api_base:
+            payload["backup_api_base"] = backup_api_base
+
+        response = self._request(
+            "PUT",
+            f"/manager/v1/agents/{safe_id}/llm",
+            params=params,
+            json=payload,
+        )
+        return response.json()
+
+    def delete_llm_config(
+        self,
+        agent_id: str,
+        restart: bool = True,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Delete LLM configuration for an agent.
+
+        After deletion, the agent will use environment variables.
+
+        Args:
+            agent_id: Agent identifier
+            restart: Restart container after deletion (default: True)
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server setups
+
+        Returns:
+            Dict with deletion result
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {"restart": str(restart).lower()}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "DELETE",
+            f"/manager/v1/agents/{safe_id}/llm",
+            params=params,
+        )
+        return response.json()
+
+    def validate_llm_config(
+        self,
+        agent_id: str,
+        provider: str,
+        api_key: str,
+        model: str,
+        api_base: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Validate LLM configuration without saving.
+
+        Tests the API key by calling the provider's /v1/models endpoint.
+        Does not consume tokens or modify agent configuration.
+
+        Args:
+            agent_id: Agent identifier (for auth context)
+            provider: Provider name (openai, together, groq, openrouter, custom)
+            api_key: API key to validate
+            model: Model identifier to check
+            api_base: Custom API base URL (optional)
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server setups
+
+        Returns:
+            Dict with validation result: {valid: bool, error: str|null, models_available: list|null}
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        payload = {
+            "provider": provider,
+            "api_key": api_key,
+            "model": model,
+        }
+        if api_base:
+            payload["api_base"] = api_base
+
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/llm/validate",
+            params=params if params else None,
+            json=payload,
+        )
+        return response.json()
+
     # Utility Methods
 
     def ping(self) -> bool:

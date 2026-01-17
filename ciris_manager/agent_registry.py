@@ -36,6 +36,7 @@ class RegisteredAgent:
         server_id: Optional[str] = None,
         occurrence_id: Optional[str] = None,
         adapter_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        llm_config: Optional[Dict[str, Any]] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -57,6 +58,7 @@ class RegisteredAgent:
         self.server_id = server_id or "main"  # Default to main server for backward compatibility
         self.occurrence_id = occurrence_id  # For multi-instance deployments on same database
         self.adapter_configs = adapter_configs or {}  # Adapter configurations from wizard
+        self.llm_config = llm_config  # Encrypted LLM provider configuration
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -76,6 +78,7 @@ class RegisteredAgent:
             "do_not_autostart": self.do_not_autostart,
             "server_id": self.server_id,
             "adapter_configs": self.adapter_configs,
+            "llm_config": self.llm_config,
         }
         # Include occurrence_id if set
         if self.occurrence_id:
@@ -110,6 +113,7 @@ class RegisteredAgent:
             server_id=data.get("server_id", "main"),  # Default to main for backward compatibility
             occurrence_id=data.get("occurrence_id"),  # For multi-instance deployments
             adapter_configs=data.get("adapter_configs", {}),  # Adapter configurations
+            llm_config=data.get("llm_config"),  # LLM provider configuration
         )
 
 
@@ -779,4 +783,147 @@ class AgentRegistry:
             del agent.adapter_configs[adapter_type]
             self._save_metadata()
             logger.info(f"Removed adapter config for {adapter_type} on agent {agent_id}")
+            return True
+
+    def get_llm_config(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get LLM configuration for an agent with API keys decrypted.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
+
+        Returns:
+            LLM config dictionary with decrypted keys, or None if not configured
+        """
+        from ciris_manager.crypto import get_token_encryption
+
+        agent = self.get_agent(agent_id, occurrence_id, server_id)
+        if not agent or not agent.llm_config:
+            return None
+
+        try:
+            encryption = get_token_encryption()
+            config = agent.llm_config.copy()
+
+            # Decrypt primary API key
+            if "primary" in config and config["primary"].get("api_key"):
+                primary = config["primary"].copy()
+                encrypted_key = primary["api_key"]
+                if encrypted_key.startswith("gAAAAA"):
+                    primary["api_key"] = encryption.decrypt_token(encrypted_key)
+                config["primary"] = primary
+
+            # Decrypt backup API key if present
+            if "backup" in config and config["backup"] and config["backup"].get("api_key"):
+                backup = config["backup"].copy()
+                encrypted_key = backup["api_key"]
+                if encrypted_key.startswith("gAAAAA"):
+                    backup["api_key"] = encryption.decrypt_token(encrypted_key)
+                config["backup"] = backup
+
+            return config
+        except Exception as e:
+            logger.error(f"Failed to decrypt LLM config for {agent_id}: {e}")
+            return None
+
+    def set_llm_config(
+        self,
+        agent_id: str,
+        config: Dict[str, Any],
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Set LLM configuration for an agent with API keys encrypted.
+
+        Args:
+            agent_id: Agent identifier
+            config: LLM config dictionary with plain-text API keys
+                Expected format:
+                {
+                    "primary": {"provider": "openai", "api_key": "sk-...", "model": "gpt-4o"},
+                    "backup": {"provider": "groq", "api_key": "gsk_...", "model": "llama-3.1-70b"}
+                }
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
+
+        Returns:
+            True if successful, False if agent not found or encryption failed
+        """
+        from ciris_manager.crypto import get_token_encryption
+
+        with self._lock:
+            agent = self.get_agent(agent_id, occurrence_id, server_id)
+            if not agent:
+                logger.error(f"Agent {agent_id} not found for LLM config update")
+                return False
+
+            try:
+                encryption = get_token_encryption()
+                encrypted_config = config.copy()
+
+                # Encrypt primary API key
+                if "primary" in encrypted_config and encrypted_config["primary"].get("api_key"):
+                    primary = encrypted_config["primary"].copy()
+                    api_key = primary["api_key"]
+                    # Only encrypt if not already encrypted
+                    if not api_key.startswith("gAAAAA"):
+                        primary["api_key"] = encryption.encrypt_token(api_key)
+                    encrypted_config["primary"] = primary
+
+                # Encrypt backup API key if present
+                if (
+                    "backup" in encrypted_config
+                    and encrypted_config["backup"]
+                    and encrypted_config["backup"].get("api_key")
+                ):
+                    backup = encrypted_config["backup"].copy()
+                    api_key = backup["api_key"]
+                    # Only encrypt if not already encrypted
+                    if not api_key.startswith("gAAAAA"):
+                        backup["api_key"] = encryption.encrypt_token(api_key)
+                    encrypted_config["backup"] = backup
+
+                agent.llm_config = encrypted_config
+                self._save_metadata()
+                logger.info(f"Updated LLM config for agent {agent_id}")
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to encrypt LLM config for {agent_id}: {e}")
+                return False
+
+    def clear_llm_config(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Clear LLM configuration for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Occurrence ID (optional, for composite key lookup)
+            server_id: Server ID (optional, for composite key lookup)
+
+        Returns:
+            True if cleared, False if agent not found
+        """
+        with self._lock:
+            agent = self.get_agent(agent_id, occurrence_id, server_id)
+            if not agent:
+                logger.error(f"Agent {agent_id} not found for LLM config clear")
+                return False
+
+            agent.llm_config = None
+            self._save_metadata()
+            logger.info(f"Cleared LLM config for agent {agent_id}")
             return True

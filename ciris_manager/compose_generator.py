@@ -45,6 +45,7 @@ class ComposeGenerator:
         agent_occurrence_id: Optional[str] = None,
         oauth_callback_hostname: str = "agents.ciris.ai",
         adapter_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        llm_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Generate docker-compose configuration for an agent.
@@ -67,6 +68,12 @@ class ComposeGenerator:
             oauth_callback_hostname: Hostname for OAuth callbacks (default: agents.ciris.ai)
             adapter_configs: Adapter configurations from wizard (stored in registry).
                 Each adapter_type maps to a config dict with 'enabled', 'env_vars', etc.
+            llm_config: LLM provider configuration with decrypted API keys.
+                Expected format:
+                {
+                    "primary": {"provider": "openai", "api_key": "...", "model": "gpt-4o", "api_base": "..."},
+                    "backup": {"provider": "groq", "api_key": "...", "model": "...", "api_base": "..."}
+                }
 
         Returns:
             Docker compose configuration dict
@@ -153,6 +160,10 @@ class ComposeGenerator:
                             base_env[key] = str(value)
                             logger.debug(f"Applied env var from {adapter_type} config: {key}")
 
+        # Apply LLM configuration if provided
+        if llm_config:
+            self._apply_llm_config(base_env, llm_config)
+
         # Set the final adapter configuration
         base_env["CIRIS_ADAPTER"] = ",".join(channels)
         logger.info(f"Agent will be accessible via: {', '.join(channels)}")
@@ -225,6 +236,69 @@ class ComposeGenerator:
             volumes.append(f"{database_ssl_cert_path}:{database_ssl_cert_path}:ro")
 
         return volumes
+
+    def _apply_llm_config(
+        self, env: Dict[str, str], llm_config: Dict[str, Any]
+    ) -> None:
+        """
+        Apply LLM configuration to environment variables.
+
+        Maps LLM config to standard OpenAI-compatible environment variables:
+        - Primary: OPENAI_API_KEY, OPENAI_MODEL_NAME, OPENAI_API_BASE, LLM_PROVIDER
+        - Backup: CIRIS_OPENAI_API_KEY_2, CIRIS_OPENAI_MODEL_NAME_2, CIRIS_OPENAI_API_BASE_2
+
+        Args:
+            env: Environment dictionary to update (modified in place)
+            llm_config: LLM configuration with decrypted API keys
+        """
+        from ciris_manager.models.llm import PROVIDER_DEFAULTS
+
+        # Apply primary configuration
+        primary = llm_config.get("primary")
+        if primary:
+            provider = primary.get("provider", "openai")
+            api_key = primary.get("api_key")
+            model = primary.get("model")
+            api_base = primary.get("api_base")
+
+            # Set provider
+            env["LLM_PROVIDER"] = provider
+
+            # Set API key
+            if api_key:
+                env["OPENAI_API_KEY"] = api_key
+                logger.info(f"Applied LLM primary: provider={provider}, model={model}")
+
+            # Set model
+            if model:
+                env["OPENAI_MODEL_NAME"] = model
+
+            # Set API base (use default if not specified)
+            effective_base = api_base or PROVIDER_DEFAULTS.get(provider)
+            if effective_base:
+                env["OPENAI_API_BASE"] = effective_base
+
+        # Apply backup configuration
+        backup = llm_config.get("backup")
+        if backup:
+            provider = backup.get("provider", "openai")
+            api_key = backup.get("api_key")
+            model = backup.get("model")
+            api_base = backup.get("api_base")
+
+            # Set backup API key
+            if api_key:
+                env["CIRIS_OPENAI_API_KEY_2"] = api_key
+                logger.info(f"Applied LLM backup: provider={provider}, model={model}")
+
+            # Set backup model
+            if model:
+                env["CIRIS_OPENAI_MODEL_NAME_2"] = model
+
+            # Set backup API base (use default if not specified)
+            effective_base = api_base or PROVIDER_DEFAULTS.get(provider)
+            if effective_base:
+                env["CIRIS_OPENAI_API_BASE_2"] = effective_base
 
     def write_compose_file(self, compose_config: Dict[str, Any], compose_path: Path) -> None:
         """

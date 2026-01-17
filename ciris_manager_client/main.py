@@ -497,6 +497,85 @@ def setup_adapter_parser(subparsers):
     )
 
 
+def setup_llm_parser(subparsers):
+    """Set up LLM configuration command subparser."""
+    llm_parser = subparsers.add_parser(
+        "llm",
+        help="LLM configuration management",
+        description="Manage LLM provider configurations for CIRIS agents",
+    )
+    llm_subparsers = llm_parser.add_subparsers(dest="llm_command", help="LLM commands")
+
+    # Common arguments for multi-instance/multi-server support
+    def add_common_args(parser):
+        parser.add_argument("--server", dest="server_id", help="Server ID for multi-server")
+        parser.add_argument("--occurrence", dest="occurrence_id", help="Occurrence ID for multi-instance")
+
+    # llm get
+    get_parser = llm_subparsers.add_parser(
+        "get", help="Get LLM configuration for an agent"
+    )
+    get_parser.add_argument("agent_id", help="Agent ID")
+    add_common_args(get_parser)
+
+    # llm set
+    set_parser = llm_subparsers.add_parser(
+        "set", help="Set LLM configuration for an agent"
+    )
+    set_parser.add_argument("agent_id", help="Agent ID")
+    set_parser.add_argument(
+        "--provider", required=True,
+        choices=["openai", "together", "groq", "openrouter", "custom"],
+        help="Primary LLM provider"
+    )
+    set_parser.add_argument("--api-key", required=True, dest="api_key", help="Primary API key")
+    set_parser.add_argument("--model", required=True, help="Primary model identifier")
+    set_parser.add_argument("--api-base", dest="api_base", help="Primary custom API base URL")
+    set_parser.add_argument(
+        "--backup-provider", dest="backup_provider",
+        choices=["openai", "together", "groq", "openrouter", "custom"],
+        help="Backup LLM provider"
+    )
+    set_parser.add_argument("--backup-api-key", dest="backup_api_key", help="Backup API key")
+    set_parser.add_argument("--backup-model", dest="backup_model", help="Backup model identifier")
+    set_parser.add_argument("--backup-api-base", dest="backup_api_base", help="Backup custom API base URL")
+    set_parser.add_argument(
+        "--no-validate", action="store_true",
+        help="Skip API key validation before saving"
+    )
+    set_parser.add_argument(
+        "--no-restart", action="store_true",
+        help="Don't restart container after update"
+    )
+    add_common_args(set_parser)
+
+    # llm delete
+    delete_parser = llm_subparsers.add_parser(
+        "delete", help="Delete LLM configuration for an agent"
+    )
+    delete_parser.add_argument("agent_id", help="Agent ID")
+    delete_parser.add_argument(
+        "--no-restart", action="store_true",
+        help="Don't restart container after deletion"
+    )
+    add_common_args(delete_parser)
+
+    # llm validate
+    validate_parser = llm_subparsers.add_parser(
+        "validate", help="Validate LLM configuration without saving"
+    )
+    validate_parser.add_argument("agent_id", help="Agent ID (for auth context)")
+    validate_parser.add_argument(
+        "--provider", required=True,
+        choices=["openai", "together", "groq", "openrouter", "custom"],
+        help="LLM provider to validate"
+    )
+    validate_parser.add_argument("--api-key", required=True, dest="api_key", help="API key to validate")
+    validate_parser.add_argument("--model", required=True, help="Model identifier to check")
+    validate_parser.add_argument("--api-base", dest="api_base", help="Custom API base URL")
+    add_common_args(validate_parser)
+
+
 def setup_debug_parser(subparsers):
     """Set up debug command subparser."""
     debug_parser = subparsers.add_parser(
@@ -622,6 +701,7 @@ Token File:
     setup_deployment_parser(subparsers)
     setup_auth_parser(subparsers)
     setup_adapter_parser(subparsers)
+    setup_llm_parser(subparsers)
     setup_debug_parser(subparsers)
 
     return parser
@@ -728,6 +808,24 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
                 return cast(int, handler(ctx, args))
             else:
                 print(f"Error: Unknown adapter command: {args.adapter_command}", file=sys.stderr)
+                return EXIT_INVALID_ARGS
+
+        elif args.command == "llm":
+            from ciris_manager_client.commands.llm import LLMCommands
+
+            if not args.llm_command:
+                print("Error: No llm subcommand specified", file=sys.stderr)
+                print(
+                    "Available commands: get, set, delete, validate",
+                    file=sys.stderr,
+                )
+                return EXIT_INVALID_ARGS
+
+            handler = getattr(LLMCommands, args.llm_command.replace("-", "_"), None)
+            if handler:
+                return cast(int, handler(ctx, args))
+            else:
+                print(f"Error: Unknown llm command: {args.llm_command}", file=sys.stderr)
                 return EXIT_INVALID_ARGS
 
         elif args.command == "debug":

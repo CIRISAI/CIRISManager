@@ -30,6 +30,7 @@ from . import config
 from . import oauth
 from . import deployment
 from . import adapters
+from . import llm
 from . import gui
 from .jailbreaker import initialize_jailbreaker
 from .deployment_tokens_setup import setup_deployment_tokens
@@ -47,6 +48,7 @@ __all__ = [
     "oauth",
     "deployment",
     "adapters",
+    "llm",
     "gui",
 ]
 
@@ -89,6 +91,7 @@ def create_routes(manager: Any) -> APIRouter:
     router.include_router(oauth.router, prefix="", tags=["oauth"])
     router.include_router(deployment.router, prefix="", tags=["deployment"])
     router.include_router(adapters.router, prefix="", tags=["adapters"])
+    router.include_router(llm.router, prefix="", tags=["llm"])
     router.include_router(gui.router, prefix="", tags=["gui"])
 
     # Add debug routes for querying agent persistence

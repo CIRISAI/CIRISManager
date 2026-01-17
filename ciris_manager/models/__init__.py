@@ -78,6 +78,20 @@ from ciris_manager.models.system import (  # noqa: E402
     SystemMetrics,
     StatusResponse,
 )
+from ciris_manager.models.llm import (  # noqa: E402
+    LLMProvider,
+    LLMProviderConfig,
+    LLMConfig,
+    LLMConfigResponse,
+    LLMProviderConfigRedacted,
+    LLMConfigUpdate,
+    LLMValidateRequest,
+    LLMValidateResponse,
+    PROVIDER_DEFAULTS,
+    redact_api_key,
+    redact_provider_config,
+    redact_llm_config,
+)
 
 __all__ = [
     # Legacy models from models.py (backward compatibility)
@@ -133,4 +147,17 @@ __all__ = [
     "DeploymentTokenInfo",
     "SystemMetrics",
     "StatusResponse",
+    # LLM models
+    "LLMProvider",
+    "LLMProviderConfig",
+    "LLMConfig",
+    "LLMConfigResponse",
+    "LLMProviderConfigRedacted",
+    "LLMConfigUpdate",
+    "LLMValidateRequest",
+    "LLMValidateResponse",
+    "PROVIDER_DEFAULTS",
+    "redact_api_key",
+    "redact_provider_config",
+    "redact_llm_config",
 ]

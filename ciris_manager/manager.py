@@ -671,10 +671,17 @@ class CIRISManager:
         # Get adapter configs from registry
         adapter_configs = agent.adapter_configs or {}
 
+        # Get LLM config from registry (decrypted)
+        llm_config = self.agent_registry.get_llm_config(
+            agent.agent_id,
+            occurrence_id=agent.occurrence_id,
+            server_id=agent.server_id,
+        )
+
         # Check if discord was originally enabled (before adapter_configs)
         enable_discord = "discord" in current_env.get("CIRIS_ADAPTER", "").split(",")
 
-        # Regenerate compose with adapter_configs
+        # Regenerate compose with adapter_configs and llm_config
         agent_dir = compose_path.parent
         new_compose = self.compose_generator.generate_compose(
             agent_id=agent_id,
@@ -692,6 +699,7 @@ class CIRISManager:
             agent_occurrence_id=current_env.get("AGENT_OCCURRENCE_ID"),
             oauth_callback_hostname=server_config.hostname,
             adapter_configs=adapter_configs,
+            llm_config=llm_config,
         )
 
         # Write updated compose file
