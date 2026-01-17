@@ -78,27 +78,35 @@ async def get_mock_user() -> Dict[str, str]:
     return {"id": "dev-user", "email": "dev@ciris.local", "name": "Development User"}
 
 
-async def get_current_user_or_mock() -> Dict[str, str]:
+def _get_auth_dependency_runtime(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> Dict[str, str]:
     """
-    Get current user, using mock in development mode.
+    Runtime auth dependency that checks CIRIS_AUTH_MODE at call time.
 
-    Checks auth mode at call time to support test fixtures.
+    This allows test fixtures to set the mode after import.
     """
     auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
     if auth_mode == "development":
-        return await get_mock_user()
-    return await get_current_user()
+        # Return mock user synchronously for dev mode
+        return {"id": "dev-user", "email": "dev@ciris.local", "name": "Development User"}
+
+    # For production, delegate to the real auth
+    from ..auth_routes import get_auth_service
+
+    auth_service = get_auth_service()
+    return auth_service.get_current_user(request, authorization)  # type: ignore[no-any-return]
 
 
 def get_auth_dependency():
     """
-    Get the appropriate authentication dependency based on auth mode.
+    Get the auth dependency that evaluates mode at runtime.
 
     Returns:
-        Depends() for auth dependency
+        Depends() wrapper for runtime auth check
     """
-    # Use dynamic check that evaluates at call time
-    return Depends(get_current_user_or_mock)
+    return Depends(_get_auth_dependency_runtime)
 
 
 # Create a reusable auth dependency

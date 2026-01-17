@@ -401,7 +401,7 @@ async def preview_deployment(
     Designed for scale - efficiently checks all agents.
     """
     preview = await deployment_orchestrator.get_deployment_preview(deployment_id)
-    return preview
+    return preview  # type: ignore[no-any-return]
 
 
 @router.get("/updates/shutdown-reasons/{deployment_id}")
@@ -411,7 +411,7 @@ async def get_shutdown_reasons(
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
     """Get the shutdown reasons that will be sent to each agent."""
-    return await deployment_orchestrator.get_shutdown_reasons_preview(deployment_id)
+    return await deployment_orchestrator.get_shutdown_reasons_preview(deployment_id)  # type: ignore[no-any-return]
 
 
 @router.post("/updates/launch")
@@ -617,7 +617,7 @@ async def get_current_images(
 ) -> Dict[str, Any]:
     """Get current running container images."""
     images = await deployment_orchestrator.get_current_images()
-    return images
+    return images  # type: ignore[no-any-return]
 
 
 @router.get("/updates/history")
@@ -680,7 +680,7 @@ async def get_rollback_versions(
     versions = await deployment_orchestrator.get_rollback_versions(deployment_id)
     if not versions:
         raise HTTPException(status_code=404, detail="Deployment not found or no versions available")
-    return versions
+    return versions  # type: ignore[no-any-return]
 
 
 @router.get("/updates/rollback-proposals")
