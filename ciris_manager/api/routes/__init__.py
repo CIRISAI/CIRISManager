@@ -30,6 +30,7 @@ from . import agents
 from . import config
 from . import oauth
 from . import deployment
+from . import adapters
 
 __all__ = [
     "create_routes",
@@ -41,6 +42,7 @@ __all__ = [
     "config",
     "oauth",
     "deployment",
+    "adapters",
 ]
 
 
@@ -62,9 +64,6 @@ def create_routes(manager: Any) -> APIRouter:
     # Include modular routes that have been extracted
     # These use Depends(get_manager) to access manager via app.state
     router.include_router(deployment.router, prefix="", tags=["deployment"])
+    router.include_router(adapters.router, prefix="", tags=["adapters"])
 
     return router
-
-
-# More modules to come:
-# from . import adapters
