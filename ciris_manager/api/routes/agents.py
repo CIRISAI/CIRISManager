@@ -14,7 +14,7 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
-from ciris_manager.models import AgentInfo, CreateAgentRequest
+from ciris_manager.models import CreateAgentRequest
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id
 
 from ..rate_limit import create_limit

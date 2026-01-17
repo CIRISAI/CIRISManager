@@ -19,7 +19,16 @@ from ciris_manager.api.routes_v1 import create_routes
 # Re-export items that tests patch for backward compatibility
 from ciris_manager.deployment import DeploymentOrchestrator
 
-__all__ = ["create_routes", "DeploymentOrchestrator"]
+__all__ = [
+    "create_routes",
+    "DeploymentOrchestrator",
+    "system",
+    "templates",
+    "infrastructure",
+    "agents",
+    "config",
+    "oauth",
+]
 
 # Modular route modules (imported as they are created)
 from . import system
