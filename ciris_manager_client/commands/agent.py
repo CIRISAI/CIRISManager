@@ -66,9 +66,9 @@ class AgentCommands:
                 "agent_name",
                 "status",
                 "health",
-                "api_port",
+                "cognitive_state",
                 "version",
-                "template",
+                "server_id",
             ]
 
             # Format and print output
