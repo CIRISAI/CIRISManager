@@ -147,12 +147,8 @@ class AuthManager:
         device_data = self.request_device_code()
 
         print("\n" + "=" * 60)
-        print(f"🌐 Please visit: {device_data['verification_uri']}")
-        print(f"📝 Enter code: {device_data['user_code']}")
+        print(f"🌐 Please visit: {device_data['verification_uri_complete']}")
         print("=" * 60 + "\n")
-
-        # Debug: show device code (first 10 chars)
-        print(f"[DEBUG] Device code: {device_data['device_code'][:10]}...")
 
         print("⏳ Waiting for authorization", end="", flush=True)
 
