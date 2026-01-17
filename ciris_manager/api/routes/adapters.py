@@ -17,9 +17,7 @@ from .dependencies import get_manager, auth_dependency
 router = APIRouter(tags=["adapters"])
 
 
-async def _get_agent_client_info(
-    manager: Any, agent_id: str
-) -> tuple[str, Dict[str, str], Any]:
+async def _get_agent_client_info(manager: Any, agent_id: str) -> tuple[str, Dict[str, str], Any]:
     """
     Get the base URL and auth headers for an agent.
 
