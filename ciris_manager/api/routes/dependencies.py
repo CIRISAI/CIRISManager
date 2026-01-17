@@ -14,8 +14,6 @@ from typing import Any, Dict, Optional
 
 from fastapi import Depends, Header, HTTPException, Request
 
-from ..auth import get_current_user_dependency as get_current_user
-
 logger = logging.getLogger(__name__)
 
 
