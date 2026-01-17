@@ -5,17 +5,16 @@ Provides endpoints for agent creation, discovery, and management.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Header, Response, Request
-from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List, Union
 import asyncio
 import httpx
-import json
 import logging
 import os  # noqa: F401 - used in jailbreaker section
 import aiofiles  # type: ignore
 from .auth import get_current_user_dependency as get_current_user
-from ciris_manager.models import AgentInfo, UpdateNotification, DeploymentStatus, CreateAgentRequest
+from ciris_manager.models import AgentInfo, CreateAgentRequest
 from ciris_manager.deployment import DeploymentOrchestrator
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id
 from .rate_limit import create_limit
