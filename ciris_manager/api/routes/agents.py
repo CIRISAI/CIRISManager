@@ -273,9 +273,7 @@ async def create_agent(
                 async with aiofiles.open(template_file, "r") as f:
                     content = await f.read()
                     template_data = yaml.safe_load(content)
-                stewardship_tier = template_data.get("stewardship", {}).get(
-                    "stewardship_tier", 1
-                )
+                stewardship_tier = template_data.get("stewardship", {}).get("stewardship_tier", 1)
 
                 if stewardship_tier >= 4:
                     if not agent_request.wa_review_completed:
@@ -349,9 +347,7 @@ async def delete_agent(
             )
             discovered_agents = discovery.discover_agents()
 
-            discovered_agent = next(
-                (a for a in discovered_agents if a.agent_id == agent_id), None
-            )
+            discovered_agent = next((a for a in discovered_agents if a.agent_id == agent_id), None)
             if discovered_agent:
                 raise HTTPException(
                     status_code=400,
@@ -477,9 +473,7 @@ async def get_agent_log_file(
         except HTTPException:
             raise
         except Exception as e:
-            logger.warning(
-                f"Failed to get log file {filename} for container {container_name}: {e}"
-            )
+            logger.warning(f"Failed to get log file {filename} for container {container_name}: {e}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Container {container_name} not found or log file unavailable: {e}",
@@ -852,9 +846,7 @@ async def restart_agent(
                 )
         except docker.errors.APIError as e:
             logger.error(f"Docker API error restarting {agent_id}: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to restart container: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Failed to restart container: {str(e)}")
 
     except HTTPException:
         raise
@@ -877,9 +869,7 @@ async def set_agent_maintenance(
         do_not_autostart = request.get("do_not_autostart", False)
 
         if not isinstance(do_not_autostart, bool):
-            raise HTTPException(
-                status_code=400, detail="do_not_autostart must be a boolean value"
-            )
+            raise HTTPException(status_code=400, detail="do_not_autostart must be a boolean value")
 
         _ = resolve_agent(manager, agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
