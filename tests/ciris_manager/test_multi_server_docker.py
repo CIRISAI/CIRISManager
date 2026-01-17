@@ -254,6 +254,7 @@ class TestCircuitBreaker:
     def clear_circuit_breaker(self):
         """Clear circuit breaker state before and after each test."""
         from ciris_manager.multi_server_docker import _server_failures
+
         _server_failures.clear()
         yield
         _server_failures.clear()
@@ -283,7 +284,7 @@ class TestCircuitBreaker:
         """Test marking a server as failed triggers circuit breaker."""
         client = MultiServerDockerClient([remote_server_config])
         client.mark_server_failed("scout", "Connection refused")
-        
+
         available, error = client.is_server_available("scout")
         assert available is False
         assert "Connection refused" in error
@@ -293,7 +294,7 @@ class TestCircuitBreaker:
         client = MultiServerDockerClient([remote_server_config])
         client.mark_server_failed("scout", "Connection refused")
         client.mark_server_healthy("scout")
-        
+
         available, error = client.is_server_available("scout")
         assert available is True
         assert error is None
@@ -306,28 +307,28 @@ class TestCircuitBreaker:
         """Test get_client raises ConnectionError when circuit breaker is open."""
         client = MultiServerDockerClient([remote_server_config])
         client.mark_server_failed("scout", "Connection refused")
-        
+
         with pytest.raises(ConnectionError) as exc_info:
             client.get_client("scout")
-        
+
         assert "circuit breaker" in str(exc_info.value).lower()
 
     @patch("ciris_manager.multi_server_docker.time.time")
     def test_circuit_breaker_timeout_resets(self, mock_time, remote_server_config):
         """Test circuit breaker resets after timeout."""
         from ciris_manager.multi_server_docker import CIRCUIT_BREAKER_TIMEOUT
-        
+
         client = MultiServerDockerClient([remote_server_config])
-        
+
         # Mark failed at time 0
         mock_time.return_value = 0
         client.mark_server_failed("scout", "Connection refused")
-        
+
         # Still in cooldown at time 30
         mock_time.return_value = 30
         available, _ = client.is_server_available("scout")
         assert available is False
-        
+
         # Reset after timeout
         mock_time.return_value = CIRCUIT_BREAKER_TIMEOUT + 1
         available, _ = client.is_server_available("scout")

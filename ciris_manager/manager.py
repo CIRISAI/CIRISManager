@@ -450,6 +450,7 @@ class CIRISManager:
             database_ssl_cert_path=database_ssl_cert_path,
             agent_occurrence_id=agent_occurrence_id,
             oauth_callback_hostname=server_config.hostname,
+            oauth_allowed_domains=[server_config.hostname],  # Default to server hostname
         )
 
         # Write compose file
@@ -683,6 +684,8 @@ class CIRISManager:
 
         # Regenerate compose with adapter_configs and llm_config
         agent_dir = compose_path.parent
+        # Use agent's oauth_allowed_domains or fall back to server hostname
+        oauth_allowed_domains = agent.oauth_allowed_domains or [server_config.hostname]
         new_compose = self.compose_generator.generate_compose(
             agent_id=agent_id,
             agent_name=agent.name,
@@ -698,6 +701,7 @@ class CIRISManager:
             database_ssl_cert_path=current_env.get("PGSSLROOTCERT"),
             agent_occurrence_id=current_env.get("AGENT_OCCURRENCE_ID"),
             oauth_callback_hostname=server_config.hostname,
+            oauth_allowed_domains=oauth_allowed_domains,
             adapter_configs=adapter_configs,
             llm_config=llm_config,
         )

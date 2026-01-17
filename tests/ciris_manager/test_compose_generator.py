@@ -434,7 +434,7 @@ class TestComposeGenerator:
         adapters = env["CIRIS_ADAPTER"].split(",")
         assert "api" in adapters
         assert "discord" in adapters  # From enable_discord flag
-        assert "reddit" in adapters   # From adapter_configs
+        assert "reddit" in adapters  # From adapter_configs
 
         # Check env vars
         assert env["DISCORD_BOT_TOKEN"] == "test_discord_token"
@@ -478,3 +478,68 @@ class TestComposeGenerator:
         assert "HOME_ASSISTANT_URL" not in env
         # env vars for enabled adapter should be applied
         assert env["REDDIT_CLIENT_ID"] == "my_id"
+
+    def test_generate_compose_oauth_allowed_domains_default(self, generator, temp_agent_dir):
+        """Test that OAUTH_ALLOWED_REDIRECT_DOMAINS defaults to callback hostname."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            oauth_callback_hostname="scoutapilb.ciris.ai",
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        # Should default to the oauth_callback_hostname
+        assert env["OAUTH_ALLOWED_REDIRECT_DOMAINS"] == "scoutapilb.ciris.ai"
+
+    def test_generate_compose_oauth_allowed_domains_explicit(self, generator, temp_agent_dir):
+        """Test OAUTH_ALLOWED_REDIRECT_DOMAINS with explicit list of domains."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            oauth_callback_hostname="agents.ciris.ai",
+            oauth_allowed_domains=["agents.ciris.ai", "scoutapilb.ciris.ai", "localhost"],
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        # Should use the explicit list, comma-separated
+        assert (
+            env["OAUTH_ALLOWED_REDIRECT_DOMAINS"] == "agents.ciris.ai,scoutapilb.ciris.ai,localhost"
+        )
+
+    def test_generate_compose_oauth_allowed_domains_single(self, generator, temp_agent_dir):
+        """Test OAUTH_ALLOWED_REDIRECT_DOMAINS with a single explicit domain."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            oauth_allowed_domains=["custom.domain.com"],
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        assert env["OAUTH_ALLOWED_REDIRECT_DOMAINS"] == "custom.domain.com"
+
+    def test_generate_compose_oauth_allowed_domains_with_default_hostname(
+        self, generator, temp_agent_dir
+    ):
+        """Test OAUTH_ALLOWED_REDIRECT_DOMAINS uses default agents.ciris.ai when neither specified."""
+        compose = generator.generate_compose(
+            agent_id="agent-scout",
+            agent_name="Scout",
+            port=8081,
+            template="scout",
+            agent_dir=temp_agent_dir,
+            # Neither oauth_callback_hostname nor oauth_allowed_domains specified
+        )
+
+        env = compose["services"]["agent-scout"]["environment"]
+        # Should use default callback hostname (agents.ciris.ai)
+        assert env["OAUTH_CALLBACK_BASE_URL"] == "https://agents.ciris.ai"
+        assert env["OAUTH_ALLOWED_REDIRECT_DOMAINS"] == "agents.ciris.ai"

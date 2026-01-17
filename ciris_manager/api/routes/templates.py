@@ -162,6 +162,7 @@ async def get_default_env(
         "WA_USER_IDS=",
         # OAuth
         "OAUTH_CALLBACK_BASE_URL=https://agents.ciris.ai",
+        "OAUTH_ALLOWED_REDIRECT_DOMAINS=agents.ciris.ai",
     ]
 
     return {"content": "\n".join(env_vars)}

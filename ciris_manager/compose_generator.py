@@ -8,7 +8,7 @@ import yaml
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,7 @@ class ComposeGenerator:
         database_ssl_cert_path: Optional[str] = None,
         agent_occurrence_id: Optional[str] = None,
         oauth_callback_hostname: str = "agents.ciris.ai",
+        oauth_allowed_domains: Optional[List[str]] = None,
         adapter_configs: Optional[Dict[str, Dict[str, Any]]] = None,
         llm_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
@@ -66,6 +67,8 @@ class ComposeGenerator:
             database_ssl_cert_path: Path to SSL certificate for database connection
             agent_occurrence_id: Unique occurrence ID for database isolation
             oauth_callback_hostname: Hostname for OAuth callbacks (default: agents.ciris.ai)
+            oauth_allowed_domains: List of allowed domains for OAuth redirects.
+                Defaults to [oauth_callback_hostname] if not provided.
             adapter_configs: Adapter configurations from wizard (stored in registry).
                 Each adapter_type maps to a config dict with 'enabled', 'env_vars', etc.
             llm_config: LLM provider configuration with decrypted API keys.
@@ -79,6 +82,10 @@ class ComposeGenerator:
             Docker compose configuration dict
         """
         # Base environment
+        # Derive allowed domains from callback hostname if not explicitly provided
+        effective_allowed_domains = (
+            oauth_allowed_domains if oauth_allowed_domains else [oauth_callback_hostname]
+        )
         base_env = {
             "CIRIS_AGENT_ID": agent_id,
             "CIRIS_MANAGED": "true",
@@ -87,6 +94,8 @@ class ComposeGenerator:
             "CIRIS_API_PORT": "8080",
             # OAuth configuration for agent authentication - use server hostname
             "OAUTH_CALLBACK_BASE_URL": f"https://{oauth_callback_hostname}",
+            # Allowed domains for OAuth redirect validation (comma-separated)
+            "OAUTH_ALLOWED_REDIRECT_DOMAINS": ",".join(effective_allowed_domains),
         }
 
         if use_mock_llm:

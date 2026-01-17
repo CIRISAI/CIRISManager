@@ -1089,9 +1089,9 @@ class TestCIRISManager:
             all_server_ids = set()
             for server_agents in grouped_agents.values():
                 for agent in server_agents:
-                    assert (
-                        agent.server_id not in all_server_ids
-                    ), f"Agent with server_id={agent.server_id} appears on multiple servers!"
+                    assert agent.server_id not in all_server_ids, (
+                        f"Agent with server_id={agent.server_id} appears on multiple servers!"
+                    )
                     all_server_ids.add(agent.server_id)
 
             assert len(all_server_ids) == 3  # Each agent on exactly one server
@@ -1273,9 +1273,10 @@ class TestRegenerateAgentCompose:
                         "CIRIS_TEMPLATE": "scout",
                     }
                 }
-            }
+            },
         }
         import yaml
+
         with open(compose_path, "w") as f:
             yaml.dump(initial_compose, f)
 
@@ -1340,9 +1341,10 @@ class TestRegenerateAgentCompose:
                         "DISCORD_BOT_TOKEN": "original_token",
                     }
                 }
-            }
+            },
         }
         import yaml
+
         with open(compose_path, "w") as f:
             yaml.dump(initial_compose, f)
 

@@ -777,8 +777,8 @@ class TestAgentRegistryCompositeKeys:
 
         # Should have loaded composite key data
         agent = registry2.get_agent("scout-abc123", occurrence_id="scout_lb_1", server_id="main")
-        assert (
-            agent is not None
-        ), f"Agent not found. Registry has {len(registry2.agents)} agents: {list(registry2.agents.keys())}"
+        assert agent is not None, (
+            f"Agent not found. Registry has {len(registry2.agents)} agents: {list(registry2.agents.keys())}"
+        )
         assert agent.occurrence_id == "scout_lb_1"
         assert agent.port == 8080

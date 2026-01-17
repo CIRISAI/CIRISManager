@@ -133,7 +133,7 @@ def _create_mock_container(agent_info, current_image="ghcr.io/cirisai/ciris-agen
     # Mock image with tags
     mock_image = Mock()
     mock_image.tags = [current_image]
-    mock_image.id = f"sha256:{'a'*64}"
+    mock_image.id = f"sha256:{'a' * 64}"
     mock_container.image = mock_image
 
     # Mock attrs for environment variables

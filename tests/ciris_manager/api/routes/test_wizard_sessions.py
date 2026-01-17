@@ -4,13 +4,11 @@ Tests for wizard session management.
 
 import pytest
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch
 
 from ciris_manager.api.routes.wizard_sessions import (
     WizardSession,
     WizardSessionManager,
     get_wizard_session_manager,
-    SESSION_TTL_SECONDS,
 )
 
 

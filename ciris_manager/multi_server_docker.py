@@ -127,7 +127,7 @@ class MultiServerDockerClient:
 
             if not all([server.tls_ca, server.tls_cert, server.tls_key]):
                 raise ValueError(
-                    f"Server '{server_id}' requires TLS certificates " "(tls_ca, tls_cert, tls_key)"
+                    f"Server '{server_id}' requires TLS certificates (tls_ca, tls_cert, tls_key)"
                 )
 
             logger.debug(f"Creating remote Docker client for {server_id} at {server.docker_host}")

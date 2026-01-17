@@ -37,6 +37,7 @@ class RegisteredAgent:
         occurrence_id: Optional[str] = None,
         adapter_configs: Optional[Dict[str, Dict[str, Any]]] = None,
         llm_config: Optional[Dict[str, Any]] = None,
+        oauth_allowed_domains: Optional[List[str]] = None,
     ):
         self.agent_id = agent_id
         self.name = name
@@ -59,6 +60,9 @@ class RegisteredAgent:
         self.occurrence_id = occurrence_id  # For multi-instance deployments on same database
         self.adapter_configs = adapter_configs or {}  # Adapter configurations from wizard
         self.llm_config = llm_config  # Encrypted LLM provider configuration
+        self.oauth_allowed_domains = (
+            oauth_allowed_domains or []
+        )  # Allowed domains for OAuth redirects
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -79,6 +83,7 @@ class RegisteredAgent:
             "server_id": self.server_id,
             "adapter_configs": self.adapter_configs,
             "llm_config": self.llm_config,
+            "oauth_allowed_domains": self.oauth_allowed_domains,
         }
         # Include occurrence_id if set
         if self.occurrence_id:
@@ -114,6 +119,7 @@ class RegisteredAgent:
             occurrence_id=data.get("occurrence_id"),  # For multi-instance deployments
             adapter_configs=data.get("adapter_configs", {}),  # Adapter configurations
             llm_config=data.get("llm_config"),  # LLM provider configuration
+            oauth_allowed_domains=data.get("oauth_allowed_domains", []),  # OAuth redirect domains
         )
 
 

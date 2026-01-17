@@ -582,7 +582,7 @@ http {
         # When using Cloudflare (use_ssl=False), generate HTTP-only config
         # Cloudflare terminates SSL and forwards HTTP to origin
         if self.use_ssl:
-            server = f"""    # === {'MAIN' if is_main else 'AGENT'} SERVER ({self.hostname}) ===
+            server = f"""    # === {"MAIN" if is_main else "AGENT"} SERVER ({self.hostname}) ===
     # Redirect HTTP to HTTPS (with health check exception)
     server {{
         listen 80;
@@ -621,7 +621,7 @@ http {
 """
         else:
             # HTTP-only config for Cloudflare SSL termination
-            server = f"""    # === {'MAIN' if is_main else 'AGENT'} SERVER ({self.hostname}) ===
+            server = f"""    # === {"MAIN" if is_main else "AGENT"} SERVER ({self.hostname}) ===
     # HTTP Server (Cloudflare handles SSL termination)
     server {{
         listen 80;
@@ -990,7 +990,7 @@ http {
                         end = min(len(lines), line_num + 2)
                         for i in range(start, end):
                             prefix = ">>>" if i == line_num - 1 else "   "
-                            logger.error(f"[Remote Deploy]   {prefix} {i+1:4d}: {lines[i]}")
+                            logger.error(f"[Remote Deploy]   {prefix} {i + 1:4d}: {lines[i]}")
 
                 # Clean up temp file
                 logger.debug(f"[Remote Deploy] Cleaning up {temp_path}")

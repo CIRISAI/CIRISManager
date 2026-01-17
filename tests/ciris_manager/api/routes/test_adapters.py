@@ -6,14 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timezone
-import httpx
 
 from ciris_manager.api.routes import create_routes
-from ciris_manager.api.routes.wizard_sessions import (
-    WizardSessionManager,
-    get_wizard_session_manager,
-)
 
 
 class TestAdapterRoutes:
@@ -49,11 +43,13 @@ class TestAdapterRoutes:
         manager.docker_client.get_server_config = Mock(return_value=server_config)
 
         # Mock regenerate_agent_compose
-        manager.regenerate_agent_compose = AsyncMock(return_value={
-            "agent_id": "test-agent",
-            "compose_file": "/path/to/compose.yml",
-            "adapter_configs_applied": ["discord"],
-        })
+        manager.regenerate_agent_compose = AsyncMock(
+            return_value={
+                "agent_id": "test-agent",
+                "compose_file": "/path/to/compose.yml",
+                "adapter_configs_applied": ["discord"],
+            }
+        )
 
         return manager
 
@@ -70,20 +66,24 @@ class TestAdapterRoutes:
     @pytest.fixture
     def mock_auth(self):
         """Mock authentication dependency."""
+
         def override_get_current_user():
             return {"id": "test-user-id", "email": "test@example.com", "name": "Test User"}
+
         return override_get_current_user
 
     @pytest.fixture
     def client(self, mock_manager, mock_auth):
         """Create test client with auth mocked."""
         import os
+
         os.environ["CIRIS_AUTH_MODE"] = "development"
 
         app = FastAPI()
         app.state.manager = mock_manager
 
         from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+
         app.dependency_overrides[get_current_user] = mock_auth
 
         router = create_routes(mock_manager)
@@ -97,7 +97,6 @@ class TestAdapterConfigMasking:
     def test_mask_sensitive_function(self):
         """Test the sensitive data masking used in config responses."""
         # Import the mask function used in the endpoint
-        from ciris_manager.api.routes.adapters import get_adapter_configs
         from typing import Dict, Any
 
         # Test the masking logic directly
@@ -144,6 +143,7 @@ class TestAdapterConfigMasking:
 
     def test_mask_sensitive_deeply_nested(self):
         """Test masking in deeply nested structures."""
+
         def mask_sensitive(d):
             sensitive_keys = {"password", "secret", "token", "api_key", "client_secret"}
             masked = {}
@@ -198,6 +198,7 @@ class TestWizardSessionEndpoints:
     def mock_auth(self):
         def override():
             return {"id": "test-user", "email": "test@test.com", "name": "Test"}
+
         return override
 
     @pytest.fixture
@@ -212,12 +213,14 @@ class TestWizardSessionEndpoints:
     @pytest.fixture
     def client(self, mock_manager, mock_auth):
         import os
+
         os.environ["CIRIS_AUTH_MODE"] = "development"
 
         app = FastAPI()
         app.state.manager = mock_manager
 
         from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+
         app.dependency_overrides[get_current_user] = mock_auth
 
         router = create_routes(mock_manager)
@@ -242,7 +245,9 @@ class TestWizardSessionEndpoints:
             mock_discovery.return_value.discover_agents.return_value = [mock_agent]
 
             with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth_fn:
-                mock_auth_fn.return_value.get_auth_headers.return_value = {"Authorization": "Bearer test"}
+                mock_auth_fn.return_value.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test"
+                }
 
                 with patch("httpx.AsyncClient") as mock_httpx:
                     mock_response = Mock()
@@ -282,7 +287,9 @@ class TestWizardSessionEndpoints:
             mock_discovery.return_value.discover_agents.return_value = [mock_agent]
 
             with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth_fn:
-                mock_auth_fn.return_value.get_auth_headers.return_value = {"Authorization": "Bearer test"}
+                mock_auth_fn.return_value.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test"
+                }
 
                 with patch("httpx.AsyncClient") as mock_httpx:
                     mock_response = Mock()
@@ -329,6 +336,7 @@ class TestRemoveAdapterConfig:
     def mock_auth(self):
         def override():
             return {"id": "test-user", "email": "test@test.com", "name": "Test"}
+
         return override
 
     @pytest.fixture
@@ -342,12 +350,14 @@ class TestRemoveAdapterConfig:
 
     def test_remove_config_success(self, mock_manager, mock_auth, mock_agent):
         import os
+
         os.environ["CIRIS_AUTH_MODE"] = "development"
 
         app = FastAPI()
         app.state.manager = mock_manager
 
         from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+
         app.dependency_overrides[get_current_user] = mock_auth
 
         router = create_routes(mock_manager)
@@ -358,7 +368,9 @@ class TestRemoveAdapterConfig:
             mock_discovery.return_value.discover_agents.return_value = [mock_agent]
 
             with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth_fn:
-                mock_auth_fn.return_value.get_auth_headers.return_value = {"Authorization": "Bearer test"}
+                mock_auth_fn.return_value.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test"
+                }
 
                 with patch("httpx.AsyncClient") as mock_httpx:
                     mock_response = Mock()
@@ -371,7 +383,9 @@ class TestRemoveAdapterConfig:
                     mock_client.delete = AsyncMock(return_value=mock_response)
                     mock_httpx.return_value = mock_client
 
-                    response = client.delete("/manager/v1/agents/test-agent/adapters/discord/config")
+                    response = client.delete(
+                        "/manager/v1/agents/test-agent/adapters/discord/config"
+                    )
 
                     assert response.status_code == 200
                     data = response.json()
@@ -379,6 +393,7 @@ class TestRemoveAdapterConfig:
 
     def test_remove_config_not_found(self, mock_manager, mock_auth, mock_agent):
         import os
+
         os.environ["CIRIS_AUTH_MODE"] = "development"
 
         # Set remove_adapter_config to return False (not found)
@@ -388,6 +403,7 @@ class TestRemoveAdapterConfig:
         app.state.manager = mock_manager
 
         from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+
         app.dependency_overrides[get_current_user] = mock_auth
 
         router = create_routes(mock_manager)
@@ -398,9 +414,13 @@ class TestRemoveAdapterConfig:
             mock_discovery.return_value.discover_agents.return_value = [mock_agent]
 
             with patch("ciris_manager.agent_auth.get_agent_auth") as mock_auth_fn:
-                mock_auth_fn.return_value.get_auth_headers.return_value = {"Authorization": "Bearer test"}
+                mock_auth_fn.return_value.get_auth_headers.return_value = {
+                    "Authorization": "Bearer test"
+                }
 
-                response = client.delete("/manager/v1/agents/test-agent/adapters/nonexistent/config")
+                response = client.delete(
+                    "/manager/v1/agents/test-agent/adapters/nonexistent/config"
+                )
 
                 assert response.status_code == 404
                 assert "No configuration found" in response.json()["detail"]
