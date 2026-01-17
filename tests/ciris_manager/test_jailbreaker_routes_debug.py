@@ -5,6 +5,7 @@ Unit tests for debugging jailbreaker initialization in create_routes.
 import pytest
 import os
 from unittest.mock import Mock, patch
+from fastapi import APIRouter
 from ciris_manager.api.routes import create_routes
 
 
@@ -71,7 +72,7 @@ class TestJailbreakerRouteDebug:
             mock_config.from_env.return_value = Mock(target_agent_id="test-agent")
             mock_service_instance = Mock()
             mock_service.return_value = mock_service_instance
-            mock_routes.return_value = Mock()
+            mock_routes.return_value = APIRouter()  # Return real APIRouter
 
             # Execute create_routes
             router = create_routes(mock_manager)
@@ -123,7 +124,7 @@ class TestJailbreakerRouteDebug:
             mock_config.from_env.return_value = Mock(target_agent_id="echo-nemesis-v2tyey")
             mock_service_instance = Mock()
             mock_service.return_value = mock_service_instance
-            mock_routes.return_value = Mock()
+            mock_routes.return_value = APIRouter()  # Return real APIRouter
 
             router = create_routes(mock_manager)
 
@@ -170,9 +171,9 @@ class TestJailbreakerRouteDebug:
                 patch("ciris_manager.jailbreaker.JailbreakerService") as mock_service,
                 patch("ciris_manager.jailbreaker.create_jailbreaker_routes") as mock_routes,
             ):
-                mock_config.from_env.return_value = Mock()
+                mock_config.from_env.return_value = Mock(target_agent_id="test-agent")
                 mock_service.return_value = Mock()
-                mock_routes.return_value = Mock()
+                mock_routes.return_value = APIRouter()  # Return real APIRouter
 
                 router = create_routes(mock_manager)
 

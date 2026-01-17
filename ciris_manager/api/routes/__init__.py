@@ -10,19 +10,18 @@ This package contains route modules organized by domain:
 - system: Health, status endpoints
 - infrastructure: Ports, tokens
 - gui: Manager UI serving
+- jailbreaker: Discord OAuth and token rotation
 """
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter
 
-# Import the base create_routes from routes_v1 (still has most routes)
-from ciris_manager.api.routes_v1 import create_routes as _create_routes_v1
-
 # Re-export items that tests patch for backward compatibility
 from ciris_manager.deployment import DeploymentOrchestrator
 
-# Modular route modules (imported as they are created)
+# Modular route modules
 from . import system
 from . import templates
 from . import infrastructure
@@ -31,6 +30,11 @@ from . import config
 from . import oauth
 from . import deployment
 from . import adapters
+from . import gui
+from .jailbreaker import initialize_jailbreaker
+from .deployment_tokens_setup import setup_deployment_tokens
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "create_routes",
@@ -43,6 +47,7 @@ __all__ = [
     "oauth",
     "deployment",
     "adapters",
+    "gui",
 ]
 
 
@@ -50,7 +55,7 @@ def create_routes(manager: Any) -> APIRouter:
     """
     Create API routes with manager instance.
 
-    Assembles routes from both routes_v1 (legacy) and modular route files.
+    Assembles all modular route files and initializes services.
 
     Args:
         manager: CIRISManager instance
@@ -58,8 +63,21 @@ def create_routes(manager: Any) -> APIRouter:
     Returns:
         Configured APIRouter with all routes
     """
-    # Get base router from routes_v1 (GUI and jailbreaker routes remain there)
-    router = _create_routes_v1(manager)
+    import time
+
+    start_time = time.time()
+    logger.info("create_routes() starting...")
+    router = APIRouter()
+
+    # Initialize deployment orchestrator
+    logger.info(f"[{time.time() - start_time:.2f}s] Creating DeploymentOrchestrator...")
+    deployment_orchestrator = DeploymentOrchestrator(manager)
+    logger.info(f"[{time.time() - start_time:.2f}s] DeploymentOrchestrator created successfully")
+
+    # Setup deployment tokens
+    logger.info(f"[{time.time() - start_time:.2f}s] Setting up deployment tokens...")
+    setup_deployment_tokens()
+    logger.info(f"[{time.time() - start_time:.2f}s] Deployment tokens configured")
 
     # Include all modular routes
     # These use Depends(get_manager) to access manager via app.state
@@ -71,5 +89,22 @@ def create_routes(manager: Any) -> APIRouter:
     router.include_router(oauth.router, prefix="", tags=["oauth"])
     router.include_router(deployment.router, prefix="", tags=["deployment"])
     router.include_router(adapters.router, prefix="", tags=["adapters"])
+    router.include_router(gui.router, prefix="", tags=["gui"])
+
+    # Add debug routes for querying agent persistence
+    try:
+        from ciris_manager.api.debug_routes import create_debug_routes
+
+        debug_router = create_debug_routes(manager)
+        router.include_router(debug_router, prefix="", tags=["debug"])
+        logger.info("Debug routes added for agent persistence querying")
+    except Exception as e:
+        logger.warning(f"Failed to initialize debug routes: {e}")
+
+    # Initialize jailbreaker service if configured
+    jailbreaker_router = initialize_jailbreaker(manager, deployment_orchestrator)
+    if jailbreaker_router:
+        router.include_router(jailbreaker_router, prefix="", tags=["jailbreaker"])
+        logger.info("Jailbreaker routes added")
 
     return router

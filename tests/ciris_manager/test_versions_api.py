@@ -59,7 +59,7 @@ class TestVersionsAPI:
     @pytest.fixture
     def mock_orchestrator(self):
         """Create mock deployment orchestrator."""
-        with patch("ciris_manager.api.routes_v1.DeploymentOrchestrator") as mock_class:
+        with patch("ciris_manager.api.routes.DeploymentOrchestrator") as mock_class:
             orchestrator = Mock()
 
             # Make async methods return coroutines
