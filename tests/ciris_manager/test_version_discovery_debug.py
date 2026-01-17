@@ -6,7 +6,7 @@ Reproduces the datum (old version) and echo-nemesis (null version) problems.
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from ciris_manager.docker_discovery import DockerAgentDiscovery
+from ciris_manager.docker_discovery import DockerAgentDiscovery, invalidate_discovery_cache
 
 
 class TestVersionDiscoveryDebug:
@@ -14,6 +14,8 @@ class TestVersionDiscoveryDebug:
 
     def test_version_discovery_with_auth_failure(self):
         """Test that version discovery fails gracefully when auth fails."""
+        # Clear cache to ensure fresh discovery
+        invalidate_discovery_cache()
 
         # Mock agent registry
         mock_registry = Mock()
