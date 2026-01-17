@@ -3,7 +3,7 @@ Unit tests for Docker discovery module.
 """
 
 from unittest.mock import Mock
-from ciris_manager.docker_discovery import DockerAgentDiscovery
+from ciris_manager.docker_discovery import DockerAgentDiscovery, invalidate_discovery_cache
 
 
 class TestDockerDiscovery:
@@ -122,6 +122,9 @@ class TestDockerDiscovery:
 
     def test_discover_agents_filters_correctly(self):
         """Test that discover_agents only returns containers with CIRIS_AGENT_ID."""
+        # Clear cache to ensure fresh discovery
+        invalidate_discovery_cache()
+
         discovery = DockerAgentDiscovery()
         discovery.client = Mock()
 
