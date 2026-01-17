@@ -228,16 +228,17 @@ class TestWizardSessionEndpoints:
         return TestClient(app)
 
     def test_wizard_start_creates_session(self, client, mock_agent):
-        """Test starting a wizard creates a session."""
-        manifest_response = {
+        """Test starting a wizard proxies to agent and returns session."""
+        # Agent's configure/start response
+        agent_response = {
             "data": {
-                "module": {"name": "discord", "version": "1.0.0"},
-                "interactive_config": {
-                    "steps": [
-                        {"step_id": "token", "step_type": "input"},
-                        {"step_id": "confirm", "step_type": "confirm"},
-                    ],
-                },
+                "session_id": "test-session-123",
+                "adapter_type": "discord",
+                "status": "active",
+                "current_step_index": 0,
+                "current_step": {"step_id": "token", "step_type": "input"},
+                "total_steps": 2,
+                "created_at": "2026-01-17T00:00:00Z",
             },
         }
 
@@ -252,13 +253,13 @@ class TestWizardSessionEndpoints:
                 with patch("httpx.AsyncClient") as mock_httpx:
                     mock_response = Mock()
                     mock_response.status_code = 200
-                    mock_response.json.return_value = manifest_response
+                    mock_response.json.return_value = agent_response
                     mock_response.raise_for_status = Mock()
 
                     mock_client = MagicMock()
                     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
                     mock_client.__aexit__ = AsyncMock(return_value=None)
-                    mock_client.get = AsyncMock(return_value=mock_response)
+                    mock_client.post = AsyncMock(return_value=mock_response)
                     mock_httpx.return_value = mock_client
 
                     response = client.post(
@@ -270,18 +271,11 @@ class TestWizardSessionEndpoints:
                     data = response.json()
                     assert "session_id" in data
                     assert data["adapter_type"] == "discord"
-                    assert data["steps_completed"] == []
+                    assert data["current_step"] == "token"
 
     def test_wizard_start_no_wizard_returns_error(self, client, mock_agent):
-        """Test starting wizard for adapter without wizard config returns error."""
-        manifest_response = {
-            "data": {
-                "module": {"name": "api"},
-                "interactive_config": {
-                    "steps": [],  # No steps
-                },
-            },
-        }
+        """Test starting wizard for adapter without wizard config returns 404."""
+        import httpx
 
         with patch("ciris_manager.docker_discovery.DockerAgentDiscovery") as mock_discovery:
             mock_discovery.return_value.discover_agents.return_value = [mock_agent]
@@ -292,15 +286,20 @@ class TestWizardSessionEndpoints:
                 }
 
                 with patch("httpx.AsyncClient") as mock_httpx:
+                    # Agent returns 404 for adapters without wizard
                     mock_response = Mock()
-                    mock_response.status_code = 200
-                    mock_response.json.return_value = manifest_response
-                    mock_response.raise_for_status = Mock()
+                    mock_response.status_code = 404
+                    mock_response.text = "Adapter not configurable"
+
+                    def raise_for_status():
+                        raise httpx.HTTPStatusError("404", request=Mock(), response=mock_response)
+
+                    mock_response.raise_for_status = raise_for_status
 
                     mock_client = MagicMock()
                     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
                     mock_client.__aexit__ = AsyncMock(return_value=None)
-                    mock_client.get = AsyncMock(return_value=mock_response)
+                    mock_client.post = AsyncMock(return_value=mock_response)
                     mock_httpx.return_value = mock_client
 
                     response = client.post(
@@ -308,8 +307,8 @@ class TestWizardSessionEndpoints:
                         json={},
                     )
 
-                    assert response.status_code == 400
-                    assert "does not have a configuration wizard" in response.json()["detail"]
+                    assert response.status_code == 404
+                    assert "not found or not configurable" in response.json()["detail"]
 
 
 class TestRemoveAdapterConfig:
