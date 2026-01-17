@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-import aiofiles
+import aiofiles  # type: ignore
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
 

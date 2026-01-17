@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import aiofiles
+import aiofiles  # type: ignore
 import httpx
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
