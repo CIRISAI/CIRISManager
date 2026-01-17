@@ -67,6 +67,16 @@ class TestCDAPIEndpoints:
             from ciris_manager.api.routes import create_routes
 
             app = FastAPI()
+
+            # Set up app.state for modular route dependencies
+            app.state.manager = mock_manager
+            app.state.deployment_orchestrator = mock_orchestrator
+            app.state.token_manager = Mock()
+            # Use "legacy" token which allows updating all image types
+            app.state.token_manager.get_all_tokens = Mock(
+                return_value={"agent": "", "gui": "", "legacy": "test-deploy-token"}
+            )
+
             router = create_routes(mock_manager)
             app.include_router(router, prefix="/manager/v1")
 

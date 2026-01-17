@@ -12,12 +12,24 @@ This package contains route modules organized by domain:
 - gui: Manager UI serving
 """
 
-# Re-export from routes_v1 for backward compatibility during modularization
-# Once modularization is complete, create_routes will be defined here
-from ciris_manager.api.routes_v1 import create_routes
+from typing import Any
+
+from fastapi import APIRouter
+
+# Import the base create_routes from routes_v1 (still has most routes)
+from ciris_manager.api.routes_v1 import create_routes as _create_routes_v1
 
 # Re-export items that tests patch for backward compatibility
 from ciris_manager.deployment import DeploymentOrchestrator
+
+# Modular route modules (imported as they are created)
+from . import system
+from . import templates
+from . import infrastructure
+from . import agents
+from . import config
+from . import oauth
+from . import deployment
 
 __all__ = [
     "create_routes",
@@ -28,16 +40,31 @@ __all__ = [
     "agents",
     "config",
     "oauth",
+    "deployment",
 ]
 
-# Modular route modules (imported as they are created)
-from . import system
-from . import templates
-from . import infrastructure
-from . import agents
-from . import config
-from . import oauth
+
+def create_routes(manager: Any) -> APIRouter:
+    """
+    Create API routes with manager instance.
+
+    Assembles routes from both routes_v1 (legacy) and modular route files.
+
+    Args:
+        manager: CIRISManager instance
+
+    Returns:
+        Configured APIRouter with all routes
+    """
+    # Get base router from routes_v1 (still has most routes defined in closure)
+    router = _create_routes_v1(manager)
+
+    # Include modular routes that have been extracted
+    # These use Depends(get_manager) to access manager via app.state
+    router.include_router(deployment.router, prefix="", tags=["deployment"])
+
+    return router
+
 
 # More modules to come:
-# from . import deployment
 # from . import adapters

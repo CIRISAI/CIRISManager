@@ -1277,6 +1277,17 @@ class CIRISManager:
                 f"[{time.time() - start_time:.2f}s] FastAPI app created with explicit lifespan"
             )
 
+            # Set up app state for dependency injection in modular routes
+            app.state.manager = self
+
+            # Create deployment orchestrator and token manager for modular routes
+            from ciris_manager.deployment import DeploymentOrchestrator
+            from ciris_manager.deployment_tokens import DeploymentTokenManager
+
+            app.state.deployment_orchestrator = DeploymentOrchestrator(self)
+            app.state.token_manager = DeploymentTokenManager()
+            logger.info(f"[{time.time() - start_time:.2f}s] App state initialized")
+
             # Try to add rate limiting if available
             try:
                 from .api.rate_limit import limiter, rate_limit_exceeded_handler, SLOWAPI_AVAILABLE

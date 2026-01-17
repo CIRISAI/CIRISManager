@@ -73,13 +73,21 @@ def get_token_manager(request: Request) -> Any:
     return request.app.state.token_manager
 
 
-# Authentication mode check
-_auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
-
-
 async def get_mock_user() -> Dict[str, str]:
     """Mock user for development mode."""
     return {"id": "dev-user", "email": "dev@ciris.local", "name": "Development User"}
+
+
+async def get_current_user_or_mock() -> Dict[str, str]:
+    """
+    Get current user, using mock in development mode.
+
+    Checks auth mode at call time to support test fixtures.
+    """
+    auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
+    if auth_mode == "development":
+        return await get_mock_user()
+    return await get_current_user()
 
 
 def get_auth_dependency():
@@ -87,11 +95,10 @@ def get_auth_dependency():
     Get the appropriate authentication dependency based on auth mode.
 
     Returns:
-        Depends() for either mock user or real auth
+        Depends() for auth dependency
     """
-    if _auth_mode == "development":
-        return Depends(get_mock_user)
-    return Depends(get_current_user)
+    # Use dynamic check that evaluates at call time
+    return Depends(get_current_user_or_mock)
 
 
 # Create a reusable auth dependency
