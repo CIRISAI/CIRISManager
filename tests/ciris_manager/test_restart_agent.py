@@ -51,6 +51,7 @@ class TestRestartAgent:
         import os
 
         app = FastAPI()
+        app.state.manager = mock_manager
         os.environ["CIRIS_AUTH_MODE"] = "development"
 
         router = create_routes(mock_manager)

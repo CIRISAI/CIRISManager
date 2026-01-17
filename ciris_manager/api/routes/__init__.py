@@ -58,11 +58,17 @@ def create_routes(manager: Any) -> APIRouter:
     Returns:
         Configured APIRouter with all routes
     """
-    # Get base router from routes_v1 (still has most routes defined in closure)
+    # Get base router from routes_v1 (GUI and jailbreaker routes remain there)
     router = _create_routes_v1(manager)
 
-    # Include modular routes that have been extracted
+    # Include all modular routes
     # These use Depends(get_manager) to access manager via app.state
+    router.include_router(system.router, prefix="", tags=["system"])
+    router.include_router(templates.router, prefix="", tags=["templates"])
+    router.include_router(infrastructure.router, prefix="", tags=["infrastructure"])
+    router.include_router(agents.router, prefix="", tags=["agents"])
+    router.include_router(config.router, prefix="", tags=["config"])
+    router.include_router(oauth.router, prefix="", tags=["oauth"])
     router.include_router(deployment.router, prefix="", tags=["deployment"])
     router.include_router(adapters.router, prefix="", tags=["adapters"])
 

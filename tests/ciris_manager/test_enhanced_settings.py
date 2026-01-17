@@ -56,6 +56,7 @@ class TestEnhancedSettings:
         from fastapi import FastAPI
 
         app = FastAPI()
+        app.state.manager = mock_manager
 
         # Set dev mode to bypass auth
         import os

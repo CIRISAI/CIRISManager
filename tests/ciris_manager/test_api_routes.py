@@ -76,7 +76,12 @@ class TestAPIRoutes:
     @pytest.fixture
     def client(self, mock_manager, mock_auth):
         """Create test client with auth mocked."""
+        import os
+
+        os.environ["CIRIS_AUTH_MODE"] = "development"
+
         app = FastAPI()
+        app.state.manager = mock_manager
 
         # Import the dependency we need to override
         from ciris_manager.api.auth import get_current_user_dependency as get_current_user

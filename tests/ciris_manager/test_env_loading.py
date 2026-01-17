@@ -53,6 +53,7 @@ class TestEnvLoading:
         import os
 
         app = FastAPI()
+        app.state.manager = mock_manager
         # Set dev mode to bypass auth
         os.environ["CIRIS_AUTH_MODE"] = "development"
 

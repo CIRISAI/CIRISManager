@@ -65,6 +65,7 @@ class TestAuthIntegration:
             from fastapi import FastAPI
 
             app = FastAPI()
+            app.state.manager = mock_manager
             router = create_routes(mock_manager)
             app.include_router(router, prefix="/manager/v1")
 
@@ -96,6 +97,7 @@ class TestAuthIntegration:
             from fastapi import FastAPI
 
             app = FastAPI()
+            app.state.manager = mock_manager
             router = create_routes(mock_manager)
             app.include_router(router, prefix="/manager/v1")
 
@@ -113,6 +115,7 @@ class TestAuthIntegration:
             from fastapi import FastAPI
 
             app = FastAPI()
+            app.state.manager = mock_manager
             router = create_routes(mock_manager)
             app.include_router(router, prefix="/manager/v1")
 
