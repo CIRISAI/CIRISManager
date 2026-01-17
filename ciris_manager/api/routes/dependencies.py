@@ -94,7 +94,16 @@ def _get_auth_dependency_runtime(
     from ..auth_routes import get_auth_service
 
     auth_service = get_auth_service()
+
+    # Try authorization header first
     result = auth_service.get_current_user(authorization)
+
+    # If no auth header, try cookie (browser requests use cookies)
+    if result is None:
+        token = request.cookies.get("manager_token")
+        if token:
+            result = auth_service.get_current_user(f"Bearer {token}")
+
     if result is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return result  # type: ignore[return-value]
