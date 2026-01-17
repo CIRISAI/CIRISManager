@@ -1095,3 +1095,56 @@ class TestCIRISManager:
                     all_server_ids.add(agent.server_id)
 
             assert len(all_server_ids) == 3  # Each agent on exactly one server
+
+    def test_generate_occurrence_id(self, manager):
+        """Test occurrence ID generation for multi-occurrence agents."""
+        from ciris_manager.agent_registry import RegisteredAgent
+
+        # Test with no existing agents - first instance should return None
+        result = manager._generate_occurrence_id([], "main")
+        assert result is None, "First instance should not have occurrence_id"
+
+        # Test with one existing agent (no occurrence_id) - new one should get "002"
+        existing = [
+            RegisteredAgent(
+                agent_id="test-agent",
+                name="test",
+                port=8000,
+                template="basic",
+                compose_file="/path/to/compose.yml",
+                server_id="main",
+                occurrence_id=None,  # First instance has no occurrence_id
+            )
+        ]
+        result = manager._generate_occurrence_id(existing, "scout")
+        assert result == "002", f"Second instance should get '002', got '{result}'"
+
+        # Test with two existing agents - new one should get "003"
+        existing.append(
+            RegisteredAgent(
+                agent_id="test-agent",
+                name="test",
+                port=8001,
+                template="basic",
+                compose_file="/path/to/compose.yml",
+                server_id="scout",
+                occurrence_id="002",
+            )
+        )
+        result = manager._generate_occurrence_id(existing, "scout2")
+        assert result == "003", f"Third instance should get '003', got '{result}'"
+
+        # Test with non-sequential occurrence_ids - should still find max
+        existing.append(
+            RegisteredAgent(
+                agent_id="test-agent",
+                name="test",
+                port=8002,
+                template="basic",
+                compose_file="/path/to/compose.yml",
+                server_id="scout2",
+                occurrence_id="010",  # Gap in sequence
+            )
+        )
+        result = manager._generate_occurrence_id(existing, "main")
+        assert result == "011", f"Should be '011' (max + 1), got '{result}'"

@@ -338,6 +338,21 @@ class CIRISManager:
                     "This should be extremely rare - please try again."
                 )
 
+        # Auto-detect multi-occurrence: check if any agents with this agent_id already exist
+        # (on any server/occurrence) and auto-generate occurrence_id if needed
+        # This ensures work partitioning when multiple instances share a database
+        if not agent_occurrence_id:
+            existing_agents = self.agent_registry.get_agents_by_agent_id(agent_id)
+            if existing_agents:
+                # This is a multi-occurrence deployment - auto-generate occurrence_id
+                agent_occurrence_id = self._generate_occurrence_id(
+                    existing_agents, target_server_id
+                )
+                logger.info(
+                    f"Auto-generated occurrence_id={agent_occurrence_id} for agent {agent_id} "
+                    f"(existing instances: {len(existing_agents)})"
+                )
+
         # Allocate port
         allocated_port = self.port_manager.allocate_port(agent_id)
 
@@ -1566,6 +1581,58 @@ class CIRISManager:
             6-character lowercase string safe for URLs
         """
         return "".join(secrets.choice(self.SAFE_CHARS) for _ in range(6))
+
+    def _generate_occurrence_id(
+        self, existing_agents: list, target_server_id: str
+    ) -> Optional[str]:
+        """
+        Generate a unique occurrence ID for multi-occurrence agent deployments.
+
+        For agents sharing the same agent_id across multiple servers/instances:
+        - First instance: returns None (agent runtime defaults to "default")
+        - Second instance: returns "002"
+        - Third instance: returns "003"
+        - etc.
+
+        Args:
+            existing_agents: List of existing RegisteredAgent objects with the same agent_id
+            target_server_id: Server ID where the new agent will be deployed
+
+        Returns:
+            None for first instance, "002", "003", etc. for subsequent instances
+        """
+        if not existing_agents:
+            # First instance - no occurrence_id needed (defaults to "default")
+            return None
+
+        # Check if any existing agent is on the target server without occurrence_id
+        # This would be a conflict - can't have two agents with same agent_id
+        # on same server without occurrence_id differentiation
+        for agent in existing_agents:
+            if agent.server_id == target_server_id and not agent.occurrence_id:
+                # There's already an agent without occurrence_id on this server
+                # The new one needs an occurrence_id
+                pass
+
+        # Find the highest existing occurrence number
+        max_occurrence = 1  # Default is considered occurrence 1
+
+        for agent in existing_agents:
+            if agent.occurrence_id:
+                try:
+                    # Parse occurrence_id like "002", "003" to get the number
+                    occurrence_num = int(agent.occurrence_id)
+                    max_occurrence = max(max_occurrence, occurrence_num)
+                except ValueError:
+                    # Non-numeric occurrence_id, skip it
+                    logger.warning(
+                        f"Agent {agent.agent_id} has non-numeric occurrence_id: "
+                        f"{agent.occurrence_id}"
+                    )
+
+        # Generate next occurrence_id
+        next_occurrence = max_occurrence + 1
+        return f"{next_occurrence:03d}"
 
     def _run_emergency_permission_fix(self, agent_dir: Path, agent_id: str) -> None:
         """Emergency permission fixing using a temporary script."""

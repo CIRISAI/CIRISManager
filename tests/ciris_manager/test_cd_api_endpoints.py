@@ -59,8 +59,8 @@ class TestCDAPIEndpoints:
         # Set test deployment token
         os.environ["CIRIS_DEPLOY_TOKEN"] = "test-deploy-token"
 
-        # Patch the DeploymentOrchestrator before importing routes
-        with patch("ciris_manager.api.routes.DeploymentOrchestrator") as mock_orch_class:
+        # Patch the DeploymentOrchestrator where it's actually imported in routes_v1
+        with patch("ciris_manager.api.routes_v1.DeploymentOrchestrator") as mock_orch_class:
             mock_orch_class.return_value = mock_orchestrator
 
             # Now import and create routes
