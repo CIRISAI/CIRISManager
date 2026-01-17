@@ -25,10 +25,10 @@ __all__ = ["create_routes", "DeploymentOrchestrator"]
 from . import system
 from . import templates
 from . import infrastructure
+from . import agents
+from . import config
+from . import oauth
 
 # More modules to come:
-# from . import agents
-# from . import config
-# from . import oauth
 # from . import deployment
 # from . import adapters
