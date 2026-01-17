@@ -237,9 +237,7 @@ class ComposeGenerator:
 
         return volumes
 
-    def _apply_llm_config(
-        self, env: Dict[str, str], llm_config: Dict[str, Any]
-    ) -> None:
+    def _apply_llm_config(self, env: Dict[str, str], llm_config: Dict[str, Any]) -> None:
         """
         Apply LLM configuration to environment variables.
 
