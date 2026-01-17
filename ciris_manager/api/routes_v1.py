@@ -277,7 +277,6 @@ def create_routes(manager: Any) -> APIRouter:
 
         return HTMLResponse(content=html_content)
 
-
     # Routes moved to modular files in routes/ package:
     # - system.py: /health, /status
     # - templates.py: /templates/*, /env/default
