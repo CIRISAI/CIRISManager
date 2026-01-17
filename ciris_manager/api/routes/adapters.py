@@ -17,7 +17,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from .dependencies import get_manager, auth_dependency
-from .wizard_sessions import get_wizard_session_manager
 
 logger = logging.getLogger(__name__)
 
@@ -482,24 +481,21 @@ async def get_adapter_manifest(
     """
     Get full manifest for a specific adapter.
 
-    Includes interactive_config with wizard steps.
+    Fetches from agent's /v1/system/adapters/types and filters to the requested adapter.
+    Also fetches wizard info from /v1/system/adapters/configurable if available.
     """
     base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get all adapter types - this contains the manifest info
         try:
             response = await client.get(
-                f"{base_url}/v1/system/adapters/{adapter_type}/manifest",
+                f"{base_url}/v1/system/adapters/types",
                 headers=headers,
             )
             response.raise_for_status()
-            manifest: Dict[str, Any] = response.json().get("data", {})
+            types_data = response.json().get("data", {})
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Adapter type '{adapter_type}' not found on agent",
-                )
             raise HTTPException(
                 status_code=e.response.status_code,
                 detail=f"Agent returned error: {e.response.text}",
@@ -509,6 +505,44 @@ async def get_adapter_manifest(
                 status_code=502,
                 detail=f"Failed to communicate with agent: {str(e)}",
             )
+
+        # Find the specific adapter in core_modules or adapters
+        manifest: Optional[Dict[str, Any]] = None
+        for module in types_data.get("core_modules", []):
+            if module.get("module_id") == adapter_type:
+                manifest = {"module": module}
+                break
+
+        if not manifest:
+            for adapter in types_data.get("adapters", []):
+                if adapter.get("module_id") == adapter_type:
+                    manifest = {"module": adapter}
+                    break
+
+        if not manifest:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Adapter type '{adapter_type}' not found on agent",
+            )
+
+        # Try to get wizard/interactive config from configurable endpoint
+        try:
+            config_response = await client.get(
+                f"{base_url}/v1/system/adapters/configurable",
+                headers=headers,
+            )
+            if config_response.status_code == 200:
+                config_data = config_response.json().get("data", {})
+                for adapter in config_data.get("adapters", []):
+                    if adapter.get("adapter_type") == adapter_type:
+                        manifest["interactive_config"] = {
+                            "workflow_type": adapter.get("workflow_type", "wizard"),
+                            "steps": adapter.get("steps", []),
+                            "requires_oauth": adapter.get("requires_oauth", False),
+                        }
+                        break
+        except Exception as e:
+            logger.debug(f"Could not get configurable info for {adapter_type}: {e}")
 
     # Add manager overlay with current config
     persisted_configs = manager.agent_registry.get_adapter_configs(
@@ -537,64 +571,53 @@ async def start_adapter_wizard(
     """
     Start a new wizard session for configuring an adapter.
 
-    Optionally resume from a previous session.
+    Proxies to agent's /v1/system/adapters/{adapter_type}/configure/start endpoint.
+    The agent manages the wizard session state.
     """
-    # Resume existing session if requested
-    if body.resume_from:
-        session_mgr = get_wizard_session_manager()
-        session = session_mgr.get_session(body.resume_from)
-        if session and session.agent_id == agent_id and session.adapter_type == adapter_type:
-            return session.to_dict()
-        # If session not found or doesn't match, create new one
-
-    # Get manifest to extract steps
-    base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.get(
-                f"{base_url}/v1/system/adapters/{adapter_type}/manifest",
-                headers=headers,
+            # Proxy to agent's configure/start endpoint
+            response = await client.post(
+                f"{base_url}/v1/system/adapters/{adapter_type}/configure/start",
+                headers={**headers, "Content-Type": "application/json"},
+                json={},
             )
             response.raise_for_status()
-            manifest = response.json().get("data", {})
+            result = response.json().get("data", {})
+
+            # Transform agent response to match expected format
+            return {
+                "session_id": result.get("session_id"),
+                "adapter_type": result.get("adapter_type", adapter_type),
+                "current_step": result.get("current_step", {}).get("step_id"),
+                "current_step_details": result.get("current_step"),
+                "steps_remaining": [
+                    f"step_{i}" for i in range(
+                        result.get("current_step_index", 0) + 1,
+                        result.get("total_steps", 1)
+                    )
+                ],
+                "total_steps": result.get("total_steps", 0),
+                "status": result.get("status", "active"),
+                "created_at": result.get("created_at"),
+            }
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Adapter type '{adapter_type}' not found",
+                    detail=f"Adapter type '{adapter_type}' not found or not configurable",
                 )
             raise HTTPException(
                 status_code=e.response.status_code,
-                detail=str(e),
+                detail=f"Agent returned error: {e.response.text}",
             )
         except Exception as e:
             raise HTTPException(
                 status_code=502,
-                detail=f"Failed to get adapter manifest: {str(e)}",
+                detail=f"Failed to start wizard on agent: {str(e)}",
             )
-
-    # Extract step IDs from manifest
-    interactive_config = manifest.get("interactive_config", {})
-    steps = interactive_config.get("steps", [])
-
-    if not steps:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Adapter '{adapter_type}' does not have a configuration wizard",
-        )
-
-    step_ids = [s.get("step_id") for s in steps if s.get("step_id")]
-
-    # Create session
-    session_mgr = get_wizard_session_manager()
-    session = session_mgr.create_session(
-        agent_id=agent_id,
-        adapter_type=adapter_type,
-        steps=step_ids,
-    )
-
-    return session.to_dict()
 
 
 @router.post("/agents/{agent_id}/adapters/{adapter_type}/wizard/{session_id}/step")
@@ -609,139 +632,60 @@ async def execute_wizard_step(
     """
     Execute a wizard step.
 
-    Validates input and stores collected data.
-    For OAuth steps, returns authorization URL.
-    For discovery steps, returns discovered items.
+    Proxies to agent's /v1/system/adapters/configure/{session_id}/step endpoint.
+    The agent handles validation, OAuth, discovery, etc.
     """
-    session_mgr = get_wizard_session_manager()
-    session = session_mgr.get_session(session_id)
-
-    if not session:
-        raise HTTPException(status_code=410, detail="Wizard session expired or not found")
-
-    if session.agent_id != agent_id or session.adapter_type != adapter_type:
-        raise HTTPException(status_code=400, detail="Session does not match agent/adapter")
-
-    # Get manifest for step definition
-    base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{base_url}/v1/system/adapters/{adapter_type}/manifest",
-            headers=headers,
-        )
-        response.raise_for_status()
-        manifest = response.json().get("data", {})
+        try:
+            # Proxy to agent's step endpoint
+            response = await client.post(
+                f"{base_url}/v1/system/adapters/configure/{session_id}/step",
+                headers={**headers, "Content-Type": "application/json"},
+                json={
+                    "step_id": body.step_id,
+                    "action": body.action,
+                    "data": body.data,
+                },
+            )
+            response.raise_for_status()
+            result = response.json().get("data", {})
 
-    # Find step definition
-    steps = manifest.get("interactive_config", {}).get("steps", [])
-    step_def = next((s for s in steps if s.get("step_id") == body.step_id), None)
-
-    if not step_def:
-        raise HTTPException(status_code=400, detail=f"Step '{body.step_id}' not found")
-
-    # Handle skip for optional steps
-    if body.action == "skip":
-        if not step_def.get("optional", False):
-            raise HTTPException(status_code=400, detail=f"Step '{body.step_id}' is not optional")
-        session.advance_step()
-        return {
-            "session_id": session_id,
-            "step_id": body.step_id,
-            "status": "skipped",
-            "next_step": session.current_step if session.steps_remaining else None,
-            "collected_data": session._mask_sensitive_data(session.collected_data),
-        }
-
-    # Process step based on type
-    step_type = step_def.get("step_type", "input")
-    result: Dict[str, Any] = {}
-
-    if step_type == "input":
-        # Validate and collect input fields
-        fields = step_def.get("fields", [])
-        errors = []
-
-        for field in fields:
-            field_id = field.get("field_id") or field.get("name")
-            required = field.get("required", False)
-            value = body.data.get(field_id)
-
-            if required and not value:
-                errors.append(f"{field.get('label', field_id)} is required")
-            elif value:
-                # Store in collected data
-                session.collected_data[field_id] = value
-
-        if errors:
+            # Transform agent response
             return {
                 "session_id": session_id,
                 "step_id": body.step_id,
-                "status": "validation_failed",
-                "validation": {"valid": False, "errors": errors},
+                "status": result.get("status", "completed"),
+                "next_step": result.get("next_step", {}).get("step_id") if result.get("next_step") else None,
+                "next_step_details": result.get("next_step"),
+                "validation": result.get("validation"),
+                "result": result.get("result"),
+                "collected_data": result.get("collected_data", {}),
             }
-
-        result = {"status": "completed", "validation": {"valid": True, "errors": []}}
-
-    elif step_type == "confirm":
-        # Confirmation step - just mark complete
-        result = {"status": "completed"}
-
-    elif step_type == "select":
-        # Selection step
-        selections = body.data.get("selections", body.data.get("selected", []))
-        if selections:
-            session.collected_data[f"{body.step_id}_selections"] = selections
-        result = {"status": "completed"}
-
-    elif step_type == "discovery":
-        # Discovery would need agent-side implementation
-        # For now, accept manual URL entry
-        if "url" in body.data:
-            session.collected_data["discovered_url"] = body.data["url"]
-        result = {"status": "completed", "result": {"discovered": body.data.get("discovered", [])}}
-
-    elif step_type == "oauth":
-        # OAuth requires redirect flow
-        oauth_config = step_def.get("oauth_config", {})
-        # Generate state for CSRF protection
-        import secrets
-
-        state = secrets.token_urlsafe(32)
-        session.oauth_state = state
-
-        # Build authorization URL (simplified - real impl would vary by provider)
-        base_oauth_url = session.collected_data.get("discovered_url", "")
-        if not base_oauth_url:
-            raise HTTPException(status_code=400, detail="OAuth requires discovered URL first")
-
-        auth_path = oauth_config.get("authorization_path", "/auth/authorize")
-        callback_url = f"https://agents.ciris.ai/manager/v1/agents/{agent_id}/adapters/{adapter_type}/wizard/{session_id}/oauth-callback"
-
-        # Store for later
-        session.collected_data["oauth_callback_url"] = callback_url
-
-        return {
-            "session_id": session_id,
-            "step_id": body.step_id,
-            "status": "pending_redirect",
-            "result": {
-                "authorization_url": f"{base_oauth_url}{auth_path}?state={state}&redirect_uri={callback_url}",
-                "state": state,
-                "callback_url": callback_url,
-            },
-        }
-
-    # Advance to next step
-    session.advance_step()
-
-    return {
-        "session_id": session_id,
-        "step_id": body.step_id,
-        "next_step": session.current_step if session.steps_remaining else None,
-        "collected_data": session._mask_sensitive_data(session.collected_data),
-        **result,
-    }
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 410:
+                raise HTTPException(
+                    status_code=410,
+                    detail="Wizard session expired or not found",
+                )
+            if e.response.status_code == 400:
+                # Try to extract error message from response
+                try:
+                    error_data = e.response.json()
+                    detail = error_data.get("detail", str(e))
+                except Exception:
+                    detail = e.response.text
+                raise HTTPException(status_code=400, detail=detail)
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"Agent returned error: {e.response.text}",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to execute wizard step: {str(e)}",
+            )
 
 
 @router.post("/agents/{agent_id}/adapters/{adapter_type}/wizard/{session_id}/complete")
@@ -756,74 +700,77 @@ async def complete_adapter_wizard(
     """
     Complete the wizard and apply configuration.
 
-    Stores config in registry and optionally loads adapter on agent.
+    Proxies to agent's /v1/system/adapters/configure/{session_id}/complete endpoint.
+    Also stores config in manager registry for persistence across restarts.
     """
     if not body.confirm:
         raise HTTPException(status_code=400, detail="Confirmation required")
 
-    session_mgr = get_wizard_session_manager()
-    session = session_mgr.get_session(session_id)
-
-    if not session:
-        raise HTTPException(status_code=410, detail="Wizard session expired or not found")
-
-    if session.agent_id != agent_id or session.adapter_type != adapter_type:
-        raise HTTPException(status_code=400, detail="Session does not match agent/adapter")
-
-    # Get manifest for env var mappings
     base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{base_url}/v1/system/adapters/{adapter_type}/manifest",
-            headers=headers,
-        )
-        response.raise_for_status()
-        manifest = response.json().get("data", {})
-
-        # Map collected data to env vars
-        configuration = manifest.get("configuration", {})
-        env_vars = {}
-
-        for param_name, param_def in configuration.items():
-            env_key = param_def.get("env")
-            if env_key and param_name in session.collected_data:
-                env_vars[env_key] = str(session.collected_data[param_name])
-
-        # Check for consent
-        consent_given = session.collected_data.get("consent_given", False)
-        consent_timestamp = None
-        if manifest.get("module", {}).get("requires_consent"):
-            if not consent_given:
+        try:
+            # Proxy to agent's complete endpoint
+            response = await client.post(
+                f"{base_url}/v1/system/adapters/configure/{session_id}/complete",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"confirm": True},
+            )
+            response.raise_for_status()
+            result = response.json().get("data", {})
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 410:
                 raise HTTPException(
-                    status_code=400,
-                    detail="This adapter requires explicit consent",
+                    status_code=410,
+                    detail="Wizard session expired or not found",
                 )
-            consent_timestamp = datetime.now(timezone.utc).isoformat()
+            if e.response.status_code == 400:
+                try:
+                    error_data = e.response.json()
+                    detail = error_data.get("detail", str(e))
+                except Exception:
+                    detail = e.response.text
+                raise HTTPException(status_code=400, detail=detail)
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"Agent returned error: {e.response.text}",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to complete wizard: {str(e)}",
+            )
+
+        # Extract collected data and env vars from agent response
+        collected_data = result.get("collected_data", {})
+        env_vars = result.get("env_vars", {})
 
         # Build config to store in registry
         adapter_config = {
             "enabled": True,
             "configured_at": datetime.now(timezone.utc).isoformat(),
-            "config": session.collected_data,
+            "config": collected_data,
             "env_vars": env_vars,
         }
 
-        if consent_given:
+        if collected_data.get("consent_given"):
             adapter_config["consent_given"] = True
-            adapter_config["consent_timestamp"] = consent_timestamp
+            adapter_config["consent_timestamp"] = collected_data.get(
+                "consent_timestamp", datetime.now(timezone.utc).isoformat()
+            )
 
-        # Store in registry
-        success = manager.agent_registry.set_adapter_config(
-            agent_id,
-            adapter_type,
-            adapter_config,
-            occurrence_id=agent_info.occurrence_id,
-            server_id=agent_info.server_id,
-        )
-
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to save adapter configuration")
+        # Store in registry for persistence
+        try:
+            manager.agent_registry.set_adapter_config(
+                agent_id,
+                adapter_type,
+                adapter_config,
+                occurrence_id=agent_info.occurrence_id,
+                server_id=agent_info.server_id,
+            )
+            logger.info(f"Stored adapter config for {adapter_type} on agent {agent_id}")
+        except Exception as e:
+            logger.warning(f"Failed to store adapter config in registry: {e}")
 
         # Regenerate compose file with new adapter env vars
         compose_regenerated = False
@@ -838,34 +785,15 @@ async def complete_adapter_wizard(
         except Exception as e:
             logger.warning(f"Failed to regenerate compose file for {agent_id}: {e}")
 
-        # Try to load adapter on agent
-        adapter_loaded = False
-        try:
-            load_response = await client.post(
-                f"{base_url}/v1/system/adapters/{adapter_type}",
-                headers={**headers, "Content-Type": "application/json"},
-                json={
-                    "config": session.collected_data,
-                    "auto_start": True,
-                },
-            )
-            adapter_loaded = load_response.status_code == 200
-        except Exception as e:
-            logger.warning(f"Failed to load adapter {adapter_type} on agent: {e}")
-
-    # Clean up session
-    session_mgr.delete_session(session_id)
-
     return {
         "session_id": session_id,
         "status": "completed",
         "adapter_type": adapter_type,
-        "config_applied": True,
+        "config_applied": result.get("config_applied", True),
         "compose_regenerated": compose_regenerated,
-        "adapter_loaded": adapter_loaded,
-        "restart_required": not adapter_loaded,
-        "message": f"{adapter_type} adapter configured successfully"
-        + (" and started" if adapter_loaded else " (restart required to apply)"),
+        "adapter_loaded": result.get("adapter_loaded", False),
+        "restart_required": not result.get("adapter_loaded", False),
+        "message": result.get("message", f"{adapter_type} adapter configured successfully"),
     }
 
 
