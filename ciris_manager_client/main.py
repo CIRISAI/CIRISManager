@@ -386,6 +386,117 @@ def setup_auth_parser(subparsers):
     auth_subparsers.add_parser("token", help="Print current token (for scripting)")
 
 
+def setup_adapter_parser(subparsers):
+    """Set up adapter command subparser."""
+    adapter_parser = subparsers.add_parser(
+        "adapter",
+        help="Adapter management",
+        description="Manage adapters on CIRIS agents",
+    )
+    adapter_subparsers = adapter_parser.add_subparsers(
+        dest="adapter_command", help="Adapter commands"
+    )
+
+    # adapter list
+    list_parser = adapter_subparsers.add_parser(
+        "list", help="List all available adapters with their status"
+    )
+    list_parser.add_argument("agent_id", help="Agent ID")
+
+    # adapter types
+    types_parser = adapter_subparsers.add_parser(
+        "types", help="List available adapter types on an agent"
+    )
+    types_parser.add_argument("agent_id", help="Agent ID")
+
+    # adapter get
+    get_parser = adapter_subparsers.add_parser("get", help="Get status of a specific adapter")
+    get_parser.add_argument("agent_id", help="Agent ID")
+    get_parser.add_argument("adapter_id", help="Adapter ID")
+
+    # adapter manifest
+    manifest_parser = adapter_subparsers.add_parser(
+        "manifest", help="Get full manifest for an adapter type"
+    )
+    manifest_parser.add_argument("agent_id", help="Agent ID")
+    manifest_parser.add_argument("adapter_type", help="Adapter type")
+
+    # adapter load
+    load_parser = adapter_subparsers.add_parser("load", help="Load/create an adapter on an agent")
+    load_parser.add_argument("agent_id", help="Agent ID")
+    load_parser.add_argument("adapter_type", help="Adapter type to load")
+    load_parser.add_argument("--config-file", help="JSON file with adapter configuration")
+    load_parser.add_argument("--adapter-id", help="Custom adapter ID")
+    load_parser.add_argument(
+        "--no-auto-start", action="store_true", help="Don't start adapter immediately"
+    )
+
+    # adapter unload
+    unload_parser = adapter_subparsers.add_parser(
+        "unload", help="Unload/stop an adapter on an agent"
+    )
+    unload_parser.add_argument("agent_id", help="Agent ID")
+    unload_parser.add_argument("adapter_id", help="Adapter ID to unload")
+
+    # adapter reload
+    reload_parser = adapter_subparsers.add_parser(
+        "reload", help="Reload an adapter with new configuration"
+    )
+    reload_parser.add_argument("agent_id", help="Agent ID")
+    reload_parser.add_argument("adapter_id", help="Adapter ID to reload")
+    reload_parser.add_argument("--config-file", help="JSON file with new configuration")
+    reload_parser.add_argument(
+        "--no-auto-start", action="store_true", help="Don't start adapter after reload"
+    )
+
+    # adapter configs
+    configs_parser = adapter_subparsers.add_parser(
+        "configs", help="Get all persisted adapter configurations"
+    )
+    configs_parser.add_argument("agent_id", help="Agent ID")
+
+    # adapter remove-config
+    remove_config_parser = adapter_subparsers.add_parser(
+        "remove-config", help="Remove adapter configuration from registry"
+    )
+    remove_config_parser.add_argument("agent_id", help="Agent ID")
+    remove_config_parser.add_argument("adapter_type", help="Adapter type")
+    remove_config_parser.add_argument("--force", action="store_true", help="Skip confirmation")
+
+    # adapter wizard-start
+    wizard_start_parser = adapter_subparsers.add_parser(
+        "wizard-start", help="Start a configuration wizard for an adapter"
+    )
+    wizard_start_parser.add_argument("agent_id", help="Agent ID")
+    wizard_start_parser.add_argument("adapter_type", help="Adapter type to configure")
+    wizard_start_parser.add_argument("--resume", help="Session ID to resume")
+
+    # adapter wizard-step
+    wizard_step_parser = adapter_subparsers.add_parser("wizard-step", help="Execute a wizard step")
+    wizard_step_parser.add_argument("agent_id", help="Agent ID")
+    wizard_step_parser.add_argument("adapter_type", help="Adapter type")
+    wizard_step_parser.add_argument("session_id", help="Wizard session ID")
+    wizard_step_parser.add_argument("step_id", help="Step ID to execute")
+    wizard_step_parser.add_argument(
+        "--data", action="append", help="Step data (KEY=VALUE)", metavar="KEY=VALUE"
+    )
+    wizard_step_parser.add_argument("--data-file", help="JSON file with step data")
+    wizard_step_parser.add_argument(
+        "--skip", action="store_true", help="Skip this step (if optional)"
+    )
+
+    # adapter wizard-complete
+    wizard_complete_parser = adapter_subparsers.add_parser(
+        "wizard-complete", help="Complete the wizard and apply configuration"
+    )
+    wizard_complete_parser.add_argument("agent_id", help="Agent ID")
+    wizard_complete_parser.add_argument("adapter_type", help="Adapter type")
+    wizard_complete_parser.add_argument("session_id", help="Wizard session ID")
+    wizard_complete_parser.add_argument(
+        "--no-confirm", action="store_true", help="Don't require confirmation"
+    )
+
+
 def setup_debug_parser(subparsers):
     """Set up debug command subparser."""
     debug_parser = subparsers.add_parser(
@@ -403,8 +514,12 @@ def setup_debug_parser(subparsers):
     # debug tasks
     tasks_parser = debug_subparsers.add_parser("tasks", help="List tasks for an agent")
     tasks_parser.add_argument("agent_id", help="Agent ID")
-    tasks_parser.add_argument("--status", help="Filter by status (pending, active, completed, deferred)")
-    tasks_parser.add_argument("--limit", type=int, default=50, help="Maximum tasks to return (default: 50)")
+    tasks_parser.add_argument(
+        "--status", help="Filter by status (pending, active, completed, deferred)"
+    )
+    tasks_parser.add_argument(
+        "--limit", type=int, default=50, help="Maximum tasks to return (default: 50)"
+    )
     add_common_args(tasks_parser)
 
     # debug task
@@ -418,7 +533,9 @@ def setup_debug_parser(subparsers):
     thoughts_parser.add_argument("agent_id", help="Agent ID")
     thoughts_parser.add_argument("--status", help="Filter by status")
     thoughts_parser.add_argument("--task-id", dest="task_id", help="Filter by task ID")
-    thoughts_parser.add_argument("--limit", type=int, default=50, help="Maximum thoughts to return (default: 50)")
+    thoughts_parser.add_argument(
+        "--limit", type=int, default=50, help="Maximum thoughts to return (default: 50)"
+    )
     add_common_args(thoughts_parser)
 
     # debug thought
@@ -504,6 +621,7 @@ Token File:
     setup_inspect_parser(subparsers)
     setup_deployment_parser(subparsers)
     setup_auth_parser(subparsers)
+    setup_adapter_parser(subparsers)
     setup_debug_parser(subparsers)
 
     return parser
@@ -593,12 +711,34 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
             args.base_url = ctx.client.base_url if ctx.client else get_api_url()
             return handle_auth_command(args)
 
+        elif args.command == "adapter":
+            from ciris_manager_client.commands.adapter import AdapterCommands
+
+            if not args.adapter_command:
+                print("Error: No adapter subcommand specified", file=sys.stderr)
+                print(
+                    "Available commands: list, types, get, manifest, load, unload, reload, "
+                    "configs, remove-config, wizard-start, wizard-step, wizard-complete",
+                    file=sys.stderr,
+                )
+                return EXIT_INVALID_ARGS
+
+            handler = getattr(AdapterCommands, args.adapter_command.replace("-", "_"), None)
+            if handler:
+                return cast(int, handler(ctx, args))
+            else:
+                print(f"Error: Unknown adapter command: {args.adapter_command}", file=sys.stderr)
+                return EXIT_INVALID_ARGS
+
         elif args.command == "debug":
             from ciris_manager_client.commands.debug import DebugCommands
 
             if not args.debug_command:
                 print("Error: No debug subcommand specified", file=sys.stderr)
-                print("Available commands: tasks, task, thoughts, thought, query, schema", file=sys.stderr)
+                print(
+                    "Available commands: tasks, task, thoughts, thought, query, schema",
+                    file=sys.stderr,
+                )
                 return EXIT_INVALID_ARGS
 
             handler = getattr(DebugCommands, args.debug_command.replace("-", "_"), None)

@@ -522,6 +522,320 @@ class CIRISManagerClient:
         response = self._request("POST", f"/manager/v1/agents/{safe_id}/maintenance", json=payload)
         return response.json()
 
+    # Adapter Management
+
+    def list_adapters(self, agent_id: str) -> Dict[str, Any]:
+        """
+        List all running adapters on an agent.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with adapter data
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters")
+        return response.json()
+
+    def list_adapter_types(self, agent_id: str) -> Dict[str, Any]:
+        """
+        List available adapter types on an agent.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with available adapter types
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters/types")
+        return response.json()
+
+    def get_adapter(self, agent_id: str, adapter_id: str) -> Dict[str, Any]:
+        """
+        Get status of a specific adapter.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_id: Adapter ID
+
+        Returns:
+            Dict with adapter status
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_adapter_id = quote(adapter_id, safe="")
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters/{safe_adapter_id}")
+        return response.json()
+
+    def load_adapter(
+        self,
+        agent_id: str,
+        adapter_type: str,
+        config: Optional[Dict[str, Any]] = None,
+        auto_start: bool = True,
+        adapter_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Load/create a new adapter on an agent.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_type: Type of adapter to load
+            config: Adapter configuration
+            auto_start: Whether to start adapter immediately
+            adapter_id: Optional custom adapter ID
+
+        Returns:
+            Dict with load result
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_type = quote(adapter_type, safe="")
+
+        payload: Dict[str, Any] = {"auto_start": auto_start}
+        if config:
+            payload["config"] = config
+
+        endpoint = f"/manager/v1/agents/{safe_id}/adapters/{safe_type}"
+        if adapter_id:
+            endpoint = f"{endpoint}?adapter_id={quote(adapter_id, safe='')}"
+
+        response = self._request("POST", endpoint, json=payload)
+        return response.json()
+
+    def reload_adapter(
+        self,
+        agent_id: str,
+        adapter_id: str,
+        config: Optional[Dict[str, Any]] = None,
+        auto_start: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Reload an adapter with new configuration.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_id: Adapter ID
+            config: New configuration
+            auto_start: Whether to start adapter after reload
+
+        Returns:
+            Dict with reload result
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_adapter_id = quote(adapter_id, safe="")
+
+        payload: Dict[str, Any] = {"auto_start": auto_start}
+        if config:
+            payload["config"] = config
+
+        response = self._request(
+            "PUT",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_adapter_id}/reload",
+            json=payload,
+        )
+        return response.json()
+
+    def unload_adapter(self, agent_id: str, adapter_id: str) -> Dict[str, Any]:
+        """
+        Unload/stop an adapter on an agent.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_id: Adapter ID
+
+        Returns:
+            Dict with unload result
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_adapter_id = quote(adapter_id, safe="")
+        response = self._request(
+            "DELETE", f"/manager/v1/agents/{safe_id}/adapters/{safe_adapter_id}"
+        )
+        return response.json()
+
+    def list_adapter_manifests(self, agent_id: str) -> Dict[str, Any]:
+        """
+        List all available adapters with their status.
+
+        Returns summary info including status (not_configured, configured, enabled).
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with adapters list
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters/manifests")
+        return response.json()
+
+    def get_adapter_manifest(self, agent_id: str, adapter_type: str) -> Dict[str, Any]:
+        """
+        Get full manifest for a specific adapter type.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_type: Type of adapter
+
+        Returns:
+            Dict with adapter manifest
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_type = quote(adapter_type, safe="")
+        response = self._request(
+            "GET", f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/manifest"
+        )
+        return response.json()
+
+    def get_adapter_configs(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Get all persisted adapter configurations for an agent.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with configs per adapter type
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters/configs")
+        return response.json()
+
+    def remove_adapter_config(self, agent_id: str, adapter_type: str) -> Dict[str, Any]:
+        """
+        Remove adapter configuration from registry.
+
+        Also attempts to unload the adapter from the agent.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_type: Type of adapter
+
+        Returns:
+            Dict with removal result
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_type = quote(adapter_type, safe="")
+        response = self._request(
+            "DELETE", f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/config"
+        )
+        return response.json()
+
+    def start_adapter_wizard(
+        self,
+        agent_id: str,
+        adapter_type: str,
+        resume_from: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Start a wizard session for configuring an adapter.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_type: Type of adapter to configure
+            resume_from: Optional session ID to resume
+
+        Returns:
+            Dict with session info (session_id, current_step, steps_remaining, etc.)
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_type = quote(adapter_type, safe="")
+
+        payload: Dict[str, Any] = {}
+        if resume_from:
+            payload["resume_from"] = resume_from
+
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/wizard/start",
+            json=payload,
+        )
+        return response.json()
+
+    def execute_wizard_step(
+        self,
+        agent_id: str,
+        adapter_type: str,
+        session_id: str,
+        step_id: str,
+        data: Optional[Dict[str, Any]] = None,
+        action: str = "execute",
+    ) -> Dict[str, Any]:
+        """
+        Execute a wizard step.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_type: Type of adapter
+            session_id: Wizard session ID
+            step_id: Step ID to execute
+            data: Step input data
+            action: "execute" or "skip"
+
+        Returns:
+            Dict with step result
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_type = quote(adapter_type, safe="")
+        safe_session = quote(session_id, safe="")
+
+        payload = {
+            "step_id": step_id,
+            "action": action,
+            "data": data or {},
+        }
+
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/wizard/{safe_session}/step",
+            json=payload,
+        )
+        return response.json()
+
+    def complete_adapter_wizard(
+        self,
+        agent_id: str,
+        adapter_type: str,
+        session_id: str,
+        confirm: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Complete the wizard and apply configuration.
+
+        Args:
+            agent_id: Agent identifier
+            adapter_type: Type of adapter
+            session_id: Wizard session ID
+            confirm: Must be True to confirm completion
+
+        Returns:
+            Dict with completion result
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        safe_type = quote(adapter_type, safe="")
+        safe_session = quote(session_id, safe="")
+
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/wizard/{safe_session}/complete",
+            json={"confirm": confirm},
+        )
+        return response.json()
+
     # Utility Methods
 
     def ping(self) -> bool:
