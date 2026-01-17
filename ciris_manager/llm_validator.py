@@ -92,9 +92,21 @@ async def validate_llm_config(
                 )
 
             # Parse models response
+            # Handle different response formats:
+            # - OpenAI style: {"data": [{...}, {...}]}
+            # - Together style: [{...}, {...}] (direct list)
             data = response.json()
-            models_list = data.get("data", [])
-            available_models = [m.get("id", "") for m in models_list if m.get("id")]
+            if isinstance(data, list):
+                models_list = data
+            elif isinstance(data, dict):
+                models_list = data.get("data", [])
+            else:
+                models_list = []
+            available_models = [
+                m.get("id", "") if isinstance(m, dict) else str(m)
+                for m in models_list
+                if m
+            ]
 
             logger.info(f"Found {len(available_models)} models from {provider}")
 
