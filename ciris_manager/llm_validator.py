@@ -103,9 +103,7 @@ async def validate_llm_config(
             else:
                 models_list = []
             available_models = [
-                m.get("id", "") if isinstance(m, dict) else str(m)
-                for m in models_list
-                if m
+                m.get("id", "") if isinstance(m, dict) else str(m) for m in models_list if m
             ]
 
             logger.info(f"Found {len(available_models)} models from {provider}")
