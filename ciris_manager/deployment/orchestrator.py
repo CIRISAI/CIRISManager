@@ -3483,6 +3483,17 @@ class DeploymentOrchestrator:
                     logger.error(f"Docker compose file not found: {compose_file}")
                     return False
 
+                # Regenerate compose file to pick up latest configs (LLM, OAuth, adapters, etc.)
+                # This ensures all registry-stored configurations are applied during deployment
+                if self.manager and hasattr(self.manager, "regenerate_agent_compose"):
+                    try:
+                        logger.info(f"Regenerating compose file for agent {agent_id}...")
+                        await self.manager.regenerate_agent_compose(agent_id)
+                        logger.info(f"Compose file regenerated with latest configs for {agent_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to regenerate compose for {agent_id}: {e}")
+                        # Continue with existing compose file if regeneration fails
+
                 # If new_image is provided, update the docker-compose.yml with the new image tag
                 if new_image:
                     try:
@@ -3552,6 +3563,33 @@ class DeploymentOrchestrator:
                 # docker_client is guaranteed to be set when not is_local_server
                 assert docker_client is not None, "docker_client should be set for remote servers"
 
+                # Regenerate compose to get latest environment (LLM, OAuth, adapters, etc.)
+                updated_environment = old_config["environment"]
+                if self.manager and hasattr(self.manager, "regenerate_agent_compose"):
+                    try:
+                        logger.info(f"Regenerating compose for remote agent {agent_id}...")
+                        await self.manager.regenerate_agent_compose(agent_id)
+                        # Read the updated environment from the regenerated compose
+                        agent_dir = Path("/opt/ciris/agents") / agent_id
+                        compose_file = agent_dir / "docker-compose.yml"
+                        if compose_file.exists():
+                            import yaml
+
+                            with open(compose_file, "r") as f:
+                                compose_config = yaml.safe_load(f)
+                            if "services" in compose_config:
+                                for service_config in compose_config["services"].values():
+                                    if "environment" in service_config:
+                                        updated_environment = service_config["environment"]
+                                        logger.info(
+                                            f"Using updated environment from regenerated compose for {agent_id}"
+                                        )
+                                        break
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to regenerate compose for remote {agent_id}: {e}, using old env"
+                        )
+
                 # Pull the new image first
                 logger.info(f"Pulling image {target_image} on remote server {server_id}...")
                 try:
@@ -3561,13 +3599,13 @@ class DeploymentOrchestrator:
                     logger.warning(f"Failed to pull image: {e}, continuing anyway")
                     # Don't fail if pull fails - the image might already be there
 
-                # Create new container with updated image but same configuration
+                # Create new container with updated image and environment
                 logger.info(f"Creating new container {container_name} on server {server_id}...")
                 try:
                     new_container = docker_client.containers.create(
                         image=target_image,
                         name=container_name,
-                        environment=old_config["environment"],
+                        environment=updated_environment,
                         volumes=old_config["volumes"],
                         ports=old_config["ports"],
                         network=old_config["networks"][0] if old_config["networks"] else None,
