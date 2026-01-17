@@ -94,7 +94,10 @@ def _get_auth_dependency_runtime(
     from ..auth_routes import get_auth_service
 
     auth_service = get_auth_service()
-    return auth_service.get_current_user(request, authorization)  # type: ignore[no-any-return]
+    result = auth_service.get_current_user(authorization)
+    if result is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return result  # type: ignore[return-value]
 
 
 def get_auth_dependency():
