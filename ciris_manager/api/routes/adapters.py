@@ -594,9 +594,9 @@ async def start_adapter_wizard(
                 "current_step": result.get("current_step", {}).get("step_id"),
                 "current_step_details": result.get("current_step"),
                 "steps_remaining": [
-                    f"step_{i}" for i in range(
-                        result.get("current_step_index", 0) + 1,
-                        result.get("total_steps", 1)
+                    f"step_{i}"
+                    for i in range(
+                        result.get("current_step_index", 0) + 1, result.get("total_steps", 1)
                     )
                 ],
                 "total_steps": result.get("total_steps", 0),
@@ -657,7 +657,9 @@ async def execute_wizard_step(
                 "session_id": session_id,
                 "step_id": body.step_id,
                 "status": result.get("status", "completed"),
-                "next_step": result.get("next_step", {}).get("step_id") if result.get("next_step") else None,
+                "next_step": result.get("next_step", {}).get("step_id")
+                if result.get("next_step")
+                else None,
                 "next_step_details": result.get("next_step"),
                 "validation": result.get("validation"),
                 "result": result.get("result"),
