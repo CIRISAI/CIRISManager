@@ -207,22 +207,26 @@ async def _handle_identity_update(
         with open(compose_path) as f:
             compose_config = yaml.safe_load(f)
     else:
-        # Remote: read via docker exec
-        container_name = f"ciris-{agent_id}"
+        # Remote: read compose file using a temporary container with host filesystem access
         try:
-            # Find the compose file path on remote
-            result = docker_client.containers.get("ciris-nginx").exec_run(
-                f"cat /opt/ciris/agents/{agent_id}/docker-compose.yml",
-                demux=True,
+            compose_file_path = f"/opt/ciris/agents/{agent_id}/docker-compose.yml"
+            # Run a temporary alpine container with the agents directory mounted
+            result = docker_client.containers.run(
+                "alpine:latest",
+                f"cat {compose_file_path}",
+                volumes={"/opt/ciris/agents": {"bind": "/opt/ciris/agents", "mode": "ro"}},
+                remove=True,
+                detach=False,
             )
-            if result.exit_code != 0:
-                # Try alternate path
-                result = docker_client.containers.get("ciris-nginx").exec_run(
-                    f"find /opt/ciris/agents -name 'docker-compose.yml' -path '*{agent_id}*' 2>/dev/null | head -1",
-                    demux=True,
-                )
-            compose_content = result.output[0].decode() if result.output[0] else ""
+            compose_content = result.decode() if result else ""
             compose_config = yaml.safe_load(compose_content)
+            if not compose_config:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Compose file not found or empty at {compose_file_path}",
+                )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Failed to read remote compose file: {e}")
             raise HTTPException(
@@ -230,7 +234,7 @@ async def _handle_identity_update(
             )
 
     # Find the service and update command
-    services = compose_config.get("services", {})
+    services = compose_config.get("services", {}) if compose_config else {}
     service_name = list(services.keys())[0] if services else agent_id
     service = services.get(service_name, {})
 
@@ -264,14 +268,17 @@ async def _handle_identity_update(
             with open(compose_path, "w") as f:
                 yaml.dump(compose_config, f, default_flow_style=False, sort_keys=False)
         else:
-            # Remote: write via docker exec
+            # Remote: write via temporary container with host filesystem access
             import base64
             compose_yaml = yaml.dump(compose_config, default_flow_style=False, sort_keys=False)
             encoded = base64.b64encode(compose_yaml.encode()).decode()
-            # Write to a temp location then move
-            docker_client.containers.get("ciris-nginx").exec_run(
-                f"sh -c 'echo {encoded} | base64 -d > /tmp/compose-{agent_id}.yml && "
-                f"cat /tmp/compose-{agent_id}.yml > /opt/ciris/agents/{agent_id}/docker-compose.yml'",
+            compose_file_path = f"/opt/ciris/agents/{agent_id}/docker-compose.yml"
+            docker_client.containers.run(
+                "alpine:latest",
+                f"sh -c 'echo {encoded} | base64 -d > {compose_file_path}'",
+                volumes={"/opt/ciris/agents": {"bind": "/opt/ciris/agents", "mode": "rw"}},
+                remove=True,
+                detach=False,
             )
 
     # Pull latest image
@@ -302,9 +309,17 @@ async def _handle_identity_update(
                 capture_output=True,
             )
         else:
-            # Remote: exec docker compose in nginx container (has docker socket)
-            docker_client.containers.get("ciris-nginx").exec_run(
-                f"sh -c 'cd /opt/ciris/agents/{agent_id} && docker compose up -d --force-recreate'",
+            # Remote: use docker:cli container with socket and agents directory mounted
+            compose_file_path = f"/opt/ciris/agents/{agent_id}/docker-compose.yml"
+            docker_client.containers.run(
+                "docker:cli",
+                f"docker compose -f {compose_file_path} up -d --force-recreate",
+                volumes={
+                    "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
+                    "/opt/ciris/agents": {"bind": "/opt/ciris/agents", "mode": "rw"},
+                },
+                remove=True,
+                detach=False,
             )
     except Exception as e:
         logger.error(f"Failed to start container: {e}")
@@ -356,8 +371,17 @@ async def _handle_restart(
                 capture_output=True,
             )
         else:
-            docker_client.containers.get("ciris-nginx").exec_run(
-                f"sh -c 'cd /opt/ciris/agents/{agent_id} && docker compose up -d --force-recreate'",
+            # Remote: use docker:cli container with socket and agents directory mounted
+            compose_file_path = f"/opt/ciris/agents/{agent_id}/docker-compose.yml"
+            docker_client.containers.run(
+                "docker:cli",
+                f"docker compose -f {compose_file_path} up -d --force-recreate",
+                volumes={
+                    "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
+                    "/opt/ciris/agents": {"bind": "/opt/ciris/agents", "mode": "rw"},
+                },
+                remove=True,
+                detach=False,
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Restart failed: {e}")
