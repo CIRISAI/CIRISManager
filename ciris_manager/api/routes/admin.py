@@ -443,7 +443,7 @@ async def _handle_pull_image(manager: Any, agent: Any) -> AdminActionResponse:
         success=True,
         action="pull-image",
         agent_id=agent_id,
-        message=f"Pulled latest image",
+        message="Pulled latest image",
         details={"image": image_name},
     )
 
