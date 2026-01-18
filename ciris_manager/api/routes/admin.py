@@ -183,17 +183,13 @@ async def execute_admin_action(
             return await _handle_pull_image(manager, agent)
 
         else:
-            raise HTTPException(
-                status_code=400, detail=f"Unknown action: {request.action}"
-            )
+            raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
 
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Failed to execute action {request.action} on {agent_id}")
-        raise HTTPException(
-            status_code=500, detail=f"Action failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Action failed: {str(e)}")
 
 
 async def _handle_identity_update(
@@ -230,9 +226,7 @@ async def _handle_identity_update(
     # Read current compose file
     if server_config.is_local:
         if not compose_path.exists():
-            raise HTTPException(
-                status_code=404, detail=f"Compose file not found: {compose_path}"
-            )
+            raise HTTPException(status_code=404, detail=f"Compose file not found: {compose_path}")
         with open(compose_path) as f:
             compose_config = yaml.safe_load(f)
     else:
@@ -258,9 +252,7 @@ async def _handle_identity_update(
             raise
         except Exception as e:
             logger.error(f"Failed to read remote compose file: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to read compose file: {e}"
-            )
+            raise HTTPException(status_code=500, detail=f"Failed to read compose file: {e}")
 
     # Find the service and update command
     services = compose_config.get("services", {}) if compose_config else {}
@@ -299,6 +291,7 @@ async def _handle_identity_update(
         else:
             # Remote: write via temporary container with host filesystem access
             import base64
+
             compose_yaml = yaml.dump(compose_config, default_flow_style=False, sort_keys=False)
             encoded = base64.b64encode(compose_yaml.encode()).decode()
             compose_file_path = f"/opt/ciris/agents/{agent_id}/docker-compose.yml"
@@ -331,6 +324,7 @@ async def _handle_identity_update(
     try:
         if server_config.is_local:
             import subprocess
+
             subprocess.run(
                 ["docker", "compose", "up", "-d", "--force-recreate"],
                 cwd=str(compose_dir),
@@ -367,9 +361,7 @@ async def _handle_identity_update(
     )
 
 
-async def _handle_restart(
-    manager: Any, agent: Any, params: Dict[str, Any]
-) -> AdminActionResponse:
+async def _handle_restart(manager: Any, agent: Any, params: Dict[str, Any]) -> AdminActionResponse:
     """Handle restart action."""
     agent_id = agent.agent_id
     server_id = agent.server_id
@@ -383,7 +375,11 @@ async def _handle_restart(
     if pull_image:
         try:
             container = docker_client.containers.get(container_name)
-            image_name = container.image.tags[0] if container.image.tags else "ghcr.io/cirisai/ciris-agent:latest"
+            image_name = (
+                container.image.tags[0]
+                if container.image.tags
+                else "ghcr.io/cirisai/ciris-agent:latest"
+            )
             docker_client.images.pull(image_name)
         except Exception as e:
             logger.warning(f"Failed to pull image: {e}")
@@ -393,6 +389,7 @@ async def _handle_restart(
         if server_config.is_local:
             compose_dir = Path(manager.config.manager.agents_directory) / agent_id
             import subprocess
+
             subprocess.run(
                 ["docker", "compose", "up", "-d", "--force-recreate"],
                 cwd=str(compose_dir),
@@ -434,7 +431,11 @@ async def _handle_pull_image(manager: Any, agent: Any) -> AdminActionResponse:
 
     try:
         container = docker_client.containers.get(container_name)
-        image_name = container.image.tags[0] if container.image.tags else "ghcr.io/cirisai/ciris-agent:latest"
+        image_name = (
+            container.image.tags[0]
+            if container.image.tags
+            else "ghcr.io/cirisai/ciris-agent:latest"
+        )
         docker_client.images.pull(image_name)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pull failed: {e}")
@@ -446,5 +447,3 @@ async def _handle_pull_image(manager: Any, agent: Any) -> AdminActionResponse:
         message="Pulled latest image",
         details={"image": image_name},
     )
-
-

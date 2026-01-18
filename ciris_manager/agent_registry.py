@@ -431,7 +431,8 @@ class AgentRegistry:
                 return agent
             # Search for any agent with matching agent_id and server_id
             matches = [
-                a for a in self.agents.values()
+                a
+                for a in self.agents.values()
                 if a.agent_id == agent_id and a.server_id == server_id
             ]
             if len(matches) == 1:
