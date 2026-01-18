@@ -32,18 +32,22 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id)
+            args: Parsed arguments (agent_id, server_id, occurrence_id)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
                 print(f"Fetching adapters for agent '{agent_id}'...")
 
-            result = ctx.client.list_adapter_manifests(agent_id)
+            result = ctx.client.list_adapter_manifests(
+                agent_id, server_id=server_id, occurrence_id=occurrence_id
+            )
             adapters = result.get("adapters", [])
 
             if not adapters:
@@ -90,18 +94,22 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id)
+            args: Parsed arguments (agent_id, server_id, occurrence_id)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
                 print(f"Fetching adapter types for agent '{agent_id}'...")
 
-            result = ctx.client.list_adapter_types(agent_id)
+            result = ctx.client.list_adapter_types(
+                agent_id, server_id=server_id, occurrence_id=occurrence_id
+            )
 
             output = formatter.format_output(result, ctx.output_format)
             print(output)
@@ -132,7 +140,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_id)
+            args: Parsed arguments (agent_id, adapter_id, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -140,11 +148,15 @@ class AdapterCommands:
         try:
             agent_id = args.agent_id
             adapter_id = args.adapter_id
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
                 print(f"Fetching adapter '{adapter_id}' on agent '{agent_id}'...")
 
-            result = ctx.client.get_adapter(agent_id, adapter_id)
+            result = ctx.client.get_adapter(
+                agent_id, adapter_id, server_id=server_id, occurrence_id=occurrence_id
+            )
 
             output = formatter.format_output(result, ctx.output_format)
             print(output)
@@ -175,7 +187,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_type)
+            args: Parsed arguments (agent_id, adapter_type, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -183,11 +195,15 @@ class AdapterCommands:
         try:
             agent_id = args.agent_id
             adapter_type = args.adapter_type
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
                 print(f"Fetching manifest for '{adapter_type}' on agent '{agent_id}'...")
 
-            result = ctx.client.get_adapter_manifest(agent_id, adapter_type)
+            result = ctx.client.get_adapter_manifest(
+                agent_id, adapter_type, server_id=server_id, occurrence_id=occurrence_id
+            )
 
             output = formatter.format_output(result, ctx.output_format)
             print(output)
@@ -218,7 +234,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_type, config_file, no_auto_start)
+            args: Parsed arguments (agent_id, adapter_type, config_file, no_auto_start, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -228,6 +244,8 @@ class AdapterCommands:
             adapter_type = args.adapter_type
             auto_start = not getattr(args, "no_auto_start", False)
             adapter_id = getattr(args, "adapter_id", None)
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             # Load config from file if provided
             config: Dict[str, Any] = {}
@@ -252,6 +270,8 @@ class AdapterCommands:
                 config=config if config else None,
                 auto_start=auto_start,
                 adapter_id=adapter_id,
+                server_id=server_id,
+                occurrence_id=occurrence_id,
             )
 
             if not ctx.quiet:
@@ -286,7 +306,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_id)
+            args: Parsed arguments (agent_id, adapter_id, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -294,11 +314,15 @@ class AdapterCommands:
         try:
             agent_id = args.agent_id
             adapter_id = args.adapter_id
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
                 print(f"Unloading adapter '{adapter_id}' from agent '{agent_id}'...")
 
-            result = ctx.client.unload_adapter(agent_id, adapter_id)
+            result = ctx.client.unload_adapter(
+                agent_id, adapter_id, server_id=server_id, occurrence_id=occurrence_id
+            )
 
             if not ctx.quiet:
                 print(f"Adapter '{adapter_id}' unloaded successfully")
@@ -333,7 +357,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_id, config_file, no_auto_start)
+            args: Parsed arguments (agent_id, adapter_id, config_file, no_auto_start, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -342,6 +366,8 @@ class AdapterCommands:
             agent_id = args.agent_id
             adapter_id = args.adapter_id
             auto_start = not getattr(args, "no_auto_start", False)
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             # Load config from file if provided
             config: Dict[str, Any] = {}
@@ -365,6 +391,8 @@ class AdapterCommands:
                 adapter_id,
                 config=config if config else None,
                 auto_start=auto_start,
+                server_id=server_id,
+                occurrence_id=occurrence_id,
             )
 
             if not ctx.quiet:
@@ -399,18 +427,22 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id)
+            args: Parsed arguments (agent_id, server_id, occurrence_id)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
                 print(f"Fetching adapter configurations for agent '{agent_id}'...")
 
-            result = ctx.client.get_adapter_configs(agent_id)
+            result = ctx.client.get_adapter_configs(
+                agent_id, server_id=server_id, occurrence_id=occurrence_id
+            )
             configs = result.get("configs", {})
 
             if not configs:
@@ -447,7 +479,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_type, force)
+            args: Parsed arguments (agent_id, adapter_type, force, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -456,6 +488,8 @@ class AdapterCommands:
             agent_id = args.agent_id
             adapter_type = args.adapter_type
             force = getattr(args, "force", False)
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not force:
                 confirm = input(
@@ -468,7 +502,9 @@ class AdapterCommands:
             if not ctx.quiet:
                 print(f"Removing configuration for '{adapter_type}'...")
 
-            result = ctx.client.remove_adapter_config(agent_id, adapter_type)
+            result = ctx.client.remove_adapter_config(
+                agent_id, adapter_type, server_id=server_id, occurrence_id=occurrence_id
+            )
 
             if not ctx.quiet:
                 print(f"Configuration for '{adapter_type}' removed")
@@ -510,7 +546,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_type, resume)
+            args: Parsed arguments (agent_id, adapter_type, resume, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -519,13 +555,19 @@ class AdapterCommands:
             agent_id = args.agent_id
             adapter_type = args.adapter_type
             resume_from = getattr(args, "resume", None)
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
                 action = "Resuming" if resume_from else "Starting"
                 print(f"{action} wizard for '{adapter_type}' on agent '{agent_id}'...")
 
             result = ctx.client.start_adapter_wizard(
-                agent_id, adapter_type, resume_from=resume_from
+                agent_id,
+                adapter_type,
+                resume_from=resume_from,
+                server_id=server_id,
+                occurrence_id=occurrence_id,
             )
 
             if not ctx.quiet:
@@ -567,7 +609,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_type, session_id, step_id, data, skip)
+            args: Parsed arguments (agent_id, adapter_type, session_id, step_id, data, skip, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -578,6 +620,8 @@ class AdapterCommands:
             session_id = args.session_id
             step_id = args.step_id
             action = "skip" if getattr(args, "skip", False) else "execute"
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             # Parse data from --data arguments
             data: Dict[str, Any] = {}
@@ -613,7 +657,14 @@ class AdapterCommands:
                 print(f"{action_str} step '{step_id}'...")
 
             result = ctx.client.execute_wizard_step(
-                agent_id, adapter_type, session_id, step_id, data=data, action=action
+                agent_id,
+                adapter_type,
+                session_id,
+                step_id,
+                data=data,
+                action=action,
+                server_id=server_id,
+                occurrence_id=occurrence_id,
             )
 
             if not ctx.quiet:
@@ -664,7 +715,7 @@ class AdapterCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, adapter_type, session_id, no_confirm)
+            args: Parsed arguments (agent_id, adapter_type, session_id, no_confirm, server_id, occurrence_id)
 
         Returns:
             Exit code
@@ -674,12 +725,19 @@ class AdapterCommands:
             adapter_type = args.adapter_type
             session_id = args.session_id
             confirm = not getattr(args, "no_confirm", False)
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
                 print(f"Completing wizard for '{adapter_type}'...")
 
             result = ctx.client.complete_adapter_wizard(
-                agent_id, adapter_type, session_id, confirm=confirm
+                agent_id,
+                adapter_type,
+                session_id,
+                confirm=confirm,
+                server_id=server_id,
+                occurrence_id=occurrence_id,
             )
 
             if not ctx.quiet:

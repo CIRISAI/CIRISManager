@@ -425,17 +425,20 @@ def setup_adapter_parser(subparsers):
         "list", help="List all available adapters with their status"
     )
     list_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(list_parser)
 
     # adapter types
     types_parser = adapter_subparsers.add_parser(
         "types", help="List available adapter types on an agent"
     )
     types_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(types_parser)
 
     # adapter get
     get_parser = adapter_subparsers.add_parser("get", help="Get status of a specific adapter")
     get_parser.add_argument("agent_id", help="Agent ID")
     get_parser.add_argument("adapter_id", help="Adapter ID")
+    add_multi_occurrence_args(get_parser)
 
     # adapter manifest
     manifest_parser = adapter_subparsers.add_parser(
@@ -443,6 +446,7 @@ def setup_adapter_parser(subparsers):
     )
     manifest_parser.add_argument("agent_id", help="Agent ID")
     manifest_parser.add_argument("adapter_type", help="Adapter type")
+    add_multi_occurrence_args(manifest_parser)
 
     # adapter load
     load_parser = adapter_subparsers.add_parser("load", help="Load/create an adapter on an agent")
@@ -453,6 +457,7 @@ def setup_adapter_parser(subparsers):
     load_parser.add_argument(
         "--no-auto-start", action="store_true", help="Don't start adapter immediately"
     )
+    add_multi_occurrence_args(load_parser)
 
     # adapter unload
     unload_parser = adapter_subparsers.add_parser(
@@ -460,6 +465,7 @@ def setup_adapter_parser(subparsers):
     )
     unload_parser.add_argument("agent_id", help="Agent ID")
     unload_parser.add_argument("adapter_id", help="Adapter ID to unload")
+    add_multi_occurrence_args(unload_parser)
 
     # adapter reload
     reload_parser = adapter_subparsers.add_parser(
@@ -471,12 +477,14 @@ def setup_adapter_parser(subparsers):
     reload_parser.add_argument(
         "--no-auto-start", action="store_true", help="Don't start adapter after reload"
     )
+    add_multi_occurrence_args(reload_parser)
 
     # adapter configs
     configs_parser = adapter_subparsers.add_parser(
         "configs", help="Get all persisted adapter configurations"
     )
     configs_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(configs_parser)
 
     # adapter remove-config
     remove_config_parser = adapter_subparsers.add_parser(
@@ -485,6 +493,7 @@ def setup_adapter_parser(subparsers):
     remove_config_parser.add_argument("agent_id", help="Agent ID")
     remove_config_parser.add_argument("adapter_type", help="Adapter type")
     remove_config_parser.add_argument("--force", action="store_true", help="Skip confirmation")
+    add_multi_occurrence_args(remove_config_parser)
 
     # adapter wizard-start
     wizard_start_parser = adapter_subparsers.add_parser(
@@ -493,6 +502,7 @@ def setup_adapter_parser(subparsers):
     wizard_start_parser.add_argument("agent_id", help="Agent ID")
     wizard_start_parser.add_argument("adapter_type", help="Adapter type to configure")
     wizard_start_parser.add_argument("--resume", help="Session ID to resume")
+    add_multi_occurrence_args(wizard_start_parser)
 
     # adapter wizard-step
     wizard_step_parser = adapter_subparsers.add_parser("wizard-step", help="Execute a wizard step")
@@ -507,6 +517,7 @@ def setup_adapter_parser(subparsers):
     wizard_step_parser.add_argument(
         "--skip", action="store_true", help="Skip this step (if optional)"
     )
+    add_multi_occurrence_args(wizard_step_parser)
 
     # adapter wizard-complete
     wizard_complete_parser = adapter_subparsers.add_parser(
@@ -518,6 +529,7 @@ def setup_adapter_parser(subparsers):
     wizard_complete_parser.add_argument(
         "--no-confirm", action="store_true", help="Don't require confirmation"
     )
+    add_multi_occurrence_args(wizard_complete_parser)
 
 
 def setup_llm_parser(subparsers):
@@ -532,43 +544,43 @@ def setup_llm_parser(subparsers):
     # Common arguments for multi-instance/multi-server support
     def add_common_args(parser):
         parser.add_argument("--server", dest="server_id", help="Server ID for multi-server")
-        parser.add_argument("--occurrence", dest="occurrence_id", help="Occurrence ID for multi-instance")
+        parser.add_argument(
+            "--occurrence", dest="occurrence_id", help="Occurrence ID for multi-instance"
+        )
 
     # llm get
-    get_parser = llm_subparsers.add_parser(
-        "get", help="Get LLM configuration for an agent"
-    )
+    get_parser = llm_subparsers.add_parser("get", help="Get LLM configuration for an agent")
     get_parser.add_argument("agent_id", help="Agent ID")
     add_common_args(get_parser)
 
     # llm set
-    set_parser = llm_subparsers.add_parser(
-        "set", help="Set LLM configuration for an agent"
-    )
+    set_parser = llm_subparsers.add_parser("set", help="Set LLM configuration for an agent")
     set_parser.add_argument("agent_id", help="Agent ID")
     set_parser.add_argument(
-        "--provider", required=True,
+        "--provider",
+        required=True,
         choices=["openai", "together", "groq", "openrouter", "custom"],
-        help="Primary LLM provider"
+        help="Primary LLM provider",
     )
     set_parser.add_argument("--api-key", required=True, dest="api_key", help="Primary API key")
     set_parser.add_argument("--model", required=True, help="Primary model identifier")
     set_parser.add_argument("--api-base", dest="api_base", help="Primary custom API base URL")
     set_parser.add_argument(
-        "--backup-provider", dest="backup_provider",
+        "--backup-provider",
+        dest="backup_provider",
         choices=["openai", "together", "groq", "openrouter", "custom"],
-        help="Backup LLM provider"
+        help="Backup LLM provider",
     )
     set_parser.add_argument("--backup-api-key", dest="backup_api_key", help="Backup API key")
     set_parser.add_argument("--backup-model", dest="backup_model", help="Backup model identifier")
-    set_parser.add_argument("--backup-api-base", dest="backup_api_base", help="Backup custom API base URL")
     set_parser.add_argument(
-        "--no-validate", action="store_true",
-        help="Skip API key validation before saving"
+        "--backup-api-base", dest="backup_api_base", help="Backup custom API base URL"
     )
     set_parser.add_argument(
-        "--no-restart", action="store_true",
-        help="Don't restart container after update"
+        "--no-validate", action="store_true", help="Skip API key validation before saving"
+    )
+    set_parser.add_argument(
+        "--no-restart", action="store_true", help="Don't restart container after update"
     )
     add_common_args(set_parser)
 
@@ -578,8 +590,7 @@ def setup_llm_parser(subparsers):
     )
     delete_parser.add_argument("agent_id", help="Agent ID")
     delete_parser.add_argument(
-        "--no-restart", action="store_true",
-        help="Don't restart container after deletion"
+        "--no-restart", action="store_true", help="Don't restart container after deletion"
     )
     add_common_args(delete_parser)
 
@@ -589,11 +600,14 @@ def setup_llm_parser(subparsers):
     )
     validate_parser.add_argument("agent_id", help="Agent ID (for auth context)")
     validate_parser.add_argument(
-        "--provider", required=True,
+        "--provider",
+        required=True,
         choices=["openai", "together", "groq", "openrouter", "custom"],
-        help="LLM provider to validate"
+        help="LLM provider to validate",
     )
-    validate_parser.add_argument("--api-key", required=True, dest="api_key", help="API key to validate")
+    validate_parser.add_argument(
+        "--api-key", required=True, dest="api_key", help="API key to validate"
+    )
     validate_parser.add_argument("--model", required=True, help="Model identifier to check")
     validate_parser.add_argument("--api-base", dest="api_base", help="Custom API base URL")
     add_common_args(validate_parser)
@@ -616,36 +630,24 @@ def setup_admin_parser(subparsers):
     add_multi_occurrence_args(list_parser)
 
     # admin execute
-    exec_parser = admin_subparsers.add_parser(
-        "execute", help="Execute an admin action"
-    )
+    exec_parser = admin_subparsers.add_parser("execute", help="Execute an admin action")
     exec_parser.add_argument("agent_id", help="Agent ID")
     exec_parser.add_argument(
-        "action",
-        choices=["identity-update", "restart", "pull-image"],
-        help="Action to execute"
+        "action", choices=["identity-update", "restart", "pull-image"], help="Action to execute"
     )
-    exec_parser.add_argument(
-        "--params", help="Action parameters as JSON string"
-    )
-    exec_parser.add_argument(
-        "--force", action="store_true", help="Force execution"
-    )
+    exec_parser.add_argument("--params", help="Action parameters as JSON string")
+    exec_parser.add_argument("--force", action="store_true", help="Force execution")
     add_multi_occurrence_args(exec_parser)
 
     # admin identity-update (convenience command)
     identity_parser = admin_subparsers.add_parser(
         "identity-update",
         help="Trigger identity update for an agent",
-        description="Modifies compose to add --identity-update flag and restarts container"
+        description="Modifies compose to add --identity-update flag and restarts container",
     )
     identity_parser.add_argument("agent_id", help="Agent ID")
-    identity_parser.add_argument(
-        "--template", help="Override template name"
-    )
-    identity_parser.add_argument(
-        "--force", action="store_true", help="Force even if agent is busy"
-    )
+    identity_parser.add_argument("--template", help="Override template name")
+    identity_parser.add_argument("--force", action="store_true", help="Force even if agent is busy")
     add_multi_occurrence_args(identity_parser)
 
     # admin pull-image (convenience command)
@@ -665,11 +667,6 @@ def setup_debug_parser(subparsers):
     )
     debug_subparsers = debug_parser.add_subparsers(dest="debug_command", help="Debug commands")
 
-    # Common arguments for all debug commands
-    def add_common_args(parser):
-        parser.add_argument("--server", help="Server ID for multi-server deployments")
-        parser.add_argument("--occurrence", help="Occurrence ID for multi-instance agents")
-
     # debug tasks
     tasks_parser = debug_subparsers.add_parser("tasks", help="List tasks for an agent")
     tasks_parser.add_argument("agent_id", help="Agent ID")
@@ -679,13 +676,13 @@ def setup_debug_parser(subparsers):
     tasks_parser.add_argument(
         "--limit", type=int, default=50, help="Maximum tasks to return (default: 50)"
     )
-    add_common_args(tasks_parser)
+    add_multi_occurrence_args(tasks_parser)
 
     # debug task
     task_parser = debug_subparsers.add_parser("task", help="Get detailed task information")
     task_parser.add_argument("agent_id", help="Agent ID")
     task_parser.add_argument("task_id", help="Task ID")
-    add_common_args(task_parser)
+    add_multi_occurrence_args(task_parser)
 
     # debug thoughts
     thoughts_parser = debug_subparsers.add_parser("thoughts", help="List thoughts for an agent")
@@ -695,24 +692,24 @@ def setup_debug_parser(subparsers):
     thoughts_parser.add_argument(
         "--limit", type=int, default=50, help="Maximum thoughts to return (default: 50)"
     )
-    add_common_args(thoughts_parser)
+    add_multi_occurrence_args(thoughts_parser)
 
     # debug thought
     thought_parser = debug_subparsers.add_parser("thought", help="Get detailed thought information")
     thought_parser.add_argument("agent_id", help="Agent ID")
     thought_parser.add_argument("thought_id", help="Thought ID (can be partial prefix)")
-    add_common_args(thought_parser)
+    add_multi_occurrence_args(thought_parser)
 
     # debug query
     query_parser = debug_subparsers.add_parser("query", help="Execute custom SQL query (read-only)")
     query_parser.add_argument("agent_id", help="Agent ID")
     query_parser.add_argument("query", help="SQL SELECT query to execute")
-    add_common_args(query_parser)
+    add_multi_occurrence_args(query_parser)
 
     # debug schema
     schema_parser = debug_subparsers.add_parser("schema", help="Get database schema")
     schema_parser.add_argument("agent_id", help="Agent ID")
-    add_common_args(schema_parser)
+    add_multi_occurrence_args(schema_parser)
 
 
 def create_parser() -> argparse.ArgumentParser:

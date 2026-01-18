@@ -705,28 +705,54 @@ class CIRISManagerClient:
         response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters")
         return response.json()
 
-    def list_adapter_types(self, agent_id: str) -> Dict[str, Any]:
+    def list_adapter_types(
+        self,
+        agent_id: str,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         List available adapter types on an agent.
 
         Args:
             agent_id: Agent identifier
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with available adapter types
         """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
-        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters/types")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/adapters/types",
+            params=params if params else None,
+        )
         return response.json()
 
-    def get_adapter(self, agent_id: str, adapter_id: str) -> Dict[str, Any]:
+    def get_adapter(
+        self,
+        agent_id: str,
+        adapter_id: str,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Get status of a specific adapter.
 
         Args:
             agent_id: Agent identifier
             adapter_id: Adapter ID
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with adapter status
@@ -734,7 +760,18 @@ class CIRISManagerClient:
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
         safe_adapter_id = quote(adapter_id, safe="")
-        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters/{safe_adapter_id}")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_adapter_id}",
+            params=params if params else None,
+        )
         return response.json()
 
     def load_adapter(
@@ -744,6 +781,8 @@ class CIRISManagerClient:
         config: Optional[Dict[str, Any]] = None,
         auto_start: bool = True,
         adapter_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Load/create a new adapter on an agent.
@@ -754,6 +793,8 @@ class CIRISManagerClient:
             config: Adapter configuration
             auto_start: Whether to start adapter immediately
             adapter_id: Optional custom adapter ID
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with load result
@@ -766,11 +807,20 @@ class CIRISManagerClient:
         if config:
             payload["config"] = config
 
-        endpoint = f"/manager/v1/agents/{safe_id}/adapters/{safe_type}"
+        params = {}
         if adapter_id:
-            endpoint = f"{endpoint}?adapter_id={quote(adapter_id, safe='')}"
+            params["adapter_id"] = adapter_id
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
 
-        response = self._request("POST", endpoint, json=payload)
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_type}",
+            params=params if params else None,
+            json=payload,
+        )
         return response.json()
 
     def reload_adapter(
@@ -779,6 +829,8 @@ class CIRISManagerClient:
         adapter_id: str,
         config: Optional[Dict[str, Any]] = None,
         auto_start: bool = True,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Reload an adapter with new configuration.
@@ -788,6 +840,8 @@ class CIRISManagerClient:
             adapter_id: Adapter ID
             config: New configuration
             auto_start: Whether to start adapter after reload
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with reload result
@@ -800,20 +854,35 @@ class CIRISManagerClient:
         if config:
             payload["config"] = config
 
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
         response = self._request(
             "PUT",
             f"/manager/v1/agents/{safe_id}/adapters/{safe_adapter_id}/reload",
+            params=params if params else None,
             json=payload,
         )
         return response.json()
 
-    def unload_adapter(self, agent_id: str, adapter_id: str) -> Dict[str, Any]:
+    def unload_adapter(
+        self,
+        agent_id: str,
+        adapter_id: str,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Unload/stop an adapter on an agent.
 
         Args:
             agent_id: Agent identifier
             adapter_id: Adapter ID
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with unload result
@@ -821,12 +890,26 @@ class CIRISManagerClient:
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
         safe_adapter_id = quote(adapter_id, safe="")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
         response = self._request(
-            "DELETE", f"/manager/v1/agents/{safe_id}/adapters/{safe_adapter_id}"
+            "DELETE",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_adapter_id}",
+            params=params if params else None,
         )
         return response.json()
 
-    def list_adapter_manifests(self, agent_id: str) -> Dict[str, Any]:
+    def list_adapter_manifests(
+        self,
+        agent_id: str,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         List all available adapters with their status.
 
@@ -834,22 +917,43 @@ class CIRISManagerClient:
 
         Args:
             agent_id: Agent identifier
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with adapters list
         """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
-        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters/manifests")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/adapters/manifests",
+            params=params if params else None,
+        )
         return response.json()
 
-    def get_adapter_manifest(self, agent_id: str, adapter_type: str) -> Dict[str, Any]:
+    def get_adapter_manifest(
+        self,
+        agent_id: str,
+        adapter_type: str,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Get full manifest for a specific adapter type.
 
         Args:
             agent_id: Agent identifier
             adapter_type: Type of adapter
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with adapter manifest
@@ -857,27 +961,60 @@ class CIRISManagerClient:
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
         safe_type = quote(adapter_type, safe="")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
         response = self._request(
-            "GET", f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/manifest"
+            "GET",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/manifest",
+            params=params if params else None,
         )
         return response.json()
 
-    def get_adapter_configs(self, agent_id: str) -> Dict[str, Any]:
+    def get_adapter_configs(
+        self,
+        agent_id: str,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Get all persisted adapter configurations for an agent.
 
         Args:
             agent_id: Agent identifier
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with configs per adapter type
         """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
-        response = self._request("GET", f"/manager/v1/agents/{safe_id}/adapters/configs")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/adapters/configs",
+            params=params if params else None,
+        )
         return response.json()
 
-    def remove_adapter_config(self, agent_id: str, adapter_type: str) -> Dict[str, Any]:
+    def remove_adapter_config(
+        self,
+        agent_id: str,
+        adapter_type: str,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Remove adapter configuration from registry.
 
@@ -886,6 +1023,8 @@ class CIRISManagerClient:
         Args:
             agent_id: Agent identifier
             adapter_type: Type of adapter
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with removal result
@@ -893,8 +1032,17 @@ class CIRISManagerClient:
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
         safe_type = quote(adapter_type, safe="")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
         response = self._request(
-            "DELETE", f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/config"
+            "DELETE",
+            f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/config",
+            params=params if params else None,
         )
         return response.json()
 
@@ -903,6 +1051,8 @@ class CIRISManagerClient:
         agent_id: str,
         adapter_type: str,
         resume_from: Optional[str] = None,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Start a wizard session for configuring an adapter.
@@ -911,6 +1061,8 @@ class CIRISManagerClient:
             agent_id: Agent identifier
             adapter_type: Type of adapter to configure
             resume_from: Optional session ID to resume
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with session info (session_id, current_step, steps_remaining, etc.)
@@ -919,6 +1071,12 @@ class CIRISManagerClient:
         safe_id = quote(agent_id, safe="")
         safe_type = quote(adapter_type, safe="")
 
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
         payload: Dict[str, Any] = {}
         if resume_from:
             payload["resume_from"] = resume_from
@@ -926,6 +1084,7 @@ class CIRISManagerClient:
         response = self._request(
             "POST",
             f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/wizard/start",
+            params=params if params else None,
             json=payload,
         )
         return response.json()
@@ -938,6 +1097,8 @@ class CIRISManagerClient:
         step_id: str,
         data: Optional[Dict[str, Any]] = None,
         action: str = "execute",
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a wizard step.
@@ -949,6 +1110,8 @@ class CIRISManagerClient:
             step_id: Step ID to execute
             data: Step input data
             action: "execute" or "skip"
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with step result
@@ -957,6 +1120,12 @@ class CIRISManagerClient:
         safe_id = quote(agent_id, safe="")
         safe_type = quote(adapter_type, safe="")
         safe_session = quote(session_id, safe="")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
 
         payload = {
             "step_id": step_id,
@@ -967,6 +1136,7 @@ class CIRISManagerClient:
         response = self._request(
             "POST",
             f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/wizard/{safe_session}/step",
+            params=params if params else None,
             json=payload,
         )
         return response.json()
@@ -977,6 +1147,8 @@ class CIRISManagerClient:
         adapter_type: str,
         session_id: str,
         confirm: bool = True,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Complete the wizard and apply configuration.
@@ -986,6 +1158,8 @@ class CIRISManagerClient:
             adapter_type: Type of adapter
             session_id: Wizard session ID
             confirm: Must be True to confirm completion
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
 
         Returns:
             Dict with completion result
@@ -995,9 +1169,16 @@ class CIRISManagerClient:
         safe_type = quote(adapter_type, safe="")
         safe_session = quote(session_id, safe="")
 
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
         response = self._request(
             "POST",
             f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/wizard/{safe_session}/complete",
+            params=params if params else None,
             json={"confirm": confirm},
         )
         return response.json()
