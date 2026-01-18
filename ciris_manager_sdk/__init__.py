@@ -124,12 +124,38 @@ class CIRISManagerClient:
         data = response.json()
         return data.get("agents", data) if isinstance(data, dict) else data
 
-    def get_agent(self, agent_id: str) -> Dict[str, Any]:
-        """Get details for a specific agent."""
+    def get_agent(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get details for a specific agent.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
+
+        Returns:
+            Agent details dict
+        """
         self._validate_agent_id(agent_id)
         # Use URL encoding to prevent injection
         safe_id = quote(agent_id, safe="")
-        response = self._request("GET", f"/manager/v1/agents/{safe_id}")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}",
+            params=params if params else None,
+        )
         return response.json()
 
     def get_agent_config(self, agent_id: str) -> Dict[str, Any]:
@@ -218,33 +244,135 @@ class CIRISManagerClient:
         response = self._request("DELETE", f"/manager/v1/agents/{safe_id}")
         return response.json()
 
-    def start_agent(self, agent_id: str) -> Dict[str, Any]:
-        """Start an agent."""
-        self._validate_agent_id(agent_id)
-        safe_id = quote(agent_id, safe="")
-        response = self._request("POST", f"/manager/v1/agents/{safe_id}/start")
-        return response.json()
+    def start_agent(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Start an agent.
 
-    def stop_agent(self, agent_id: str) -> Dict[str, Any]:
-        """Stop an agent."""
-        self._validate_agent_id(agent_id)
-        safe_id = quote(agent_id, safe="")
-        response = self._request("POST", f"/manager/v1/agents/{safe_id}/stop")
-        return response.json()
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
-    def restart_agent(self, agent_id: str) -> Dict[str, Any]:
-        """Restart an agent."""
+        Returns:
+            Start result dict
+        """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
-        response = self._request("POST", f"/manager/v1/agents/{safe_id}/restart")
-        return response.json()
 
-    def get_agent_logs(self, agent_id: str, lines: int = 100) -> str:
-        """Get agent logs."""
-        self._validate_agent_id(agent_id)
-        safe_id = quote(agent_id, safe="")
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
         response = self._request(
-            "GET", f"/manager/v1/agents/{safe_id}/logs", params={"lines": lines}
+            "POST",
+            f"/manager/v1/agents/{safe_id}/start",
+            params=params if params else None,
+        )
+        return response.json()
+
+    def stop_agent(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Stop an agent.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
+
+        Returns:
+            Stop result dict
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/stop",
+            params=params if params else None,
+        )
+        return response.json()
+
+    def restart_agent(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Restart an agent.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
+
+        Returns:
+            Restart result dict
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/restart",
+            params=params if params else None,
+        )
+        return response.json()
+
+    def get_agent_logs(
+        self,
+        agent_id: str,
+        lines: int = 100,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> str:
+        """
+        Get agent logs.
+
+        Args:
+            agent_id: Agent identifier
+            lines: Number of log lines to retrieve
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
+
+        Returns:
+            Log output as string
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params: Dict[str, Any] = {"lines": lines}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "GET", f"/manager/v1/agents/{safe_id}/logs", params=params
         )
         return response.text
 
@@ -486,22 +614,46 @@ class CIRISManagerClient:
 
     # Maintenance Mode
 
-    def get_maintenance_status(self, agent_id: str) -> Dict[str, Any]:
+    def get_maintenance_status(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Get maintenance mode status for an agent.
 
         Args:
             agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Dict with agent_id, do_not_autostart, and maintenance_mode fields
         """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
-        response = self._request("GET", f"/manager/v1/agents/{safe_id}/maintenance")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/maintenance",
+            params=params if params else None,
+        )
         return response.json()
 
-    def set_maintenance_mode(self, agent_id: str, enable: bool = True) -> Dict[str, Any]:
+    def set_maintenance_mode(
+        self,
+        agent_id: str,
+        enable: bool = True,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Enable or disable maintenance mode for an agent.
 
@@ -512,14 +664,28 @@ class CIRISManagerClient:
         Args:
             agent_id: Agent identifier
             enable: True to enable maintenance mode, False to disable
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Dict with status, agent_id, do_not_autostart, and message
         """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
         payload = {"do_not_autostart": enable}
-        response = self._request("POST", f"/manager/v1/agents/{safe_id}/maintenance", json=payload)
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/maintenance",
+            params=params if params else None,
+            json=payload,
+        )
         return response.json()
 
     # Adapter Management
@@ -1038,7 +1204,12 @@ class CIRISManagerClient:
 
     # Admin Actions (Infrastructure Operations)
 
-    def list_admin_actions(self, agent_id: str) -> Dict[str, Any]:
+    def list_admin_actions(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         List available admin actions for an agent.
 
@@ -1047,13 +1218,26 @@ class CIRISManagerClient:
 
         Args:
             agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Dict with agent_id and available actions list
         """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
-        response = self._request("GET", f"/manager/v1/agents/{safe_id}/admin/actions")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/admin/actions",
+            params=params if params else None,
+        )
         return response.json()
 
     def execute_admin_action(
@@ -1062,6 +1246,8 @@ class CIRISManagerClient:
         action: str,
         params: Optional[Dict[str, Any]] = None,
         force: bool = False,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute an admin action on an agent.
@@ -1076,12 +1262,21 @@ class CIRISManagerClient:
             action: Action to execute (identity-update, restart, pull-image)
             params: Optional action parameters
             force: Force execution even if agent is busy
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Dict with success, action, agent_id, message, and details
         """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
+
+        query_params = {}
+        if occurrence_id:
+            query_params["occurrence_id"] = occurrence_id
+        if server_id:
+            query_params["server_id"] = server_id
+
         payload = {
             "action": action,
             "force": force,
@@ -1090,7 +1285,10 @@ class CIRISManagerClient:
             payload["params"] = params
 
         response = self._request(
-            "POST", f"/manager/v1/agents/{safe_id}/admin/actions", json=payload
+            "POST",
+            f"/manager/v1/agents/{safe_id}/admin/actions",
+            params=query_params if query_params else None,
+            json=payload,
         )
         return response.json()
 
@@ -1099,6 +1297,8 @@ class CIRISManagerClient:
         agent_id: str,
         template: Optional[str] = None,
         force: bool = False,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Trigger identity update for an agent.
@@ -1111,6 +1311,8 @@ class CIRISManagerClient:
             agent_id: Agent identifier
             template: Optional template name override
             force: Force even if agent is busy
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Dict with action result
@@ -1119,20 +1321,37 @@ class CIRISManagerClient:
         if template:
             params["template"] = template
         return self.execute_admin_action(
-            agent_id, "identity-update", params=params if params else None, force=force
+            agent_id,
+            "identity-update",
+            params=params if params else None,
+            force=force,
+            occurrence_id=occurrence_id,
+            server_id=server_id,
         )
 
-    def pull_agent_image(self, agent_id: str) -> Dict[str, Any]:
+    def pull_agent_image(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Pull latest Docker image for an agent without restarting.
 
         Args:
             agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
 
         Returns:
             Dict with pull result including image name
         """
-        return self.execute_admin_action(agent_id, "pull-image")
+        return self.execute_admin_action(
+            agent_id,
+            "pull-image",
+            occurrence_id=occurrence_id,
+            server_id=server_id,
+        )
 
     # Utility Methods
 

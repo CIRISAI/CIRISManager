@@ -55,7 +55,12 @@ class AdminActionResponse(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
-async def _get_agent_client_info(manager: Any, agent_id: str) -> tuple[str, Dict[str, str], Any]:
+async def _get_agent_client_info(
+    manager: Any,
+    agent_id: str,
+    occurrence_id: Optional[str] = None,
+    server_id: Optional[str] = None,
+) -> tuple[str, Dict[str, str], Any]:
     """Get the base URL and auth headers for an agent."""
     from ciris_manager.docker_discovery import DockerAgentDiscovery
     from ciris_manager.agent_auth import get_agent_auth
@@ -64,10 +69,26 @@ async def _get_agent_client_info(manager: Any, agent_id: str) -> tuple[str, Dict
         manager.agent_registry, docker_client_manager=manager.docker_client
     )
     agents = discovery.discover_agents()
-    agent = next((a for a in agents if a.agent_id == agent_id), None)
+
+    # Find matching agent - check occurrence_id and server_id if provided
+    agent = None
+    for a in agents:
+        if a.agent_id != agent_id:
+            continue
+        if occurrence_id and getattr(a, "occurrence_id", None) != occurrence_id:
+            continue
+        if server_id and getattr(a, "server_id", None) != server_id:
+            continue
+        agent = a
+        break
 
     if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        detail = f"Agent {agent_id} not found"
+        if occurrence_id:
+            detail += f" (occurrence_id={occurrence_id})"
+        if server_id:
+            detail += f" (server_id={server_id})"
+        raise HTTPException(status_code=404, detail=detail)
 
     try:
         auth = get_agent_auth()
@@ -94,12 +115,16 @@ async def _get_agent_client_info(manager: Any, agent_id: str) -> tuple[str, Dict
 @router.get("/agents/{agent_id}/admin/actions")
 async def list_available_actions(
     agent_id: str,
+    occurrence_id: Optional[str] = None,
+    server_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
     """List available admin actions for an agent."""
     # Verify agent exists
-    _, _, agent = await _get_agent_client_info(manager, agent_id)
+    _, _, agent = await _get_agent_client_info(
+        manager, agent_id, occurrence_id=occurrence_id, server_id=server_id
+    )
 
     actions = [
         {
@@ -129,6 +154,8 @@ async def list_available_actions(
 async def execute_admin_action(
     agent_id: str,
     request: AdminActionRequest,
+    occurrence_id: Optional[str] = None,
+    server_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> AdminActionResponse:
@@ -140,7 +167,9 @@ async def execute_admin_action(
 
     Agent-side actions (pause, resume, etc.) are proxied to the agent's API.
     """
-    base_url, headers, agent = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, agent = await _get_agent_client_info(
+        manager, agent_id, occurrence_id=occurrence_id, server_id=server_id
+    )
     params = request.params or {}
 
     try:

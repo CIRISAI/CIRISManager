@@ -127,6 +127,20 @@ def get_api_url() -> str:
     return os.environ.get("CIRIS_MANAGER_API_URL", "https://agents.ciris.ai")
 
 
+def add_multi_occurrence_args(parser):
+    """Add --server-id and --occurrence-id arguments for multi-occurrence agent support."""
+    parser.add_argument(
+        "--server-id",
+        dest="server_id",
+        help="Server ID for multi-server agents (e.g., 'main', 'scout1', 'scout2')",
+    )
+    parser.add_argument(
+        "--occurrence-id",
+        dest="occurrence_id",
+        help="Occurrence ID for multi-instance agents (e.g., 'default', '002', '003')",
+    )
+
+
 def setup_agent_parser(subparsers):
     """Set up agent command subparser."""
     agent_parser = subparsers.add_parser(
@@ -143,6 +157,7 @@ def setup_agent_parser(subparsers):
     # agent get
     get_parser = agent_subparsers.add_parser("get", help="Get agent details")
     get_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(get_parser)
 
     # agent create
     create_parser = agent_subparsers.add_parser("create", help="Create a new agent")
@@ -167,29 +182,35 @@ def setup_agent_parser(subparsers):
     delete_parser = agent_subparsers.add_parser("delete", help="Delete an agent")
     delete_parser.add_argument("agent_id", help="Agent ID")
     delete_parser.add_argument("--force", action="store_true", help="Skip confirmation")
+    add_multi_occurrence_args(delete_parser)
 
     # agent start
     start_parser = agent_subparsers.add_parser("start", help="Start an agent")
     start_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(start_parser)
 
     # agent stop
     stop_parser = agent_subparsers.add_parser("stop", help="Stop an agent")
     stop_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(stop_parser)
 
     # agent restart
     restart_parser = agent_subparsers.add_parser("restart", help="Restart an agent")
     restart_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(restart_parser)
 
     # agent shutdown
     shutdown_parser = agent_subparsers.add_parser("shutdown", help="Gracefully shutdown an agent")
     shutdown_parser.add_argument("agent_id", help="Agent ID")
     shutdown_parser.add_argument("--message", help="Shutdown message")
+    add_multi_occurrence_args(shutdown_parser)
 
     # agent logs
     logs_parser = agent_subparsers.add_parser("logs", help="View agent logs")
     logs_parser.add_argument("agent_id", help="Agent ID")
     logs_parser.add_argument("--lines", type=int, default=100, help="Number of lines to show")
     logs_parser.add_argument("--follow", action="store_true", help="Follow log output")
+    add_multi_occurrence_args(logs_parser)
 
     # agent versions
     versions_parser = agent_subparsers.add_parser("versions", help="Show version information")
@@ -230,6 +251,7 @@ def setup_agent_parser(subparsers):
     maintenance_parser.add_argument(
         "--disable", action="store_true", help="Disable maintenance mode (resume normal operations)"
     )
+    add_multi_occurrence_args(maintenance_parser)
 
     # agent pull-logs
     pull_logs_parser = agent_subparsers.add_parser(
@@ -241,6 +263,7 @@ def setup_agent_parser(subparsers):
     pull_logs_parser.add_argument(
         "--output-dir", "-o", help="Output directory (default: /tmp/agent_logs_TIMESTAMP)"
     )
+    add_multi_occurrence_args(pull_logs_parser)
 
 
 def setup_config_parser(subparsers):
@@ -590,6 +613,7 @@ def setup_admin_parser(subparsers):
         "list", help="List available admin actions for an agent"
     )
     list_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(list_parser)
 
     # admin execute
     exec_parser = admin_subparsers.add_parser(
@@ -607,6 +631,7 @@ def setup_admin_parser(subparsers):
     exec_parser.add_argument(
         "--force", action="store_true", help="Force execution"
     )
+    add_multi_occurrence_args(exec_parser)
 
     # admin identity-update (convenience command)
     identity_parser = admin_subparsers.add_parser(
@@ -621,12 +646,14 @@ def setup_admin_parser(subparsers):
     identity_parser.add_argument(
         "--force", action="store_true", help="Force even if agent is busy"
     )
+    add_multi_occurrence_args(identity_parser)
 
     # admin pull-image (convenience command)
     pull_parser = admin_subparsers.add_parser(
         "pull-image", help="Pull latest Docker image for an agent"
     )
     pull_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(pull_parser)
 
 
 def setup_debug_parser(subparsers):

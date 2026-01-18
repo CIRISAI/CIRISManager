@@ -32,18 +32,22 @@ class AdminCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id)
+            args: Parsed arguments (agent_id, occurrence_id, server_id)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
                 print(f"Listing admin actions for agent '{agent_id}'...")
 
-            result = ctx.client.list_admin_actions(agent_id)
+            result = ctx.client.list_admin_actions(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             if ctx.output_format == "json":
                 print(json.dumps(result, indent=2))
@@ -101,7 +105,7 @@ class AdminCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, action, params, force)
+            args: Parsed arguments (agent_id, action, params, force, occurrence_id, server_id)
 
         Returns:
             Exit code
@@ -109,6 +113,8 @@ class AdminCommands:
         try:
             agent_id = args.agent_id
             action = args.action
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
                 print(f"Executing action '{action}' on agent '{agent_id}'...")
@@ -119,7 +125,7 @@ class AdminCommands:
                 try:
                     params = json.loads(args.params)
                 except json.JSONDecodeError:
-                    print(f"Error: params must be valid JSON", file=sys.stderr)
+                    print("Error: params must be valid JSON", file=sys.stderr)
                     return EXIT_ERROR
 
             force = getattr(args, "force", False)
@@ -129,6 +135,8 @@ class AdminCommands:
                 action=action,
                 params=params,
                 force=force,
+                occurrence_id=occurrence_id,
+                server_id=server_id,
             )
 
             if ctx.output_format == "json":
@@ -174,7 +182,7 @@ class AdminCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, template, force)
+            args: Parsed arguments (agent_id, template, force, occurrence_id, server_id)
 
         Returns:
             Exit code
@@ -183,6 +191,8 @@ class AdminCommands:
             agent_id = args.agent_id
             template = getattr(args, "template", None)
             force = getattr(args, "force", False)
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
                 msg = f"Triggering identity update for agent '{agent_id}'..."
@@ -194,6 +204,8 @@ class AdminCommands:
                 agent_id=agent_id,
                 template=template,
                 force=force,
+                occurrence_id=occurrence_id,
+                server_id=server_id,
             )
 
             if ctx.output_format == "json":
@@ -239,18 +251,22 @@ class AdminCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id)
+            args: Parsed arguments (agent_id, occurrence_id, server_id)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
                 print(f"Pulling latest image for agent '{agent_id}'...")
 
-            result = ctx.client.pull_agent_image(agent_id)
+            result = ctx.client.pull_agent_image(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             if ctx.output_format == "json":
                 print(json.dumps(result, indent=2))

@@ -423,9 +423,26 @@ class AgentRegistry:
             composite_key = self._make_key(agent_id, occurrence_id, server_id)
             return self.agents.get(composite_key)
         elif server_id:
-            # Lookup by agent_id and server_id (no occurrence_id)
+            # Lookup by agent_id and server_id (no occurrence_id specified)
+            # First try direct key without occurrence_id (backward compatibility)
             composite_key = self._make_key(agent_id, None, server_id)
-            return self.agents.get(composite_key)
+            agent = self.agents.get(composite_key)
+            if agent:
+                return agent
+            # Search for any agent with matching agent_id and server_id
+            matches = [
+                a for a in self.agents.values()
+                if a.agent_id == agent_id and a.server_id == server_id
+            ]
+            if len(matches) == 1:
+                return matches[0]
+            elif len(matches) > 1:
+                logger.warning(
+                    f"Multiple agents found with agent_id={agent_id}, server_id={server_id}. "
+                    f"Returning first match. Use occurrence_id for precise lookup."
+                )
+                return matches[0]
+            return None
         else:
             # Backward compatibility: try direct agent_id lookup first
             agent = self.agents.get(agent_id)

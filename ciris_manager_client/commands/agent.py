@@ -98,18 +98,22 @@ class AgentCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, format)
+            args: Parsed arguments (agent_id, occurrence_id, server_id, format)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
                 print(f"Fetching agent '{agent_id}'...")
 
-            agent = ctx.client.get_agent(agent_id)
+            agent = ctx.client.get_agent(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             # Format and print output
             output = formatter.format_output(agent, ctx.output_format)
@@ -312,18 +316,22 @@ class AgentCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id)
+            args: Parsed arguments (agent_id, occurrence_id, server_id)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
                 print(f"Starting agent '{agent_id}'...")
 
-            result = ctx.client.start_agent(agent_id)
+            result = ctx.client.start_agent(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             if not ctx.quiet:
                 print(f"Agent '{agent_id}' started successfully")
@@ -358,18 +366,22 @@ class AgentCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id)
+            args: Parsed arguments (agent_id, occurrence_id, server_id)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
                 print(f"Stopping agent '{agent_id}'...")
 
-            result = ctx.client.stop_agent(agent_id)
+            result = ctx.client.stop_agent(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             if not ctx.quiet:
                 print(f"Agent '{agent_id}' stopped successfully")
@@ -404,18 +416,22 @@ class AgentCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id)
+            args: Parsed arguments (agent_id, occurrence_id, server_id)
 
         Returns:
             Exit code
         """
         try:
             agent_id = args.agent_id
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
                 print(f"Restarting agent '{agent_id}'...")
 
-            result = ctx.client.restart_agent(agent_id)
+            result = ctx.client.restart_agent(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             if not ctx.quiet:
                 print(f"Agent '{agent_id}' restarted successfully")
@@ -538,7 +554,7 @@ class AgentCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, lines, follow)
+            args: Parsed arguments (agent_id, lines, follow, occurrence_id, server_id)
 
         Returns:
             Exit code
@@ -546,6 +562,8 @@ class AgentCommands:
         try:
             agent_id = args.agent_id
             lines = getattr(args, "lines", 100)
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             # Note: --follow is not implemented yet
             if hasattr(args, "follow") and args.follow:
@@ -557,7 +575,9 @@ class AgentCommands:
             if not ctx.quiet:
                 print(f"Fetching logs for agent '{agent_id}'...")
 
-            logs = ctx.client.get_agent_logs(agent_id, lines=lines)
+            logs = ctx.client.get_agent_logs(
+                agent_id, lines=lines, occurrence_id=occurrence_id, server_id=server_id
+            )
 
             # Print logs directly (not formatted as JSON/YAML)
             print(logs)
@@ -758,7 +778,7 @@ class AgentCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, enable, disable)
+            args: Parsed arguments (agent_id, enable, disable, occurrence_id, server_id)
 
         Returns:
             Exit code
@@ -767,13 +787,17 @@ class AgentCommands:
             agent_id = args.agent_id
             enable = getattr(args, "enable", False)
             disable = getattr(args, "disable", False)
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
 
             # If neither --enable nor --disable, just show current status
             if not enable and not disable:
                 if not ctx.quiet:
                     print(f"Fetching maintenance status for agent '{agent_id}'...")
 
-                result = ctx.client.get_maintenance_status(agent_id)
+                result = ctx.client.get_maintenance_status(
+                    agent_id, occurrence_id=occurrence_id, server_id=server_id
+                )
 
                 # Format output
                 status = result.get("maintenance_mode", "unknown")
@@ -796,7 +820,12 @@ class AgentCommands:
                 action = "Enabling" if enable_value else "Disabling"
                 print(f"{action} maintenance mode for agent '{agent_id}'...")
 
-            result = ctx.client.set_maintenance_mode(agent_id, enable=enable_value)
+            result = ctx.client.set_maintenance_mode(
+                agent_id,
+                enable=enable_value,
+                occurrence_id=occurrence_id,
+                server_id=server_id,
+            )
 
             if not ctx.quiet:
                 status = "enabled" if enable_value else "disabled"
@@ -835,7 +864,7 @@ class AgentCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (output_dir, agent_id)
+            args: Parsed arguments (output_dir, agent_id, occurrence_id, server_id)
 
         Returns:
             Exit code
@@ -847,10 +876,18 @@ class AgentCommands:
 
             # Get list of agents to pull logs from
             target_agent_id = getattr(args, "agent_id", None)
+            target_occurrence_id = getattr(args, "occurrence_id", None)
+            target_server_id = getattr(args, "server_id", None)
 
             if target_agent_id:
-                # Single agent mode
-                agents = [ctx.client.get_agent(target_agent_id)]
+                # Single agent mode - use provided occurrence_id and server_id
+                agents = [
+                    ctx.client.get_agent(
+                        target_agent_id,
+                        occurrence_id=target_occurrence_id,
+                        server_id=target_server_id,
+                    )
+                ]
                 if not ctx.quiet:
                     print(f"Pulling logs for agent: {target_agent_id}")
             else:
