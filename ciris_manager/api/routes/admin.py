@@ -175,10 +175,13 @@ async def _handle_identity_update(
 
     agent_id = agent.agent_id
     server_id = agent.server_id
+    occurrence_id = getattr(agent, "occurrence_id", None)
     template = params.get("template")
 
-    # Get agent directory
-    agent_info = manager.agent_registry.get_agent(agent_id)
+    # Get agent directory - use occurrence_id and server_id for multi-occurrence agents
+    agent_info = manager.agent_registry.get_agent(
+        agent_id, occurrence_id=occurrence_id, server_id=server_id
+    )
     if not agent_info:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not in registry")
 
