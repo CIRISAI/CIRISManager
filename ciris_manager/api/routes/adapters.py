@@ -194,14 +194,16 @@ async def list_adapter_manifests(
         )
 
         # Build adapter list with status
+        # Agent returns core_modules and adapters, not "types"
         adapters = []
-        adapter_types = types_data.get("data", {}).get("types", [])
+        data = types_data.get("data", {})
+        adapter_types = data.get("core_modules", []) + data.get("adapters", [])
 
         for adapter_type in adapter_types:
             type_name = (
-                adapter_type
-                if isinstance(adapter_type, str)
-                else adapter_type.get("name", "unknown")
+                adapter_type.get("module_id", adapter_type.get("name", "unknown"))
+                if isinstance(adapter_type, dict)
+                else str(adapter_type)
             )
 
             # Determine status
