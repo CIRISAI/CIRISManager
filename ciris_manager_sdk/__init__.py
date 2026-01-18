@@ -1036,6 +1036,104 @@ class CIRISManagerClient:
         )
         return response.json()
 
+    # Admin Actions (Infrastructure Operations)
+
+    def list_admin_actions(self, agent_id: str) -> Dict[str, Any]:
+        """
+        List available admin actions for an agent.
+
+        These are infrastructure-level actions that the manager can perform.
+        Agent-side actions (pause/resume) must go through the H3ERE pipeline.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with agent_id and available actions list
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/admin/actions")
+        return response.json()
+
+    def execute_admin_action(
+        self,
+        agent_id: str,
+        action: str,
+        params: Optional[Dict[str, Any]] = None,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Execute an admin action on an agent.
+
+        Available actions:
+        - identity-update: Update agent identity from template (modifies compose, restarts)
+        - restart: Restart agent container
+        - pull-image: Pull latest agent image without restart
+
+        Args:
+            agent_id: Agent identifier
+            action: Action to execute (identity-update, restart, pull-image)
+            params: Optional action parameters
+            force: Force execution even if agent is busy
+
+        Returns:
+            Dict with success, action, agent_id, message, and details
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+        payload = {
+            "action": action,
+            "force": force,
+        }
+        if params:
+            payload["params"] = params
+
+        response = self._request(
+            "POST", f"/manager/v1/agents/{safe_id}/admin/actions", json=payload
+        )
+        return response.json()
+
+    def trigger_identity_update(
+        self,
+        agent_id: str,
+        template: Optional[str] = None,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Trigger identity update for an agent.
+
+        Modifies the docker-compose.yml to add --identity-update flag
+        and restarts the container. On next boot, the agent will
+        regenerate its identity from the template.
+
+        Args:
+            agent_id: Agent identifier
+            template: Optional template name override
+            force: Force even if agent is busy
+
+        Returns:
+            Dict with action result
+        """
+        params = {}
+        if template:
+            params["template"] = template
+        return self.execute_admin_action(
+            agent_id, "identity-update", params=params if params else None, force=force
+        )
+
+    def pull_agent_image(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Pull latest Docker image for an agent without restarting.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with pull result including image name
+        """
+        return self.execute_admin_action(agent_id, "pull-image")
+
     # Utility Methods
 
     def ping(self) -> bool:

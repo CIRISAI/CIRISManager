@@ -576,6 +576,59 @@ def setup_llm_parser(subparsers):
     add_common_args(validate_parser)
 
 
+def setup_admin_parser(subparsers):
+    """Set up admin action command subparser."""
+    admin_parser = subparsers.add_parser(
+        "admin",
+        help="Admin actions (infrastructure operations)",
+        description="Execute infrastructure-level admin actions on agents",
+    )
+    admin_subparsers = admin_parser.add_subparsers(dest="admin_command", help="Admin commands")
+
+    # admin list
+    list_parser = admin_subparsers.add_parser(
+        "list", help="List available admin actions for an agent"
+    )
+    list_parser.add_argument("agent_id", help="Agent ID")
+
+    # admin execute
+    exec_parser = admin_subparsers.add_parser(
+        "execute", help="Execute an admin action"
+    )
+    exec_parser.add_argument("agent_id", help="Agent ID")
+    exec_parser.add_argument(
+        "action",
+        choices=["identity-update", "restart", "pull-image"],
+        help="Action to execute"
+    )
+    exec_parser.add_argument(
+        "--params", help="Action parameters as JSON string"
+    )
+    exec_parser.add_argument(
+        "--force", action="store_true", help="Force execution"
+    )
+
+    # admin identity-update (convenience command)
+    identity_parser = admin_subparsers.add_parser(
+        "identity-update",
+        help="Trigger identity update for an agent",
+        description="Modifies compose to add --identity-update flag and restarts container"
+    )
+    identity_parser.add_argument("agent_id", help="Agent ID")
+    identity_parser.add_argument(
+        "--template", help="Override template name"
+    )
+    identity_parser.add_argument(
+        "--force", action="store_true", help="Force even if agent is busy"
+    )
+
+    # admin pull-image (convenience command)
+    pull_parser = admin_subparsers.add_parser(
+        "pull-image", help="Pull latest Docker image for an agent"
+    )
+    pull_parser.add_argument("agent_id", help="Agent ID")
+
+
 def setup_debug_parser(subparsers):
     """Set up debug command subparser."""
     debug_parser = subparsers.add_parser(
@@ -702,6 +755,7 @@ Token File:
     setup_auth_parser(subparsers)
     setup_adapter_parser(subparsers)
     setup_llm_parser(subparsers)
+    setup_admin_parser(subparsers)
     setup_debug_parser(subparsers)
 
     return parser
@@ -827,6 +881,32 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
             else:
                 print(f"Error: Unknown llm command: {args.llm_command}", file=sys.stderr)
                 return EXIT_INVALID_ARGS
+
+        elif args.command == "admin":
+            from ciris_manager_client.commands.admin import AdminCommands
+
+            if not args.admin_command:
+                print("Error: No admin subcommand specified", file=sys.stderr)
+                print(
+                    "Available commands: list, execute, identity-update, pull-image",
+                    file=sys.stderr,
+                )
+                return EXIT_INVALID_ARGS
+
+            # Map command names to handler methods
+            command_map = {
+                "list": "list_actions",
+                "execute": "execute",
+                "identity-update": "identity_update",
+                "pull-image": "pull_image",
+            }
+            handler_name = command_map.get(args.admin_command)
+            if handler_name:
+                handler = getattr(AdminCommands, handler_name, None)
+                if handler:
+                    return cast(int, handler(ctx, args))
+            print(f"Error: Unknown admin command: {args.admin_command}", file=sys.stderr)
+            return EXIT_INVALID_ARGS
 
         elif args.command == "debug":
             from ciris_manager_client.commands.debug import DebugCommands

@@ -32,6 +32,7 @@ from . import deployment
 from . import adapters
 from . import llm
 from . import gui
+from . import admin
 from .jailbreaker import initialize_jailbreaker
 from .deployment_tokens_setup import setup_deployment_tokens
 
@@ -50,6 +51,7 @@ __all__ = [
     "adapters",
     "llm",
     "gui",
+    "admin",
 ]
 
 
@@ -93,6 +95,7 @@ def create_routes(manager: Any) -> APIRouter:
     router.include_router(adapters.router, prefix="", tags=["adapters"])
     router.include_router(llm.router, prefix="", tags=["llm"])
     router.include_router(gui.router, prefix="", tags=["gui"])
+    router.include_router(admin.router, prefix="", tags=["admin"])
 
     # Add debug routes for querying agent persistence
     try:
