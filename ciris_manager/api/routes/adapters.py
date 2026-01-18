@@ -142,6 +142,152 @@ async def list_agent_adapter_types(
             )
 
 
+@router.get("/agents/{agent_id}/adapters/manifests")
+async def list_adapter_manifests(
+    agent_id: str,
+    manager: Any = Depends(get_manager),
+    _user: Dict[str, str] = auth_dependency,
+) -> Dict[str, Any]:
+    """
+    List all available adapters with their status.
+
+    Returns summary info for each adapter including:
+    - adapter_type, name, description, version
+    - status: not_configured, configured, enabled, disabled, error
+    - requires_consent, has_wizard, workflow_type
+    """
+    base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
+
+    # Get available adapter types from agent
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(
+                f"{base_url}/v1/system/adapters/types",
+                headers=headers,
+            )
+            response.raise_for_status()
+            types_data = response.json()
+        except Exception as e:
+            logger.warning(f"Failed to get adapter types from agent {agent_id}: {e}")
+            types_data = {"data": {"types": []}}
+
+        # Get running adapters to determine status
+        try:
+            running_response = await client.get(
+                f"{base_url}/v1/system/adapters",
+                headers=headers,
+            )
+            running_response.raise_for_status()
+            running_data = running_response.json()
+            running_adapters = {
+                a.get("adapter_type", a.get("id")): a
+                for a in running_data.get("data", {}).get("adapters", [])
+            }
+        except Exception:
+            running_adapters = {}
+
+        # Get persisted configs from registry
+        persisted_configs = manager.agent_registry.get_adapter_configs(
+            agent_id,
+            occurrence_id=agent_info.occurrence_id,
+            server_id=agent_info.server_id,
+        )
+
+        # Build adapter list with status
+        adapters = []
+        adapter_types = types_data.get("data", {}).get("types", [])
+
+        for adapter_type in adapter_types:
+            type_name = (
+                adapter_type
+                if isinstance(adapter_type, str)
+                else adapter_type.get("name", "unknown")
+            )
+
+            # Determine status
+            if type_name in running_adapters:
+                status = "enabled"
+            elif type_name in persisted_configs:
+                config = persisted_configs[type_name]
+                status = "configured" if config.get("enabled", True) else "disabled"
+            else:
+                status = "not_configured"
+
+            # Try to get manifest info
+            manifest_info = {}
+            try:
+                manifest_response = await client.get(
+                    f"{base_url}/v1/system/adapters/{type_name}/manifest",
+                    headers=headers,
+                )
+                if manifest_response.status_code == 200:
+                    manifest = manifest_response.json().get("data", {})
+                    module = manifest.get("module", {})
+                    interactive = manifest.get("interactive_config", {})
+                    manifest_info = {
+                        "name": module.get("name", type_name),
+                        "description": module.get("description", ""),
+                        "version": module.get("version", ""),
+                        "requires_consent": module.get("requires_consent", False),
+                        "has_wizard": bool(interactive.get("steps")),
+                        "workflow_type": interactive.get("workflow_type", "wizard"),
+                    }
+            except Exception:
+                manifest_info = {
+                    "name": type_name,
+                    "description": "",
+                    "version": "",
+                    "requires_consent": False,
+                    "has_wizard": False,
+                    "workflow_type": "wizard",
+                }
+
+            adapters.append(
+                {
+                    "adapter_type": type_name,
+                    "status": status,
+                    **manifest_info,
+                }
+            )
+
+    return {"adapters": adapters}
+
+
+@router.get("/agents/{agent_id}/adapters/configs")
+async def get_adapter_configs(
+    agent_id: str,
+    manager: Any = Depends(get_manager),
+    _user: Dict[str, str] = auth_dependency,
+) -> Dict[str, Any]:
+    """
+    Get all persisted adapter configurations for an agent.
+
+    Returns configs stored in the registry (not runtime state).
+    """
+    _, _, agent_info = await _get_agent_client_info(manager, agent_id)
+
+    configs = manager.agent_registry.get_adapter_configs(
+        agent_id,
+        occurrence_id=agent_info.occurrence_id,
+        server_id=agent_info.server_id,
+    )
+
+    # Mask sensitive values
+    def mask_sensitive(d: Dict[str, Any]) -> Dict[str, Any]:
+        sensitive_keys = {"password", "secret", "token", "api_key", "client_secret"}
+        masked: Dict[str, Any] = {}
+        for k, v in d.items():
+            if any(s in k.lower() for s in sensitive_keys):
+                masked[k] = "***"
+            elif isinstance(v, dict):
+                masked[k] = mask_sensitive(v)
+            else:
+                masked[k] = v
+        return masked
+
+    return {"configs": {k: mask_sensitive(v) for k, v in configs.items()}}
+
+
 @router.get("/agents/{agent_id}/adapters/{adapter_id}")
 async def get_agent_adapter(
     agent_id: str,
@@ -358,117 +504,6 @@ class AdapterConfigUpdate(BaseModel):
 # =============================================================================
 # Wizard & Config Endpoints
 # =============================================================================
-
-
-@router.get("/agents/{agent_id}/adapters/manifests")
-async def list_adapter_manifests(
-    agent_id: str,
-    manager: Any = Depends(get_manager),
-    _user: Dict[str, str] = auth_dependency,
-) -> Dict[str, Any]:
-    """
-    List all available adapters with their status.
-
-    Returns summary info for each adapter including:
-    - adapter_type, name, description, version
-    - status: not_configured, configured, enabled, disabled, error
-    - requires_consent, has_wizard, workflow_type
-    """
-    base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
-
-    # Get available adapter types from agent
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.get(
-                f"{base_url}/v1/system/adapters/types",
-                headers=headers,
-            )
-            response.raise_for_status()
-            types_data = response.json()
-        except Exception as e:
-            logger.warning(f"Failed to get adapter types from agent {agent_id}: {e}")
-            types_data = {"data": {"types": []}}
-
-        # Get running adapters to determine status
-        try:
-            running_response = await client.get(
-                f"{base_url}/v1/system/adapters",
-                headers=headers,
-            )
-            running_response.raise_for_status()
-            running_data = running_response.json()
-            running_adapters = {
-                a.get("adapter_type", a.get("id")): a
-                for a in running_data.get("data", {}).get("adapters", [])
-            }
-        except Exception:
-            running_adapters = {}
-
-        # Get persisted configs from registry
-        persisted_configs = manager.agent_registry.get_adapter_configs(
-            agent_id,
-            occurrence_id=agent_info.occurrence_id,
-            server_id=agent_info.server_id,
-        )
-
-        # Build adapter list with status
-        adapters = []
-        adapter_types = types_data.get("data", {}).get("types", [])
-
-        for adapter_type in adapter_types:
-            type_name = (
-                adapter_type
-                if isinstance(adapter_type, str)
-                else adapter_type.get("name", "unknown")
-            )
-
-            # Determine status
-            if type_name in running_adapters:
-                status = "enabled"
-            elif type_name in persisted_configs:
-                config = persisted_configs[type_name]
-                status = "configured" if config.get("enabled", True) else "disabled"
-            else:
-                status = "not_configured"
-
-            # Try to get manifest info
-            manifest_info = {}
-            try:
-                manifest_response = await client.get(
-                    f"{base_url}/v1/system/adapters/{type_name}/manifest",
-                    headers=headers,
-                )
-                if manifest_response.status_code == 200:
-                    manifest = manifest_response.json().get("data", {})
-                    module = manifest.get("module", {})
-                    interactive = manifest.get("interactive_config", {})
-                    manifest_info = {
-                        "name": module.get("name", type_name),
-                        "description": module.get("description", ""),
-                        "version": module.get("version", ""),
-                        "requires_consent": module.get("requires_consent", False),
-                        "has_wizard": bool(interactive.get("steps")),
-                        "workflow_type": interactive.get("workflow_type", "wizard"),
-                    }
-            except Exception:
-                manifest_info = {
-                    "name": type_name,
-                    "description": "",
-                    "version": "",
-                    "requires_consent": False,
-                    "has_wizard": False,
-                    "workflow_type": "wizard",
-                }
-
-            adapters.append(
-                {
-                    "adapter_type": type_name,
-                    "status": status,
-                    **manifest_info,
-                }
-            )
-
-    return {"adapters": adapters}
 
 
 @router.get("/agents/{agent_id}/adapters/{adapter_type}/manifest")
@@ -797,41 +832,6 @@ async def complete_adapter_wizard(
         "restart_required": not result.get("adapter_loaded", False),
         "message": result.get("message", f"{adapter_type} adapter configured successfully"),
     }
-
-
-@router.get("/agents/{agent_id}/adapters/configs")
-async def get_adapter_configs(
-    agent_id: str,
-    manager: Any = Depends(get_manager),
-    _user: Dict[str, str] = auth_dependency,
-) -> Dict[str, Any]:
-    """
-    Get all persisted adapter configurations for an agent.
-
-    Returns configs stored in the registry (not runtime state).
-    """
-    _, _, agent_info = await _get_agent_client_info(manager, agent_id)
-
-    configs = manager.agent_registry.get_adapter_configs(
-        agent_id,
-        occurrence_id=agent_info.occurrence_id,
-        server_id=agent_info.server_id,
-    )
-
-    # Mask sensitive values
-    def mask_sensitive(d: Dict[str, Any]) -> Dict[str, Any]:
-        sensitive_keys = {"password", "secret", "token", "api_key", "client_secret"}
-        masked: Dict[str, Any] = {}
-        for k, v in d.items():
-            if any(s in k.lower() for s in sensitive_keys):
-                masked[k] = "***"
-            elif isinstance(v, dict):
-                masked[k] = mask_sensitive(v)
-            else:
-                masked[k] = v
-        return masked
-
-    return {"configs": {k: mask_sensitive(v) for k, v in configs.items()}}
 
 
 @router.delete("/agents/{agent_id}/adapters/{adapter_type}/config")
