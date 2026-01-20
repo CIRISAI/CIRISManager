@@ -23,13 +23,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["adapters"])
 
 
-async def _get_agent_client_info(manager: Any, agent_id: str) -> tuple[str, Dict[str, str], Any]:
+async def _get_agent_client_info(
+    manager: Any,
+    agent_id: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
+) -> tuple[str, Dict[str, str], Any]:
     """
     Get the base URL and auth headers for an agent.
 
     Args:
         manager: CIRISManager instance
         agent_id: The agent ID to look up
+        server_id: Optional server ID to filter by (for multi-server agents)
+        occurrence_id: Optional occurrence ID to filter by (for multi-instance agents)
 
     Returns:
         Tuple of (base_url, headers, agent_info)
@@ -45,7 +52,19 @@ async def _get_agent_client_info(manager: Any, agent_id: str) -> tuple[str, Dict
         manager.agent_registry, docker_client_manager=manager.docker_client
     )
     agents = discovery.discover_agents()
-    agent = next((a for a in agents if a.agent_id == agent_id), None)
+
+    # Filter by agent_id first
+    matching = [a for a in agents if a.agent_id == agent_id]
+
+    # Then filter by server_id if provided
+    if server_id and matching:
+        matching = [a for a in matching if a.server_id == server_id]
+
+    # Then filter by occurrence_id if provided
+    if occurrence_id and matching:
+        matching = [a for a in matching if a.occurrence_id == occurrence_id]
+
+    agent = matching[0] if matching else None
 
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
@@ -77,6 +96,8 @@ async def _get_agent_client_info(manager: Any, agent_id: str) -> tuple[str, Dict
 @router.get("/agents/{agent_id}/adapters")
 async def list_agent_adapters(
     agent_id: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -85,7 +106,9 @@ async def list_agent_adapters(
 
     Proxies to agent's GET /v1/system/adapters endpoint.
     """
-    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -111,6 +134,8 @@ async def list_agent_adapters(
 @router.get("/agents/{agent_id}/adapters/types")
 async def list_agent_adapter_types(
     agent_id: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -119,7 +144,9 @@ async def list_agent_adapter_types(
 
     Proxies to agent's GET /v1/system/adapters/types endpoint.
     """
-    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -145,6 +172,8 @@ async def list_agent_adapter_types(
 @router.get("/agents/{agent_id}/adapters/manifests")
 async def list_adapter_manifests(
     agent_id: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -156,7 +185,9 @@ async def list_adapter_manifests(
     - status: not_configured, configured, enabled, disabled, error
     - requires_consent, has_wizard, workflow_type
     """
-    base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, agent_info = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     # Get available adapter types from agent
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -258,6 +289,8 @@ async def list_adapter_manifests(
 @router.get("/agents/{agent_id}/adapters/configs")
 async def get_adapter_configs(
     agent_id: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -266,7 +299,9 @@ async def get_adapter_configs(
 
     Returns configs stored in the registry (not runtime state).
     """
-    _, _, agent_info = await _get_agent_client_info(manager, agent_id)
+    _, _, agent_info = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     configs = manager.agent_registry.get_adapter_configs(
         agent_id,
@@ -294,6 +329,8 @@ async def get_adapter_configs(
 async def get_agent_adapter(
     agent_id: str,
     adapter_id: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -302,7 +339,9 @@ async def get_agent_adapter(
 
     Proxies to agent's GET /v1/system/adapters/{adapter_id} endpoint.
     """
-    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -331,6 +370,9 @@ async def load_agent_adapter(
     adapter_type: str,
     request: Request,
     adapter_id: Optional[str] = None,
+    persist: bool = True,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -338,6 +380,12 @@ async def load_agent_adapter(
     Load/create a new adapter on an agent.
 
     Proxies to agent's POST /v1/system/adapters/{adapter_type} endpoint.
+    By default, also persists the config to the manager registry for
+    automatic restoration after agent restarts.
+
+    Query params:
+        adapter_id: Optional custom adapter instance ID
+        persist: Whether to save config to registry (default: true)
 
     Request body should contain:
     {
@@ -350,7 +398,9 @@ async def load_agent_adapter(
         "auto_start": true
     }
     """
-    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, agent_info = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     # Get request body
     try:
@@ -373,6 +423,43 @@ async def load_agent_adapter(
             )
             response.raise_for_status()
             result: Dict[str, Any] = response.json()
+
+            # Persist config to registry for restoration after restarts
+            if persist:
+                try:
+                    # Extract config from request body
+                    config_data = body.get("config", {})
+                    adapter_config = {
+                        "enabled": config_data.get("enabled", True),
+                        "configured_at": datetime.now(timezone.utc).isoformat(),
+                        "config": config_data.get("adapter_config", {}),
+                        "settings": config_data.get("settings", {}),
+                    }
+
+                    # Check for consent fields
+                    if config_data.get("adapter_config", {}).get("consent_given"):
+                        adapter_config["consent_given"] = True
+                        adapter_config["consent_timestamp"] = config_data.get(
+                            "adapter_config", {}
+                        ).get("consent_timestamp", datetime.now(timezone.utc).isoformat())
+
+                    manager.agent_registry.set_adapter_config(
+                        agent_id,
+                        adapter_type,
+                        adapter_config,
+                        occurrence_id=agent_info.occurrence_id,
+                        server_id=agent_info.server_id,
+                    )
+                    logger.info(
+                        f"Persisted adapter config for {adapter_type} on agent {agent_id} "
+                        f"(server={agent_info.server_id}, occurrence={agent_info.occurrence_id})"
+                    )
+                    result["_persisted"] = True
+                except Exception as e:
+                    logger.warning(f"Failed to persist adapter config to registry: {e}")
+                    result["_persisted"] = False
+                    result["_persist_error"] = str(e)
+
             return result
         except httpx.HTTPStatusError as e:
             raise HTTPException(
@@ -391,6 +478,8 @@ async def reload_agent_adapter(
     agent_id: str,
     adapter_id: str,
     request: Request,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -405,7 +494,9 @@ async def reload_agent_adapter(
         "auto_start": true
     }
     """
-    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     # Get request body
     try:
@@ -439,6 +530,8 @@ async def reload_agent_adapter(
 async def unload_agent_adapter(
     agent_id: str,
     adapter_id: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -447,7 +540,9 @@ async def unload_agent_adapter(
 
     Proxies to agent's DELETE /v1/system/adapters/{adapter_id} endpoint.
     """
-    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -512,6 +607,8 @@ class AdapterConfigUpdate(BaseModel):
 async def get_adapter_manifest(
     agent_id: str,
     adapter_type: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -521,7 +618,9 @@ async def get_adapter_manifest(
     Fetches from agent's /v1/system/adapters/types and filters to the requested adapter.
     Also fetches wizard info from /v1/system/adapters/configurable if available.
     """
-    base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, agent_info = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         # Get all adapter types - this contains the manifest info
@@ -602,6 +701,8 @@ async def start_adapter_wizard(
     agent_id: str,
     adapter_type: str,
     body: WizardStartRequest,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -611,7 +712,9 @@ async def start_adapter_wizard(
     Proxies to agent's /v1/system/adapters/{adapter_type}/configure/start endpoint.
     The agent manages the wizard session state.
     """
-    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -663,6 +766,8 @@ async def execute_wizard_step(
     adapter_type: str,
     session_id: str,
     body: WizardStepRequest,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -672,7 +777,9 @@ async def execute_wizard_step(
     Proxies to agent's /v1/system/adapters/configure/{session_id}/step endpoint.
     The agent handles validation, OAuth, discovery, etc.
     """
-    base_url, headers, _ = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, _ = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -733,6 +840,8 @@ async def complete_adapter_wizard(
     adapter_type: str,
     session_id: str,
     body: WizardCompleteRequest,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -745,7 +854,9 @@ async def complete_adapter_wizard(
     if not body.confirm:
         raise HTTPException(status_code=400, detail="Confirmation required")
 
-    base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, agent_info = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -840,6 +951,8 @@ async def complete_adapter_wizard(
 async def remove_adapter_config(
     agent_id: str,
     adapter_type: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
     manager: Any = Depends(get_manager),
     _user: Dict[str, str] = auth_dependency,
 ) -> Dict[str, Any]:
@@ -848,7 +961,9 @@ async def remove_adapter_config(
 
     Also attempts to unload the adapter from the agent.
     """
-    base_url, headers, agent_info = await _get_agent_client_info(manager, agent_id)
+    base_url, headers, agent_info = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
 
     # Remove from registry
     removed = manager.agent_registry.remove_adapter_config(
@@ -881,4 +996,136 @@ async def remove_adapter_config(
         "config_removed": True,
         "adapter_unloaded": adapter_unloaded,
         "message": f"{adapter_type} adapter disabled and configuration removed",
+    }
+
+
+@router.post("/agents/{agent_id}/adapters/sync")
+async def sync_adapter_configs(
+    agent_id: str,
+    server_id: Optional[str] = None,
+    occurrence_id: Optional[str] = None,
+    manager: Any = Depends(get_manager),
+    _user: Dict[str, str] = auth_dependency,
+) -> Dict[str, Any]:
+    """
+    Sync running adapters from agent to registry.
+
+    Discovers all running adapters on the agent and ensures they are
+    persisted in the manager registry. This is useful for:
+    - Recovering from state mismatches
+    - Migrating adapters that were loaded before persistence was added
+    - Ensuring adapters survive agent restarts
+
+    Returns summary of what was synced.
+    """
+    base_url, headers, agent_info = await _get_agent_client_info(
+        manager, agent_id, server_id=server_id, occurrence_id=occurrence_id
+    )
+
+    synced = []
+    skipped = []
+    errors = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Get running adapters from agent
+        try:
+            response = await client.get(
+                f"{base_url}/v1/system/adapters",
+                headers=headers,
+            )
+            response.raise_for_status()
+            running_data = response.json()
+            running_adapters = running_data.get("data", {}).get("adapters", [])
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to get running adapters from agent: {str(e)}",
+            )
+
+        # Get current registry configs
+        persisted_configs = manager.agent_registry.get_adapter_configs(
+            agent_id,
+            occurrence_id=agent_info.occurrence_id,
+            server_id=agent_info.server_id,
+        )
+
+        # Sync each running adapter
+        for adapter in running_adapters:
+            adapter_type = adapter.get("adapter_type", adapter.get("id", "unknown"))
+
+            # Skip if already in registry
+            if adapter_type in persisted_configs:
+                skipped.append({
+                    "adapter_type": adapter_type,
+                    "reason": "already_persisted",
+                })
+                continue
+
+            # Try to get adapter config from agent
+            try:
+                config_response = await client.get(
+                    f"{base_url}/v1/system/adapters/{adapter_type}",
+                    headers=headers,
+                )
+                if config_response.status_code == 200:
+                    adapter_data = config_response.json().get("data", {})
+                    adapter_config_raw = adapter_data.get("adapter_config", {})
+                else:
+                    adapter_config_raw = {}
+            except Exception:
+                adapter_config_raw = {}
+
+            # Build config to store
+            adapter_config = {
+                "enabled": True,
+                "configured_at": datetime.now(timezone.utc).isoformat(),
+                "synced_from_agent": True,
+                "config": adapter_config_raw,
+                "settings": adapter.get("settings", {}),
+            }
+
+            # Check for consent in config
+            if adapter_config_raw.get("consent_given"):
+                adapter_config["consent_given"] = True
+                adapter_config["consent_timestamp"] = adapter_config_raw.get(
+                    "consent_timestamp", datetime.now(timezone.utc).isoformat()
+                )
+
+            # Store in registry
+            try:
+                manager.agent_registry.set_adapter_config(
+                    agent_id,
+                    adapter_type,
+                    adapter_config,
+                    occurrence_id=agent_info.occurrence_id,
+                    server_id=agent_info.server_id,
+                )
+                synced.append({
+                    "adapter_type": adapter_type,
+                    "config": adapter_config,
+                })
+                logger.info(
+                    f"Synced adapter {adapter_type} from agent {agent_id} to registry "
+                    f"(server={agent_info.server_id}, occurrence={agent_info.occurrence_id})"
+                )
+            except Exception as e:
+                errors.append({
+                    "adapter_type": adapter_type,
+                    "error": str(e),
+                })
+                logger.warning(f"Failed to sync adapter {adapter_type}: {e}")
+
+    return {
+        "agent_id": agent_id,
+        "server_id": agent_info.server_id,
+        "occurrence_id": agent_info.occurrence_id,
+        "synced": synced,
+        "skipped": skipped,
+        "errors": errors,
+        "summary": {
+            "total_running": len(running_adapters),
+            "synced_count": len(synced),
+            "skipped_count": len(skipped),
+            "error_count": len(errors),
+        },
     }
