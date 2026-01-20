@@ -1055,10 +1055,12 @@ async def sync_adapter_configs(
 
             # Skip if already in registry
             if adapter_type in persisted_configs:
-                skipped.append({
-                    "adapter_type": adapter_type,
-                    "reason": "already_persisted",
-                })
+                skipped.append(
+                    {
+                        "adapter_type": adapter_type,
+                        "reason": "already_persisted",
+                    }
+                )
                 continue
 
             # Try to get adapter config from agent
@@ -1100,19 +1102,23 @@ async def sync_adapter_configs(
                     occurrence_id=agent_info.occurrence_id,
                     server_id=agent_info.server_id,
                 )
-                synced.append({
-                    "adapter_type": adapter_type,
-                    "config": adapter_config,
-                })
+                synced.append(
+                    {
+                        "adapter_type": adapter_type,
+                        "config": adapter_config,
+                    }
+                )
                 logger.info(
                     f"Synced adapter {adapter_type} from agent {agent_id} to registry "
                     f"(server={agent_info.server_id}, occurrence={agent_info.occurrence_id})"
                 )
             except Exception as e:
-                errors.append({
-                    "adapter_type": adapter_type,
-                    "error": str(e),
-                })
+                errors.append(
+                    {
+                        "adapter_type": adapter_type,
+                        "error": str(e),
+                    }
+                )
                 logger.warning(f"Failed to sync adapter {adapter_type}: {e}")
 
     return {
