@@ -470,7 +470,9 @@ def setup_adapter_parser(subparsers):
     load_parser.add_argument("--config-file", help="JSON file with adapter configuration")
     load_parser.add_argument("--adapter-id", help="Custom adapter ID")
     load_parser.add_argument(
-        "--no-auto-start", action="store_true", help="Don't start adapter immediately"
+        "--no-persist",
+        action="store_true",
+        help="Don't persist adapter config (won't survive restart)",
     )
     add_multi_occurrence_args(load_parser)
 

@@ -242,7 +242,7 @@ class AdapterCommands:
         try:
             agent_id = args.agent_id
             adapter_type = args.adapter_type
-            auto_start = not getattr(args, "no_auto_start", False)
+            persist = not getattr(args, "no_persist", False)
             adapter_id = getattr(args, "adapter_id", None)
             server_id = getattr(args, "server_id", None)
             occurrence_id = getattr(args, "occurrence_id", None)
@@ -268,7 +268,7 @@ class AdapterCommands:
                 agent_id,
                 adapter_type,
                 config=config if config else None,
-                auto_start=auto_start,
+                persist=persist,
                 adapter_id=adapter_id,
                 server_id=server_id,
                 occurrence_id=occurrence_id,
@@ -533,6 +533,78 @@ class AdapterCommands:
             return EXIT_API_ERROR
         except Exception as e:
             print(f"Error removing configuration: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
+    def sync(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Sync running adapters from agent to registry.
+
+        Discovers all running adapters on the agent and ensures they are
+        persisted in the manager registry.
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments (agent_id, server_id, occurrence_id)
+
+        Returns:
+            Exit code
+        """
+        try:
+            agent_id = args.agent_id
+            server_id = getattr(args, "server_id", None)
+            occurrence_id = getattr(args, "occurrence_id", None)
+
+            if not ctx.quiet:
+                print(f"Syncing adapters for agent '{agent_id}'...")
+
+            result = ctx.client.sync_adapters(
+                agent_id, server_id=server_id, occurrence_id=occurrence_id
+            )
+
+            summary = result.get("summary", {})
+            synced = result.get("synced", [])
+            skipped = result.get("skipped", [])
+            errors = result.get("errors", [])
+
+            if not ctx.quiet:
+                print(f"\nSync Summary for {agent_id}:")
+                print(f"  Total running adapters: {summary.get('total_running', 0)}")
+                print(f"  Synced to registry: {summary.get('synced_count', 0)}")
+                print(f"  Already persisted: {summary.get('skipped_count', 0)}")
+                print(f"  Errors: {summary.get('error_count', 0)}")
+
+                if synced:
+                    print("\nNewly synced adapters:")
+                    for item in synced:
+                        print(f"  - {item.get('adapter_type')}")
+
+                if errors:
+                    print("\nErrors:")
+                    for item in errors:
+                        print(f"  - {item.get('adapter_type')}: {item.get('error')}")
+
+            if ctx.verbose:
+                output = formatter.format_output(result, ctx.output_format)
+                print(output)
+
+            return EXIT_SUCCESS
+
+        except AuthenticationError as e:
+            print(f"Authentication error: {e}", file=sys.stderr)
+            return EXIT_AUTH_ERROR
+        except APIError as e:
+            if e.status_code == 404:
+                print(f"Agent '{args.agent_id}' not found", file=sys.stderr)
+                return EXIT_NOT_FOUND
+            print(f"API error: {e}", file=sys.stderr)
+            return EXIT_API_ERROR
+        except Exception as e:
+            print(f"Error syncing adapters: {e}", file=sys.stderr)
             if ctx.verbose:
                 import traceback
 

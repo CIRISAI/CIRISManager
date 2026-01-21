@@ -827,7 +827,7 @@ class CIRISManagerClient:
         agent_id: str,
         adapter_type: str,
         config: Optional[Dict[str, Any]] = None,
-        auto_start: bool = True,
+        persist: bool = True,
         adapter_id: Optional[str] = None,
         server_id: Optional[str] = None,
         occurrence_id: Optional[str] = None,
@@ -839,7 +839,7 @@ class CIRISManagerClient:
             agent_id: Agent identifier
             adapter_type: Type of adapter to load
             config: Adapter configuration
-            auto_start: Whether to start adapter immediately
+            persist: Whether to persist adapter config for restarts (default: True)
             adapter_id: Optional custom adapter ID
             server_id: Optional server ID for multi-server agents
             occurrence_id: Optional occurrence ID for multi-instance agents
@@ -851,7 +851,7 @@ class CIRISManagerClient:
         safe_id = quote(agent_id, safe="")
         safe_type = quote(adapter_type, safe="")
 
-        payload: Dict[str, Any] = {"auto_start": auto_start}
+        payload: Dict[str, Any] = {"persist": persist}
         if config:
             payload["config"] = config
 
