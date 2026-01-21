@@ -111,9 +111,7 @@ class AgentCommands:
             if not ctx.quiet:
                 print(f"Fetching agent '{agent_id}'...")
 
-            agent = ctx.client.get_agent(
-                agent_id, occurrence_id=occurrence_id, server_id=server_id
-            )
+            agent = ctx.client.get_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
             # Format and print output
             output = formatter.format_output(agent, ctx.output_format)
@@ -554,7 +552,7 @@ class AgentCommands:
 
         Args:
             ctx: Command context
-            args: Parsed arguments (agent_id, lines, follow, occurrence_id, server_id)
+            args: Parsed arguments (agent_id, lines, follow, source, occurrence_id, server_id)
 
         Returns:
             Exit code
@@ -564,6 +562,7 @@ class AgentCommands:
             lines = getattr(args, "lines", 100)
             occurrence_id = getattr(args, "occurrence_id", None)
             server_id = getattr(args, "server_id", None)
+            source = getattr(args, "source", "all")
 
             # Note: --follow is not implemented yet
             if hasattr(args, "follow") and args.follow:
@@ -576,7 +575,11 @@ class AgentCommands:
                 print(f"Fetching logs for agent '{agent_id}'...")
 
             logs = ctx.client.get_agent_logs(
-                agent_id, lines=lines, occurrence_id=occurrence_id, server_id=server_id
+                agent_id,
+                lines=lines,
+                occurrence_id=occurrence_id,
+                server_id=server_id,
+                source=source,
             )
 
             # Print logs directly (not formatted as JSON/YAML)
@@ -979,6 +982,100 @@ class AgentCommands:
             return EXIT_API_ERROR
         except Exception as e:
             print(f"Error pulling logs: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
+    def access(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Get access details for an agent including service token and database info.
+
+        Returns connection details needed to interact with the agent directly.
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments (agent_id, occurrence_id, server_id)
+
+        Returns:
+            Exit code
+        """
+        try:
+            agent_id = args.agent_id
+            occurrence_id = getattr(args, "occurrence_id", None)
+            server_id = getattr(args, "server_id", None)
+
+            if not ctx.quiet:
+                print(f"Fetching access details for agent '{agent_id}'...")
+
+            result = ctx.client.get_agent_access(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id
+            )
+
+            # For table format, show a nice summary
+            if ctx.output_format == "table":
+                print(f"\nAgent: {result.get('agent_id')}")
+                print(f"Registry Key: {result.get('registry_key')}")
+                print(f"Server: {result.get('server_id')}")
+                if result.get("occurrence_id"):
+                    print(f"Occurrence: {result.get('occurrence_id')}")
+                print(f"Container: {result.get('container_name')}")
+                print(f"Port: {result.get('port')}")
+                print(f"\nAPI Endpoint: {result.get('api_endpoint')}")
+
+                # Service token
+                token = result.get("service_token")
+                if token and token not in ("[decryption failed]", None):
+                    print(f"\nService Token: {token}")
+                elif token == "[decryption failed]":
+                    print("\nService Token: [decryption failed]")
+                else:
+                    print("\nService Token: [not set]")
+
+                # Database info
+                db = result.get("database", {})
+                print("\nDatabase:")
+                if db.get("error"):
+                    print(f"  Error: {db.get('error')}")
+                elif db.get("type") == "postgresql":
+                    print("  Type: PostgreSQL")
+                    print(f"  URL: {db.get('url')}")
+                    if db.get("raw_url"):
+                        print(f"  Raw URL: {db.get('raw_url')}")
+                elif db.get("type") == "sqlite":
+                    print("  Type: SQLite")
+                    print(f"  Host Path: {db.get('path')}")
+                    print(f"  Container Path: {db.get('container_path')}")
+                else:
+                    print("  Type: Unknown")
+
+                # Server info
+                server = result.get("server")
+                if server:
+                    print("\nServer:")
+                    print(f"  Hostname: {server.get('hostname')}")
+                    print(f"  Public IP: {server.get('public_ip')}")
+                    print(f"  VPC IP: {server.get('vpc_ip')}")
+            else:
+                # JSON/YAML format
+                output = formatter.format_output(result, ctx.output_format)
+                print(output)
+
+            return EXIT_SUCCESS
+
+        except AuthenticationError as e:
+            print(f"Authentication error: {e}", file=sys.stderr)
+            return EXIT_AUTH_ERROR
+        except APIError as e:
+            if e.status_code == 404:
+                print(f"Agent '{args.agent_id}' not found", file=sys.stderr)
+                return EXIT_NOT_FOUND
+            print(f"API error: {e}", file=sys.stderr)
+            return EXIT_API_ERROR
+        except Exception as e:
+            print(f"Error fetching access details: {e}", file=sys.stderr)
             if ctx.verbose:
                 import traceback
 

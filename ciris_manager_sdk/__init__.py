@@ -158,6 +158,53 @@ class CIRISManagerClient:
         )
         return response.json()
 
+    def get_agent_access(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get access details for an agent including service token and database info.
+
+        Returns connection details needed to interact with the agent directly,
+        including the decrypted service token, API endpoint, and database
+        connection information.
+
+        Args:
+            agent_id: Agent identifier
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server agents
+
+        Returns:
+            Dict with access details:
+                - agent_id: Agent identifier
+                - registry_key: Registry key used to find the agent
+                - server_id: Server where agent runs
+                - occurrence_id: Occurrence ID if multi-instance
+                - container_name: Docker container name
+                - port: Agent API port
+                - api_endpoint: Full API endpoint URL
+                - service_token: Decrypted service token for auth
+                - database: Database connection info (type, path/url)
+                - server: Server connection info (hostname, public_ip, vpc_ip)
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        response = self._request(
+            "GET",
+            f"/manager/v1/agents/{safe_id}/access",
+            params=params if params else None,
+        )
+        return response.json()
+
     def get_agent_config(self, agent_id: str) -> Dict[str, Any]:
         """
         Get agent configuration including environment variables.
@@ -349,6 +396,7 @@ class CIRISManagerClient:
         lines: int = 100,
         occurrence_id: Optional[str] = None,
         server_id: Optional[str] = None,
+        source: str = "all",
     ) -> str:
         """
         Get agent logs.
@@ -358,6 +406,8 @@ class CIRISManagerClient:
             lines: Number of log lines to retrieve
             occurrence_id: Optional occurrence ID for multi-instance agents
             server_id: Optional server ID for multi-server agents
+            source: Log source - "docker" (container stdout/stderr),
+                    "file" (application log files), or "all" (both, default)
 
         Returns:
             Log output as string
@@ -365,15 +415,13 @@ class CIRISManagerClient:
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")
 
-        params: Dict[str, Any] = {"lines": lines}
+        params: Dict[str, Any] = {"lines": lines, "source": source}
         if occurrence_id:
             params["occurrence_id"] = occurrence_id
         if server_id:
             params["server_id"] = server_id
 
-        response = self._request(
-            "GET", f"/manager/v1/agents/{safe_id}/logs", params=params
-        )
+        response = self._request("GET", f"/manager/v1/agents/{safe_id}/logs", params=params)
         return response.text
 
     def get_agent_log_file(
@@ -1042,6 +1090,45 @@ class CIRISManagerClient:
         response = self._request(
             "DELETE",
             f"/manager/v1/agents/{safe_id}/adapters/{safe_type}/config",
+            params=params if params else None,
+        )
+        return response.json()
+
+    def sync_adapters(
+        self,
+        agent_id: str,
+        server_id: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Sync running adapters from agent to registry.
+
+        Discovers all running adapters on the agent and ensures they are
+        persisted in the manager registry. This is useful for:
+        - Recovering from state mismatches
+        - Migrating adapters that were loaded before persistence was added
+        - Ensuring adapters survive agent restarts
+
+        Args:
+            agent_id: Agent identifier
+            server_id: Optional server ID for multi-server agents
+            occurrence_id: Optional occurrence ID for multi-instance agents
+
+        Returns:
+            Dict with sync results including synced, skipped, and errors
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {}
+        if server_id:
+            params["server_id"] = server_id
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+
+        response = self._request(
+            "POST",
+            f"/manager/v1/agents/{safe_id}/adapters/sync",
             params=params if params else None,
         )
         return response.json()

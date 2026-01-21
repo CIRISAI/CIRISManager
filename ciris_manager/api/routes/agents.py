@@ -246,6 +246,159 @@ async def get_agent(
     )
 
 
+@router.get("/agents/{agent_id}/access")
+async def get_agent_access(
+    agent_id: str,
+    occurrence_id: Optional[str] = None,
+    server_id: Optional[str] = None,
+    manager: Any = Depends(get_manager),
+    _user: Dict[str, str] = auth_dependency,
+) -> Dict[str, Any]:
+    """
+    Get access details for an agent including service token and database info.
+
+    Returns connection details needed to interact with the agent directly.
+    """
+    from ciris_manager.crypto import get_token_encryption
+    from ciris_manager.docker_discovery import DockerAgentDiscovery
+
+    # Discover the agent
+    discovery = DockerAgentDiscovery(
+        manager.agent_registry, docker_client_manager=manager.docker_client
+    )
+    agents = discovery.discover_agents()
+
+    # Filter by agent_id
+    matching = [a for a in agents if a.agent_id == agent_id]
+    if server_id:
+        matching = [a for a in matching if a.server_id == server_id]
+    if occurrence_id:
+        matching = [a for a in matching if a.occurrence_id == occurrence_id]
+
+    if not matching:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    agent = matching[0]
+
+    # Build registry key to find service token
+    # Key format: {agent_id}-{occurrence}-{server_id} or {agent_id}-{server_id}
+    registry_keys_to_try = []
+    if agent.occurrence_id:
+        registry_keys_to_try.append(f"{agent_id}-{agent.occurrence_id}-{agent.server_id}")
+    registry_keys_to_try.append(f"{agent_id}-{agent.server_id}")
+    registry_keys_to_try.append(agent_id)
+
+    # Find registry entry
+    registry_entry = None
+    registry_key_used = None
+    for key in registry_keys_to_try:
+        entry = manager.agent_registry.get_agent(key)
+        if entry:
+            registry_entry = entry
+            registry_key_used = key
+            break
+
+    # Decrypt service token if available
+    service_token = None
+    if registry_entry and registry_entry.service_token:
+        try:
+            encryption = get_token_encryption()
+            service_token = encryption.decrypt_token(registry_entry.service_token)
+        except Exception as e:
+            logger.warning(f"Failed to decrypt service token for {agent_id}: {e}")
+            service_token = "[decryption failed]"
+
+    # Get database info from container
+    database_info = {}
+    try:
+        docker_client = manager.docker_client.get_client(agent.server_id or "main")
+        container_name = agent.container_name or f"ciris-{agent_id}"
+        container = docker_client.containers.get(container_name)
+
+        # Get environment variables for database config
+        env_vars = container.attrs.get("Config", {}).get("Env", [])
+        env_dict = {}
+        for env in env_vars:
+            if "=" in env:
+                k, v = env.split("=", 1)
+                env_dict[k] = v
+
+        # Check for PostgreSQL config
+        if env_dict.get("CIRIS_DATABASE_URL"):
+            db_url = env_dict["CIRIS_DATABASE_URL"]
+            # Redact password in URL for display
+            import re
+
+            redacted_url = re.sub(r"://([^:]+):([^@]+)@", r"://\1:***@", db_url)
+            database_info = {
+                "type": "postgresql",
+                "url": redacted_url,
+                "raw_url": db_url,  # Include full URL for actual access
+            }
+        elif env_dict.get("DATABASE_URL"):
+            db_url = env_dict["DATABASE_URL"]
+            import re
+
+            redacted_url = re.sub(r"://([^:]+):([^@]+)@", r"://\1:***@", db_url)
+            database_info = {
+                "type": "postgresql",
+                "url": redacted_url,
+                "raw_url": db_url,
+            }
+        else:
+            # Default to SQLite
+            # Get mount points to find data directory
+            mounts = container.attrs.get("Mounts", [])
+            data_mount = None
+            for mount in mounts:
+                if mount.get("Destination") == "/app/data":
+                    data_mount = mount.get("Source")
+                    break
+
+            database_info = {
+                "type": "sqlite",
+                "path": f"{data_mount}/ciris_engine.db"
+                if data_mount
+                else "/app/data/ciris_engine.db",
+                "container_path": "/app/data/ciris_engine.db",
+            }
+    except Exception as e:
+        logger.warning(f"Failed to get database info for {agent_id}: {e}")
+        database_info = {"error": str(e)}
+
+    # Build server connection info
+    server_config = None
+    try:
+        server_config = manager.docker_client.get_server_config(agent.server_id or "main")
+    except Exception:
+        pass
+
+    # Build API endpoint URL
+    if server_config and server_config.hostname:
+        api_endpoint = f"https://{server_config.hostname}/api/{agent_id}/v1/"
+    else:
+        api_endpoint = f"https://agents.ciris.ai/api/{agent_id}/v1/"
+
+    return {
+        "agent_id": agent_id,
+        "registry_key": registry_key_used,
+        "server_id": agent.server_id,
+        "occurrence_id": agent.occurrence_id,
+        "container_name": agent.container_name,
+        "port": agent.port,
+        "api_endpoint": api_endpoint,
+        "service_token": service_token,
+        "database": database_info,
+        "server": {
+            "hostname": server_config.hostname if server_config else None,
+            "public_ip": server_config.public_ip if server_config else None,
+            "vpc_ip": server_config.vpc_ip if server_config else None,
+        }
+        if server_config
+        else None,
+    }
+
+
 @router.post("/agents", response_model=AgentResponse)
 @create_limit
 async def create_agent(
@@ -383,10 +536,21 @@ async def get_agent_logs(
     lines: int = 100,
     occurrence_id: Optional[str] = None,
     server_id: Optional[str] = None,
+    source: str = "all",
     manager: Any = Depends(get_manager),
     _user: dict = auth_dependency,
 ) -> PlainTextResponse:
-    """Get container logs for an agent."""
+    """
+    Get logs for an agent.
+
+    Args:
+        agent_id: Agent identifier
+        lines: Number of log lines to retrieve
+        occurrence_id: Optional occurrence ID for multi-instance agents
+        server_id: Optional server ID for multi-server agents
+        source: Log source - "docker" (container stdout/stderr),
+                "file" (application log files), or "all" (both, default)
+    """
     try:
         from ciris_manager.docker_discovery import DockerAgentDiscovery
 
@@ -412,10 +576,74 @@ async def get_agent_logs(
         container_name = discovered_agent.container_name
         client = manager.docker_client.get_client(discovered_agent.server_id)
 
+        all_logs = []
+
         try:
             container = client.containers.get(container_name)
-            logs = container.logs(tail=lines, timestamps=True).decode("utf-8")
-            return PlainTextResponse(content=logs)
+
+            # Get docker container logs (stdout/stderr)
+            if source in ("docker", "all"):
+                try:
+                    docker_logs = container.logs(tail=lines, timestamps=True).decode("utf-8")
+                    if docker_logs.strip():
+                        all_logs.append("=== DOCKER CONTAINER LOGS ===\n" + docker_logs)
+                except Exception as e:
+                    logger.warning(f"Failed to get docker logs for {container_name}: {e}")
+                    if source == "docker":
+                        raise
+
+            # Get application log files
+            if source in ("file", "all"):
+                try:
+                    # Find the latest ciris_agent log file
+                    exit_code, output = container.exec_run(
+                        "sh -c 'ls -t /app/logs/ciris_agent_*.log 2>/dev/null | head -1'",
+                        demux=False,
+                    )
+                    if exit_code == 0 and output:
+                        latest_log = output.decode("utf-8").strip()
+                        if latest_log:
+                            # Read the latest log file
+                            exit_code, log_content = container.exec_run(
+                                f"tail -n {lines} {latest_log}",
+                                demux=False,
+                            )
+                            if exit_code == 0 and log_content:
+                                content = log_content.decode("utf-8")
+                                if content.strip():
+                                    all_logs.append(
+                                        f"=== APPLICATION LOG ({latest_log}) ===\n" + content
+                                    )
+
+                    # Also get incidents log if available
+                    exit_code, output = container.exec_run(
+                        "sh -c 'ls -t /app/logs/incidents_*.log 2>/dev/null | head -1'",
+                        demux=False,
+                    )
+                    if exit_code == 0 and output:
+                        incidents_log = output.decode("utf-8").strip()
+                        if incidents_log:
+                            exit_code, log_content = container.exec_run(
+                                f"tail -n {lines} {incidents_log}",
+                                demux=False,
+                            )
+                            if exit_code == 0 and log_content:
+                                content = log_content.decode("utf-8")
+                                if content.strip():
+                                    all_logs.append(
+                                        f"=== INCIDENTS LOG ({incidents_log}) ===\n" + content
+                                    )
+
+                except Exception as e:
+                    logger.warning(f"Failed to get log files for {container_name}: {e}")
+                    if source == "file":
+                        raise
+
+            if not all_logs:
+                return PlainTextResponse(content="No logs available")
+
+            return PlainTextResponse(content="\n\n".join(all_logs))
+
         except Exception as e:
             logger.warning(f"Failed to get logs for container {container_name}: {e}")
             raise HTTPException(

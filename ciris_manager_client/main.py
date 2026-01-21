@@ -210,6 +210,12 @@ def setup_agent_parser(subparsers):
     logs_parser.add_argument("agent_id", help="Agent ID")
     logs_parser.add_argument("--lines", type=int, default=100, help="Number of lines to show")
     logs_parser.add_argument("--follow", action="store_true", help="Follow log output")
+    logs_parser.add_argument(
+        "--source",
+        choices=["all", "docker", "file"],
+        default="all",
+        help="Log source: 'all' (default), 'docker' (container stdout), 'file' (application logs)",
+    )
     add_multi_occurrence_args(logs_parser)
 
     # agent versions
@@ -264,6 +270,15 @@ def setup_agent_parser(subparsers):
         "--output-dir", "-o", help="Output directory (default: /tmp/agent_logs_TIMESTAMP)"
     )
     add_multi_occurrence_args(pull_logs_parser)
+
+    # agent access
+    access_parser = agent_subparsers.add_parser(
+        "access",
+        help="Get access details for an agent",
+        description="Get connection details including service token, API endpoint, and database info",
+    )
+    access_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(access_parser)
 
 
 def setup_config_parser(subparsers):
@@ -494,6 +509,13 @@ def setup_adapter_parser(subparsers):
     remove_config_parser.add_argument("adapter_type", help="Adapter type")
     remove_config_parser.add_argument("--force", action="store_true", help="Skip confirmation")
     add_multi_occurrence_args(remove_config_parser)
+
+    # adapter sync
+    sync_parser = adapter_subparsers.add_parser(
+        "sync", help="Sync running adapters from agent to registry"
+    )
+    sync_parser.add_argument("agent_id", help="Agent ID")
+    add_multi_occurrence_args(sync_parser)
 
     # adapter wizard-start
     wizard_start_parser = adapter_subparsers.add_parser(
