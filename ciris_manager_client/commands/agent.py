@@ -1056,7 +1056,6 @@ class AgentCommands:
                 if server:
                     print("\nServer:")
                     print(f"  Hostname: {server.get('hostname')}")
-                    print(f"  Public IP: {server.get('public_ip')}")
                     print(f"  VPC IP: {server.get('vpc_ip')}")
             else:
                 # JSON/YAML format

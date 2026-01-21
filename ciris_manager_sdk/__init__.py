@@ -187,7 +187,7 @@ class CIRISManagerClient:
                 - api_endpoint: Full API endpoint URL
                 - service_token: Decrypted service token for auth
                 - database: Database connection info (type, path/url)
-                - server: Server connection info (hostname, public_ip, vpc_ip)
+                - server: Server connection info (hostname, vpc_ip)
         """
         self._validate_agent_id(agent_id)
         safe_id = quote(agent_id, safe="")

@@ -391,7 +391,6 @@ async def get_agent_access(
         "database": database_info,
         "server": {
             "hostname": server_config.hostname if server_config else None,
-            "public_ip": server_config.public_ip if server_config else None,
             "vpc_ip": server_config.vpc_ip if server_config else None,
         }
         if server_config
