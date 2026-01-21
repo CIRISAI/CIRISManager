@@ -2211,8 +2211,8 @@ class DeploymentOrchestrator:
                             if isinstance(health_data, dict) and health_data.get("data"):
                                 health_data = health_data["data"]
 
-                            cognitive_state = health_data.get("cognitive_state", "").lower()
-                            version = health_data.get("version", "unknown")
+                            cognitive_state = (health_data.get("cognitive_state") or "").lower()
+                            version = health_data.get("version") or "unknown"
 
                             # Check if agent is in WORK state
                             if cognitive_state == "work":
