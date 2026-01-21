@@ -385,7 +385,7 @@ async def get_agent_access(
         "server_id": agent.server_id,
         "occurrence_id": agent.occurrence_id,
         "container_name": agent.container_name,
-        "port": agent.port,
+        "port": agent.api_port,
         "api_endpoint": api_endpoint,
         "service_token": service_token,
         "database": database_info,
