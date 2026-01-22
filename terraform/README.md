@@ -122,3 +122,9 @@ terraform destroy
 | `variables.tf` | Configurable parameters |
 | `outputs.tf` | Post-deployment information |
 | `terraform.tfvars.example` | Example configuration |
+
+## Complete Deployment Guide
+
+For a comprehensive end-to-end guide covering Terraform, server setup, and agent deployment, see:
+
+**[Zero to Hero Deployment Guide](../docs/ZERO_TO_HERO.md)**

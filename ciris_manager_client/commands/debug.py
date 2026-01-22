@@ -24,8 +24,8 @@ class DebugCommands:
                 - agent_id: Agent identifier
                 - status: Optional status filter
                 - limit: Maximum number of tasks
-                - server: Optional server ID
-                - occurrence: Optional occurrence ID
+                - server_id: Optional server ID for multi-server
+                - occurrence_id: Optional occurrence ID for multi-instance
 
         Returns:
             0 on success, non-zero on failure
@@ -33,8 +33,8 @@ class DebugCommands:
         agent_id = args.agent_id
         status = getattr(args, "status", None)
         limit = getattr(args, "limit", 50)
-        server_id = getattr(args, "server", None)
-        occurrence_id = getattr(args, "occurrence", None)
+        server_id = getattr(args, "server_id", None)
+        occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
             print(f"Listing tasks for agent: {agent_id}")
@@ -49,14 +49,13 @@ class DebugCommands:
             if occurrence_id:
                 params["occurrence_id"] = occurrence_id
 
-            result = ctx.client._request(
-                "GET", f"/debug/agents/{agent_id}/tasks", params=params
-            )
+            result = ctx.client._request("GET", f"/debug/agents/{agent_id}/tasks", params=params)
 
             if ctx.output_format == "json":
                 print(json.dumps(result, indent=2))
             elif ctx.output_format == "yaml":
                 import yaml
+
                 print(yaml.dump(result, default_flow_style=False))
             else:
                 # Table format
@@ -91,16 +90,16 @@ class DebugCommands:
             args: Parsed arguments with:
                 - agent_id: Agent identifier
                 - task_id: Task identifier
-                - server: Optional server ID
-                - occurrence: Optional occurrence ID
+                - server_id: Optional server ID for multi-server
+                - occurrence_id: Optional occurrence ID for multi-instance
 
         Returns:
             0 on success, non-zero on failure
         """
         agent_id = args.agent_id
         task_id = args.task_id
-        server_id = getattr(args, "server", None)
-        occurrence_id = getattr(args, "occurrence", None)
+        server_id = getattr(args, "server_id", None)
+        occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
             print(f"Getting task {task_id} for agent: {agent_id}")
@@ -120,6 +119,7 @@ class DebugCommands:
                 print(json.dumps(result, indent=2))
             elif ctx.output_format == "yaml":
                 import yaml
+
                 print(yaml.dump(result, default_flow_style=False))
             else:
                 # Detailed format
@@ -166,8 +166,8 @@ class DebugCommands:
                 - status: Optional status filter
                 - task_id: Optional task ID filter
                 - limit: Maximum number of thoughts
-                - server: Optional server ID
-                - occurrence: Optional occurrence ID
+                - server_id: Optional server ID for multi-server
+                - occurrence_id: Optional occurrence ID for multi-instance
 
         Returns:
             0 on success, non-zero on failure
@@ -176,8 +176,8 @@ class DebugCommands:
         status = getattr(args, "status", None)
         task_id = getattr(args, "task_id", None)
         limit = getattr(args, "limit", 50)
-        server_id = getattr(args, "server", None)
-        occurrence_id = getattr(args, "occurrence", None)
+        server_id = getattr(args, "server_id", None)
+        occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
             print(f"Listing thoughts for agent: {agent_id}")
@@ -193,14 +193,13 @@ class DebugCommands:
             if occurrence_id:
                 params["occurrence_id"] = occurrence_id
 
-            result = ctx.client._request(
-                "GET", f"/debug/agents/{agent_id}/thoughts", params=params
-            )
+            result = ctx.client._request("GET", f"/debug/agents/{agent_id}/thoughts", params=params)
 
             if ctx.output_format == "json":
                 print(json.dumps(result, indent=2))
             elif ctx.output_format == "yaml":
                 import yaml
+
                 print(yaml.dump(result, default_flow_style=False))
             else:
                 # Table format
@@ -208,14 +207,20 @@ class DebugCommands:
                     print("No thoughts found")
                     return 0
 
-                print(f"\n{'Thought ID':<35} {'Status':<12} {'Depth':<6} {'Action':<15} {'Task ID':<25}")
+                print(
+                    f"\n{'Thought ID':<35} {'Status':<12} {'Depth':<6} {'Action':<15} {'Task ID':<25}"
+                )
                 print("-" * 100)
                 for thought in result:
                     t_id = thought.get("thought_id", "")[:34]
                     status_val = thought.get("status", "unknown")
                     depth = str(thought.get("depth", "-"))
                     action = thought.get("final_action", "-") or "-"
-                    task = thought.get("source_task_id", "")[:24] if thought.get("source_task_id") else "-"
+                    task = (
+                        thought.get("source_task_id", "")[:24]
+                        if thought.get("source_task_id")
+                        else "-"
+                    )
                     print(f"{t_id:<35} {status_val:<12} {depth:<6} {action:<15} {task:<25}")
 
                 print(f"\nTotal: {len(result)} thought(s)")
@@ -236,16 +241,16 @@ class DebugCommands:
             args: Parsed arguments with:
                 - agent_id: Agent identifier
                 - thought_id: Thought identifier (can be partial)
-                - server: Optional server ID
-                - occurrence: Optional occurrence ID
+                - server_id: Optional server ID for multi-server
+                - occurrence_id: Optional occurrence ID for multi-instance
 
         Returns:
             0 on success, non-zero on failure
         """
         agent_id = args.agent_id
         thought_id = args.thought_id
-        server_id = getattr(args, "server", None)
-        occurrence_id = getattr(args, "occurrence", None)
+        server_id = getattr(args, "server_id", None)
+        occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
             print(f"Getting thought {thought_id} for agent: {agent_id}")
@@ -265,6 +270,7 @@ class DebugCommands:
                 print(json.dumps(result, indent=2))
             elif ctx.output_format == "yaml":
                 import yaml
+
                 print(yaml.dump(result, default_flow_style=False))
             else:
                 # Detailed format
@@ -309,16 +315,16 @@ class DebugCommands:
             args: Parsed arguments with:
                 - agent_id: Agent identifier
                 - query: SQL query to execute
-                - server: Optional server ID
-                - occurrence: Optional occurrence ID
+                - server_id: Optional server ID for multi-server
+                - occurrence_id: Optional occurrence ID for multi-instance
 
         Returns:
             0 on success, non-zero on failure
         """
         agent_id = args.agent_id
         query = args.query
-        server_id = getattr(args, "server", None)
-        occurrence_id = getattr(args, "occurrence", None)
+        server_id = getattr(args, "server_id", None)
+        occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
             print(f"Executing query on agent: {agent_id}")
@@ -341,6 +347,7 @@ class DebugCommands:
                 print(json.dumps(result, indent=2))
             elif ctx.output_format == "yaml":
                 import yaml
+
                 print(yaml.dump(result, default_flow_style=False))
             else:
                 # Table format
@@ -363,8 +370,7 @@ class DebugCommands:
 
                 # Print header
                 header = " | ".join(
-                    col[:widths[i]].ljust(widths[i])
-                    for i, col in enumerate(columns)
+                    col[: widths[i]].ljust(widths[i]) for i, col in enumerate(columns)
                 )
                 print(f"\n{header}")
                 print("-" * len(header))
@@ -372,8 +378,7 @@ class DebugCommands:
                 # Print rows
                 for row in rows[:100]:  # Limit output
                     row_str = " | ".join(
-                        str(val)[:widths[i]].ljust(widths[i])
-                        for i, val in enumerate(row)
+                        str(val)[: widths[i]].ljust(widths[i]) for i, val in enumerate(row)
                     )
                     print(row_str)
 
@@ -396,15 +401,15 @@ class DebugCommands:
             ctx: Command context
             args: Parsed arguments with:
                 - agent_id: Agent identifier
-                - server: Optional server ID
-                - occurrence: Optional occurrence ID
+                - server_id: Optional server ID for multi-server
+                - occurrence_id: Optional occurrence ID for multi-instance
 
         Returns:
             0 on success, non-zero on failure
         """
         agent_id = args.agent_id
-        server_id = getattr(args, "server", None)
-        occurrence_id = getattr(args, "occurrence", None)
+        server_id = getattr(args, "server_id", None)
+        occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
             print(f"Getting schema for agent: {agent_id}")
@@ -416,19 +421,18 @@ class DebugCommands:
             if occurrence_id:
                 params["occurrence_id"] = occurrence_id
 
-            result = ctx.client._request(
-                "GET", f"/debug/agents/{agent_id}/schema", params=params
-            )
+            result = ctx.client._request("GET", f"/debug/agents/{agent_id}/schema", params=params)
 
             if ctx.output_format == "json":
                 print(json.dumps(result, indent=2))
             elif ctx.output_format == "yaml":
                 import yaml
+
                 print(yaml.dump(result, default_flow_style=False))
             else:
                 # Human-readable format
                 print(f"\nDatabase Dialect: {result.get('dialect', 'unknown')}")
-                print(f"\n{'='*60}")
+                print(f"\n{'=' * 60}")
 
                 tables = result.get("tables", {})
                 for table_name, columns in tables.items():

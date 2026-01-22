@@ -27,8 +27,8 @@ A comprehensive command-line interface for managing CIRIS agents, deployments, a
 # Install from source
 pip install -e ".[dev]"
 
-# The CLI will be available as 'ciris-cli'
-ciris-cli --help
+# The CLI will be available as 'ciris-manager-client'
+ciris-manager-client --help
 ```
 
 ## Configuration
@@ -43,7 +43,7 @@ API endpoint defaults to `https://agents.ciris.ai` but can be overridden:
 
 ```bash
 # Set custom API endpoint
-ciris-cli --api-url http://localhost:8888 agent list
+ciris-manager-client --api-url http://localhost:8888 agent list
 
 # Or use environment variable
 export CIRIS_MANAGER_API_URL=http://localhost:8888
@@ -64,58 +64,58 @@ All commands support these global options:
 
 ```bash
 # List all agents
-ciris-cli agent list
+ciris-manager-client agent list
 
 # List agents on specific server
-ciris-cli agent list --server scout
+ciris-manager-client agent list --server scout
 
 # List agents by deployment
-ciris-cli agent list --deployment CIRIS_DISCORD_PILOT
+ciris-manager-client agent list --deployment CIRIS_DISCORD_PILOT
 
 # List agents by status
-ciris-cli agent list --status running
+ciris-manager-client agent list --status running
 
 # Output as JSON
-ciris-cli agent list --format json
+ciris-manager-client agent list --format json
 
 # Filter and format
-ciris-cli agent list --server main --status running --format table
+ciris-manager-client agent list --server main --status running --format table
 ```
 
 #### Get Agent Details
 
 ```bash
 # Get detailed information about an agent
-ciris-cli agent get datum
+ciris-manager-client agent get datum
 
 # Output as JSON for scripting
-ciris-cli agent get datum --format json
+ciris-manager-client agent get datum --format json
 ```
 
 #### Create Agent
 
 ```bash
 # Create basic agent
-ciris-cli agent create --name my-agent --template scout
+ciris-manager-client agent create --name my-agent --template scout
 
 # Create on specific server
-ciris-cli agent create --name scout-test --template scout --server scout
+ciris-manager-client agent create --name scout-test --template scout --server scout
 
 # Create with environment variables
-ciris-cli agent create \
+ciris-manager-client agent create \
   --name my-agent \
   --template scout \
   --env OAUTH_CALLBACK_BASE_URL=https://scoutapi.ciris.ai \
   --env CUSTOM_VAR=value
 
 # Create with mock LLM
-ciris-cli agent create --name test-agent --template scout --use-mock-llm
+ciris-manager-client agent create --name test-agent --template scout --use-mock-llm
 
 # Create with Discord enabled
-ciris-cli agent create --name discord-bot --template scout --enable-discord
+ciris-manager-client agent create --name discord-bot --template scout --enable-discord
 
 # Create with billing
-ciris-cli agent create \
+ciris-manager-client agent create \
   --name paid-agent \
   --template scout \
   --billing-enabled \
@@ -126,52 +126,99 @@ ciris-cli agent create \
 
 ```bash
 # Delete agent (with confirmation)
-ciris-cli agent delete scout-test-abc123
+ciris-manager-client agent delete scout-test-abc123
 
 # Force delete without confirmation
-ciris-cli agent delete scout-test-abc123 --force
+ciris-manager-client agent delete scout-test-abc123 --force
 ```
 
 #### Start/Stop/Restart Agent
 
 ```bash
 # Start agent
-ciris-cli agent start datum
+ciris-manager-client agent start datum
 
 # Stop agent
-ciris-cli agent stop datum
+ciris-manager-client agent stop datum
 
 # Restart agent
-ciris-cli agent restart datum
+ciris-manager-client agent restart datum
 
 # Graceful shutdown (allows agent to finish work)
-ciris-cli agent shutdown datum --message "Maintenance window"
+ciris-manager-client agent shutdown datum --message "Maintenance window"
 ```
 
 #### View Agent Logs
 
 ```bash
 # View last 100 lines
-ciris-cli agent logs datum
+ciris-manager-client agent logs datum
 
 # View last N lines
-ciris-cli agent logs datum --lines 500
+ciris-manager-client agent logs datum --lines 500
 
 # Follow logs (like tail -f)
-ciris-cli agent logs datum --follow
+ciris-manager-client agent logs datum --follow
 
 # Save to file
-ciris-cli agent logs datum --lines 1000 > datum.log
+ciris-manager-client agent logs datum --lines 1000 > datum.log
 ```
 
 #### Agent Version Information
 
 ```bash
 # Show version info for all agents
-ciris-cli agent versions
+ciris-manager-client agent versions
 
 # Show version for specific agent
-ciris-cli agent versions --agent-id datum
+ciris-manager-client agent versions --agent-id datum
+```
+
+#### Agent Access Details
+
+Get connection details for an agent including service token, API endpoint, and database info:
+
+```bash
+# Get access details for an agent
+ciris-manager-client agent access datum
+
+# Get access for agent on specific server
+ciris-manager-client agent access scout-remote-test-dahrb9 --server-id scout1
+
+# Get access for specific occurrence
+ciris-manager-client agent access scout-remote-test-dahrb9 --occurrence-id 002 --server-id scout2
+```
+
+Output includes:
+- Agent ID and registry key
+- Server ID and port
+- API endpoint URL
+- Decrypted service token
+- Database location (host and container paths)
+- Server hostname and VPC IP
+
+### Adapter Management
+
+Manage adapters on agents (load, unload, list):
+
+```bash
+# List adapters on an agent
+ciris-manager-client adapter list datum
+
+# Load an adapter
+ciris-manager-client adapter load datum ciris_covenant_metrics
+
+# Load adapter with custom config
+ciris-manager-client adapter load datum my_adapter --config '{"key": "value"}'
+
+# Load adapter without persistence (won't survive restart)
+ciris-manager-client adapter load datum my_adapter --no-persist
+
+# Unload an adapter
+ciris-manager-client adapter unload datum ciris_covenant_metrics_abc123
+
+# Get adapter details
+ciris-manager-client adapter get datum ciris_covenant_metrics_abc123
 ```
 
 ### Configuration Management
@@ -180,109 +227,109 @@ ciris-cli agent versions --agent-id datum
 
 ```bash
 # Get agent config
-ciris-cli config get datum
+ciris-manager-client config get datum
 
 # Get as JSON
-ciris-cli config get datum --format json
+ciris-manager-client config get datum --format json
 
 # Get as YAML
-ciris-cli config get datum --format yaml
+ciris-manager-client config get datum --format yaml
 ```
 
 #### Update Agent Configuration
 
 ```bash
 # Update environment variable
-ciris-cli config update datum --env NEW_VAR=value
+ciris-manager-client config update datum --env NEW_VAR=value
 
 # Update multiple environment variables
-ciris-cli config update datum \
+ciris-manager-client config update datum \
   --env VAR1=value1 \
   --env VAR2=value2
 
 # Update from JSON file
-ciris-cli config update datum --from-file config.json
+ciris-manager-client config update datum --from-file config.json
 ```
 
 #### Export Configuration
 
 ```bash
 # Export to JSON file
-ciris-cli config export datum --output datum-config.json
+ciris-manager-client config export datum --output datum-config.json
 
 # Export to YAML
-ciris-cli config export datum --output datum-config.yaml --format yaml
+ciris-manager-client config export datum --output datum-config.yaml --format yaml
 
 # Export all agents on a server
-ciris-cli config export --server scout --output scout-agents.json
+ciris-manager-client config export --server scout --output scout-agents.json
 ```
 
 #### Import Configuration
 
 ```bash
 # Import from file (dry run first)
-ciris-cli config import datum-config.json --dry-run
+ciris-manager-client config import datum-config.json --dry-run
 
 # Import and create/update agent
-ciris-cli config import datum-config.json
+ciris-manager-client config import datum-config.json
 
 # Import with different agent ID
-ciris-cli config import datum-config.json --agent-id new-datum
+ciris-manager-client config import datum-config.json --agent-id new-datum
 ```
 
 #### Backup All Configurations
 
 ```bash
 # Backup all agents
-ciris-cli config backup --output agents-backup.json
+ciris-manager-client config backup --output agents-backup.json
 
 # Backup specific server
-ciris-cli config backup --server main --output main-backup.json
+ciris-manager-client config backup --server main --output main-backup.json
 
 # Backup with timestamp
-ciris-cli config backup --output "backup-$(date +%Y%m%d).json"
+ciris-manager-client config backup --output "backup-$(date +%Y%m%d).json"
 ```
 
 #### Restore from Backup
 
 ```bash
 # Restore all agents from backup
-ciris-cli config restore agents-backup.json
+ciris-manager-client config restore agents-backup.json
 
 # Restore specific agent from backup
-ciris-cli config restore agents-backup.json --agent-id datum
+ciris-manager-client config restore agents-backup.json --agent-id datum
 
 # Restore with dry run
-ciris-cli config restore agents-backup.json --dry-run
+ciris-manager-client config restore agents-backup.json --dry-run
 ```
 
 ### Maintenance Mode
 
 ```bash
 # Enter maintenance mode
-ciris-cli maintenance enter datum --message "Database migration"
+ciris-manager-client maintenance enter datum --message "Database migration"
 
 # Exit maintenance mode
-ciris-cli maintenance exit datum
+ciris-manager-client maintenance exit datum
 
 # Check maintenance status
-ciris-cli maintenance status datum
+ciris-manager-client maintenance status datum
 
 # List all agents in maintenance
-ciris-cli maintenance list
+ciris-manager-client maintenance list
 ```
 
 ### OAuth Management
 
 ```bash
 # Verify OAuth status
-ciris-cli oauth verify datum
+ciris-manager-client oauth verify datum
 
 # Complete OAuth flow
-ciris-cli oauth complete datum --code AUTH_CODE
+ciris-manager-client oauth complete datum --code AUTH_CODE
 
 # Check OAuth for all agents
-ciris-cli oauth status
+ciris-manager-client oauth status
 ```
 
 ### Deployment Operations
@@ -291,14 +338,14 @@ ciris-cli oauth status
 
 ```bash
 # Notify agents about new version (canary deployment)
-ciris-cli deploy notify \
+ciris-manager-client deploy notify \
   --agent-image ghcr.io/cirisai/ciris-agent:v2.0.0 \
   --gui-image ghcr.io/cirisai/ciris-gui:v2.0.0 \
   --strategy canary \
   --message "Security update with new features"
 
 # Immediate deployment (all agents at once)
-ciris-cli deploy notify \
+ciris-manager-client deploy notify \
   --agent-image ghcr.io/cirisai/ciris-agent:v2.0.1 \
   --strategy immediate \
   --message "Critical security patch"
@@ -308,83 +355,83 @@ ciris-cli deploy notify \
 
 ```bash
 # Launch a pending deployment
-ciris-cli deploy launch DEPLOYMENT_ID
+ciris-manager-client deploy launch DEPLOYMENT_ID
 ```
 
 #### Deployment Status
 
 ```bash
 # Get current deployment status
-ciris-cli deploy status
+ciris-manager-client deploy status
 
 # Get specific deployment status
-ciris-cli deploy status --deployment-id abc123
+ciris-manager-client deploy status --deployment-id abc123
 
 # Watch deployment progress
-ciris-cli deploy status --follow
+ciris-manager-client deploy status --follow
 ```
 
 #### Pending Deployments
 
 ```bash
 # List pending deployments for current agent
-ciris-cli deploy pending
+ciris-manager-client deploy pending
 
 # List all pending deployments
-ciris-cli deploy pending --all
+ciris-manager-client deploy pending --all
 ```
 
 #### Preview Deployment
 
 ```bash
 # Preview what will happen
-ciris-cli deploy preview DEPLOYMENT_ID
+ciris-manager-client deploy preview DEPLOYMENT_ID
 ```
 
 #### Deployment Events
 
 ```bash
 # Show deployment events/timeline
-ciris-cli deploy events DEPLOYMENT_ID
+ciris-manager-client deploy events DEPLOYMENT_ID
 
 # Follow events in real-time
-ciris-cli deploy events DEPLOYMENT_ID --follow
+ciris-manager-client deploy events DEPLOYMENT_ID --follow
 ```
 
 #### Control Deployment
 
 ```bash
 # Cancel deployment
-ciris-cli deploy cancel
+ciris-manager-client deploy cancel
 
 # Reject deployment
-ciris-cli deploy reject --reason "Failed smoke tests"
+ciris-manager-client deploy reject --reason "Failed smoke tests"
 
 # Pause deployment
-ciris-cli deploy pause
+ciris-manager-client deploy pause
 ```
 
 #### Rollback
 
 ```bash
 # Rollback current deployment
-ciris-cli deploy rollback
+ciris-manager-client deploy rollback
 
 # List rollback options
-ciris-cli deploy rollback-options
+ciris-manager-client deploy rollback-options
 
 # Preview rollback
-ciris-cli deploy rollback-preview DEPLOYMENT_ID
+ciris-manager-client deploy rollback-preview DEPLOYMENT_ID
 
 # Approve pending rollback
-ciris-cli deploy approve-rollback ROLLBACK_ID
+ciris-manager-client deploy approve-rollback ROLLBACK_ID
 ```
 
 #### Single Agent Deploy
 
 ```bash
 # Deploy to single agent
-ciris-cli deploy single datum \
+ciris-manager-client deploy single datum \
   --agent-image ghcr.io/cirisai/ciris-agent:v2.0.0
 ```
 
@@ -392,108 +439,108 @@ ciris-cli deploy single datum \
 
 ```bash
 # View deployment history
-ciris-cli deploy history
+ciris-manager-client deploy history
 
 # View last N deployments
-ciris-cli deploy history --limit 10
+ciris-manager-client deploy history --limit 10
 
 # View history as JSON
-ciris-cli deploy history --format json
+ciris-manager-client deploy history --format json
 ```
 
 #### View Changelog
 
 ```bash
 # View latest changelog
-ciris-cli deploy changelog
+ciris-manager-client deploy changelog
 
 # View specific version changelog
-ciris-cli deploy changelog --version v2.0.0
+ciris-manager-client deploy changelog --version v2.0.0
 ```
 
 ### Canary Deployments
 
 ```bash
 # List canary groups
-ciris-cli canary groups
+ciris-manager-client canary groups
 
 # Set agent canary group
-ciris-cli canary set-group datum --group explorer
+ciris-manager-client canary set-group datum --group explorer
 
 # Available groups: explorer, early_adopter, general
 
 # View version adoption statistics
-ciris-cli canary adoption
+ciris-manager-client canary adoption
 
 # View adoption over time
-ciris-cli canary adoption --history
+ciris-manager-client canary adoption --history
 ```
 
 ### Template Management
 
 ```bash
 # List available templates
-ciris-cli template list
+ciris-manager-client template list
 
 # Get template details
-ciris-cli template details scout
+ciris-manager-client template details scout
 
 # View default environment for template
-ciris-cli template env-default scout
+ciris-manager-client template env-default scout
 ```
 
 ### Server Management
 
 ```bash
 # List all servers
-ciris-cli server list
+ciris-manager-client server list
 
 # Get server details
-ciris-cli server get main
+ciris-manager-client server get main
 
 # Get server statistics
-ciris-cli server stats scout
+ciris-manager-client server stats scout
 
 # List agents on server
-ciris-cli server agents scout
+ciris-manager-client server agents scout
 
 # Compare servers
-ciris-cli server compare main scout
+ciris-manager-client server compare main scout
 ```
 
 ### System Operations
 
 ```bash
 # Health check
-ciris-cli system health
+ciris-manager-client system health
 
 # Detailed status
-ciris-cli system status
+ciris-manager-client system status
 
 # View allocated ports
-ciris-cli system ports
+ciris-manager-client system ports
 
 # View deployment tokens
-ciris-cli system tokens
+ciris-manager-client system tokens
 ```
 
 ### Authentication
 
 ```bash
 # OAuth login (opens browser)
-ciris-cli auth login
+ciris-manager-client auth login
 
 # OAuth logout
-ciris-cli auth logout
+ciris-manager-client auth logout
 
 # Show current user
-ciris-cli auth whoami
+ciris-manager-client auth whoami
 
 # Device code flow (for headless systems)
-ciris-cli auth device
+ciris-manager-client auth device
 
 # Generate dev token (development mode only)
-ciris-cli auth token --dev
+ciris-manager-client auth token --dev
 ```
 
 ### Inspection & Validation
@@ -502,24 +549,24 @@ These commands perform deeper inspection beyond API calls, including SSH checks.
 
 ```bash
 # Inspect agent (checks Docker labels, nginx routes, health)
-ciris-cli inspect agent datum
+ciris-manager-client inspect agent datum
 
 # Inspect remote agent
-ciris-cli inspect agent scout-u7e9s3 --server scout
+ciris-manager-client inspect agent scout-u7e9s3 --server scout
 
 # Check specific aspects
-ciris-cli inspect agent datum --check-labels
-ciris-cli inspect agent datum --check-nginx
-ciris-cli inspect agent datum --check-health
+ciris-manager-client inspect agent datum --check-labels
+ciris-manager-client inspect agent datum --check-nginx
+ciris-manager-client inspect agent datum --check-health
 
 # Inspect server
-ciris-cli inspect server scout
+ciris-manager-client inspect server scout
 
 # Validate config file
-ciris-cli inspect validate config.json
+ciris-manager-client inspect validate config.json
 
 # Full system inspection
-ciris-cli inspect system
+ciris-manager-client inspect system
 ```
 
 ## Configuration Files
@@ -602,108 +649,108 @@ metadata:
 
 ```bash
 # 1. Create agent on scout server
-ciris-cli agent create \
+ciris-manager-client agent create \
   --name production-scout \
   --template scout \
   --server scout \
   --env OAUTH_CALLBACK_BASE_URL=https://scoutapi.ciris.ai
 
 # 2. Verify it's working
-ciris-cli inspect agent scout-xxx --server scout
+ciris-manager-client inspect agent scout-xxx --server scout
 
 # 3. Check logs
-ciris-cli agent logs scout-xxx
+ciris-manager-client agent logs scout-xxx
 ```
 
 #### Backup and Recreate Agent
 
 ```bash
 # 1. Export existing agent config
-ciris-cli config export scout-remote-test-dahrb9 --output scout-backup.json
+ciris-manager-client config export scout-remote-test-dahrb9 --output scout-backup.json
 
 # 2. Delete old agent
-ciris-cli agent delete scout-remote-test-dahrb9 --force
+ciris-manager-client agent delete scout-remote-test-dahrb9 --force
 
 # 3. Recreate from backup
-ciris-cli config import scout-backup.json
+ciris-manager-client config import scout-backup.json
 
 # 4. Verify new agent
-ciris-cli inspect agent <new-agent-id> --check-labels --check-nginx
+ciris-manager-client inspect agent <new-agent-id> --check-labels --check-nginx
 ```
 
 #### Migrate Agent Between Servers
 
 ```bash
 # 1. Export config from main server
-ciris-cli config export datum --output datum-main.json
+ciris-manager-client config export datum --output datum-main.json
 
 # 2. Edit config to change server_id
 # Edit datum-main.json: "server_id": "scout"
 
 # 3. Create on new server
-ciris-cli config import datum-main.json --agent-id datum-scout
+ciris-manager-client config import datum-main.json --agent-id datum-scout
 
 # 4. Test new agent
-ciris-cli inspect agent datum-scout --server scout
+ciris-manager-client inspect agent datum-scout --server scout
 
 # 5. Delete old agent if satisfied
-ciris-cli agent delete datum --force
+ciris-manager-client agent delete datum --force
 ```
 
 #### Rolling Deployment
 
 ```bash
 # 1. Notify about new version
-ciris-cli deploy notify \
+ciris-manager-client deploy notify \
   --agent-image ghcr.io/cirisai/ciris-agent:v2.1.0 \
   --strategy canary \
   --message "New features: X, Y, Z"
 
 # 2. Monitor deployment progress
-ciris-cli deploy status --follow
+ciris-manager-client deploy status --follow
 
 # 3. Check events
-ciris-cli deploy events <deployment-id>
+ciris-manager-client deploy events <deployment-id>
 
 # 4. If issues, rollback
-ciris-cli deploy rollback
+ciris-manager-client deploy rollback
 ```
 
 #### Maintenance Window
 
 ```bash
 # 1. Put agents in maintenance mode
-ciris-cli maintenance enter datum --message "Database upgrade"
-ciris-cli maintenance enter scout-u7e9s3 --message "Database upgrade"
+ciris-manager-client maintenance enter datum --message "Database upgrade"
+ciris-manager-client maintenance enter scout-u7e9s3 --message "Database upgrade"
 
 # 2. Perform maintenance
 # ... database operations ...
 
 # 3. Take agents out of maintenance
-ciris-cli maintenance exit datum
-ciris-cli maintenance exit scout-u7e9s3
+ciris-manager-client maintenance exit datum
+ciris-manager-client maintenance exit scout-u7e9s3
 
 # 4. Verify health
-ciris-cli inspect agent datum
-ciris-cli inspect agent scout-u7e9s3
+ciris-manager-client inspect agent datum
+ciris-manager-client inspect agent scout-u7e9s3
 ```
 
 #### Batch Operations with Shell
 
 ```bash
 # Stop all agents on scout server
-ciris-cli agent list --server scout --format json | \
+ciris-manager-client agent list --server scout --format json | \
   jq -r '.[].agent_id' | \
-  xargs -I {} ciris-cli agent stop {}
+  xargs -I {} ciris-manager-client agent stop {}
 
 # Restart all running agents
-ciris-cli agent list --status running --format json | \
+ciris-manager-client agent list --status running --format json | \
   jq -r '.[].agent_id' | \
-  xargs -I {} ciris-cli agent restart {}
+  xargs -I {} ciris-manager-client agent restart {}
 
 # Backup all servers separately
 for server in main scout; do
-  ciris-cli config backup --server $server --output "backup-$server-$(date +%Y%m%d).json"
+  ciris-manager-client config backup --server $server --output "backup-$server-$(date +%Y%m%d).json"
 done
 ```
 
@@ -711,20 +758,20 @@ done
 
 ```bash
 # Full system health check
-ciris-cli system health
-ciris-cli system status
+ciris-manager-client system health
+ciris-manager-client system status
 
 # Check each server
 for server in main scout; do
   echo "=== Server: $server ==="
-  ciris-cli server stats $server
-  ciris-cli server agents $server
+  ciris-manager-client server stats $server
+  ciris-manager-client server agents $server
 done
 
 # Inspect all agents
-ciris-cli agent list --format json | \
+ciris-manager-client agent list --format json | \
   jq -r '.[].agent_id' | \
-  xargs -I {} ciris-cli inspect agent {}
+  xargs -I {} ciris-manager-client inspect agent {}
 ```
 
 ## Output Formats
@@ -785,37 +832,37 @@ echo-core-jm2jy2      echo-core   main    running  8003
 
 ```bash
 # Check if token is valid
-ciris-cli auth whoami
+ciris-manager-client auth whoami
 
 # Re-authenticate
-ciris-cli auth login
+ciris-manager-client auth login
 
 # Use dev token (development mode)
-ciris-cli auth token --dev
+ciris-manager-client auth token --dev
 ```
 
 ### Connection Issues
 
 ```bash
 # Check API health
-ciris-cli system health
+ciris-manager-client system health
 
 # Test with verbose output
-ciris-cli --verbose agent list
+ciris-manager-client --verbose agent list
 
 # Try different API endpoint
-ciris-cli --api-url http://localhost:8888 agent list
+ciris-manager-client --api-url http://localhost:8888 agent list
 ```
 
 ### Inspection Failures
 
 ```bash
 # Run with verbose logging
-ciris-cli --verbose inspect agent datum
+ciris-manager-client --verbose inspect agent datum
 
 # Check specific components
-ciris-cli inspect agent datum --check-labels
-ciris-cli inspect agent datum --check-nginx
+ciris-manager-client inspect agent datum --check-labels
+ciris-manager-client inspect agent datum --check-nginx
 ```
 
 ## Development
@@ -827,7 +874,7 @@ ciris-cli inspect agent datum --check-nginx
 pip install -e ".[dev]"
 
 # Run CLI
-ciris-cli --help
+ciris-manager-client --help
 
 # Run tests
 pytest tests/cli/

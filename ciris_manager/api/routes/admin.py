@@ -348,6 +348,36 @@ async def _handle_identity_update(
         logger.error(f"Failed to start container: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to restart: {e}")
 
+    # Remove --identity-update flag from compose file after container starts
+    # so subsequent restarts don't trigger identity update again
+    if "--identity-update" in command:
+        command.remove("--identity-update")
+        service["command"] = command
+        compose_config["services"][service_name] = service
+
+        try:
+            if server_config.is_local:
+                with open(compose_path, "w") as f:
+                    yaml.dump(compose_config, f, default_flow_style=False, sort_keys=False)
+                logger.info(f"Removed --identity-update flag from {compose_path}")
+            else:
+                # Remote: write via temporary container with host filesystem access
+                import base64
+
+                compose_yaml = yaml.dump(compose_config, default_flow_style=False, sort_keys=False)
+                encoded = base64.b64encode(compose_yaml.encode()).decode()
+                compose_file_path = f"/opt/ciris/agents/{agent_id}/docker-compose.yml"
+                docker_client.containers.run(
+                    "alpine:latest",
+                    f"sh -c 'echo {encoded} | base64 -d > {compose_file_path}'",
+                    volumes={"/opt/ciris/agents": {"bind": "/opt/ciris/agents", "mode": "rw"}},
+                    remove=True,
+                    detach=False,
+                )
+                logger.info("Removed --identity-update flag from remote compose file")
+        except Exception as e:
+            logger.warning(f"Failed to remove --identity-update flag from compose: {e}")
+
     return AdminActionResponse(
         success=True,
         action="identity-update",
@@ -356,6 +386,7 @@ async def _handle_identity_update(
         details={
             "compose_updated": True,
             "container_restarted": True,
+            "flag_cleanup": True,
             "template": template or "default",
         },
     )
