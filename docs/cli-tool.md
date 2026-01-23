@@ -533,15 +533,26 @@ ciris-manager-client auth login
 # OAuth logout
 ciris-manager-client auth logout
 
-# Show current user
-ciris-manager-client auth whoami
+# Show current user/status
+ciris-manager-client auth status
 
-# Device code flow (for headless systems)
-ciris-manager-client auth device
+# Print current token (for scripting)
+ciris-manager-client auth token
 
-# Generate dev token (development mode only)
-ciris-manager-client auth token --dev
+# Get dev token (MUST run on manager server with CIRIS_DEV_MODE=true)
+# This is for test environments without OAuth
+ciris-manager-client auth dev-token
 ```
+
+#### Dev Token (Test Environments)
+
+For test environments without OAuth configured:
+
+1. Set `CIRIS_DEV_MODE=true` on the manager server
+2. SSH to the manager server
+3. Run: `ciris-manager-client auth dev-token`
+
+The dev token endpoint only accepts requests from localhost, so it must be run directly on the manager server. This prevents remote token generation while still allowing easy scripting for test setups.
 
 ### Inspection & Validation
 

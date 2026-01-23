@@ -423,6 +423,12 @@ def setup_auth_parser(subparsers):
     # auth token
     auth_subparsers.add_parser("token", help="Print current token (for scripting)")
 
+    # auth dev-token
+    auth_subparsers.add_parser(
+        "dev-token",
+        help="Get dev token (must run on manager server with CIRIS_DEV_MODE=true)",
+    )
+
 
 def setup_adapter_parser(subparsers):
     """Set up adapter command subparser."""

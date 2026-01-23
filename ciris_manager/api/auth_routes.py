@@ -197,16 +197,48 @@ def create_auth_routes() -> APIRouter:
 
         return {"user": user}
 
-    # Add dev token endpoint for easy testing
+    # Add dev token endpoint for easy testing (localhost only)
     if os.getenv("CIRIS_DEV_MODE") == "true":
+        logger.info("Dev mode enabled - /dev/token endpoint available (localhost only)")
 
         @router.post("/dev/token")
         async def get_dev_token(
+            request: Request,
             auth_service: AuthService = Depends(get_auth_service),
         ) -> TokenResponse:
-            """Get a development token (only available in dev mode)."""
+            """
+            Get a development token (only available in dev mode from localhost).
+
+            Security: This endpoint only accepts requests from localhost/127.0.0.1/::1.
+            This ensures dev tokens can only be generated from scripts running on the
+            manager server itself, not from remote clients.
+            """
             if not auth_service:
                 raise HTTPException(status_code=500, detail=oauth_error_msg)
+
+            # Security: Only allow from localhost
+            client_host = request.client.host if request.client else None
+            allowed_hosts = {"127.0.0.1", "::1", "localhost"}
+
+            # Also check X-Forwarded-For in case of proxy, but only trust if from localhost
+            forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+
+            is_localhost = client_host in allowed_hosts or (
+                client_host in allowed_hosts and forwarded_for in allowed_hosts
+            )
+
+            if not is_localhost:
+                logger.warning(
+                    f"Dev token request rejected from non-localhost: {client_host} "
+                    f"(X-Forwarded-For: {forwarded_for})"
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="Dev token endpoint only accessible from localhost. "
+                    "Run this command on the manager server itself.",
+                )
+
+            logger.info(f"Dev token issued to localhost client: {client_host}")
 
             # Create a dev user session
             dev_user = {

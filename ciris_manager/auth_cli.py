@@ -215,6 +215,68 @@ class AuthManager:
         else:
             print("⚠️  Token status: Invalid (may have been revoked)")
 
+    def request_dev_token(self) -> Optional[str]:
+        """
+        Request a dev token from the local manager.
+
+        This only works when:
+        1. The manager has CIRIS_DEV_MODE=true
+        2. This command is run on the manager server itself (localhost)
+
+        Returns the token if successful, None otherwise.
+        """
+        # Dev token endpoint must be called via localhost
+        # Override base_url to localhost for this request
+        localhost_url = "http://127.0.0.1:8888"
+        url = f"{localhost_url}/manager/v1/dev/token"
+
+        try:
+            response = requests.post(url, timeout=10)
+
+            if response.status_code == 200:
+                data = response.json()
+                return cast(Optional[str], data.get("access_token"))
+            elif response.status_code == 403:
+                print("❌ Dev token rejected: endpoint only accessible from localhost")
+                print("   Run this command directly on the manager server.")
+                return None
+            elif response.status_code == 404:
+                print("❌ Dev token endpoint not found.")
+                print("   Ensure CIRIS_DEV_MODE=true is set on the manager.")
+                return None
+            else:
+                print(f"❌ Failed to get dev token: HTTP {response.status_code}")
+                try:
+                    error = response.json().get("detail", response.text)
+                    print(f"   {error}")
+                except Exception:
+                    print(f"   {response.text}")
+                return None
+
+        except requests.exceptions.ConnectionError:
+            print("❌ Cannot connect to local manager at http://127.0.0.1:8888")
+            print("   Ensure the manager is running and you're on the manager server.")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Request failed: {e}")
+            return None
+
+    def get_dev_token(self) -> Optional[str]:
+        """Get a dev token and save it."""
+        print("🔧 Requesting dev token from local manager...")
+
+        token = self.request_dev_token()
+
+        if token:
+            # Save the token
+            self.save_token(token, "dev@ciris.ai")
+            print("✅ Dev token obtained and saved!")
+            print("   Email: dev@ciris.ai")
+            print(f"   Token file: {self.token_file}")
+            return token
+
+        return None
+
 
 def handle_auth_command(args: argparse.Namespace) -> int:
     """Handle auth subcommand."""
@@ -258,6 +320,15 @@ def handle_auth_command(args: argparse.Namespace) -> int:
                 "Not authenticated. Run: ciris-manager auth login your-email@ciris.ai",
                 file=sys.stderr,
             )
+            return 1
+
+    elif args.auth_command == "dev-token":
+        token = auth.get_dev_token()
+        if token:
+            print("\n🎉 Dev token ready! You can now use the CLI:")
+            print(f"   ciris-manager-client --api-url {auth.base_url} agent list")
+            return 0
+        else:
             return 1
 
     else:
