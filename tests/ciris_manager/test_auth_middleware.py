@@ -58,46 +58,74 @@ class TestAuthIntegration:
         )
         return manager
 
-    def test_dev_mode_allows_unauthenticated_requests(self, mock_manager):
-        """Test that dev mode allows requests without auth headers."""
-        with patch.dict(os.environ, {"CIRIS_AUTH_MODE": "development"}):
-            from ciris_manager.api.routes import create_routes
-            from fastapi import FastAPI
+    @pytest.fixture
+    def mock_auth(self):
+        """Mock authentication dependency."""
 
-            app = FastAPI()
-            app.state.manager = mock_manager
-            router = create_routes(mock_manager)
-            app.include_router(router, prefix="/manager/v1")
+        def override_get_current_user():
+            return {"id": "test-user-id", "email": "test@example.com", "name": "Test User"}
 
-            client = TestClient(app)
+        return override_get_current_user
 
-            # Make request without any auth headers
-            response = client.post(
-                "/manager/v1/agents", json={"template": "scout", "name": "Test Agent"}
-            )
+    def test_authenticated_request_succeeds(self, mock_manager, mock_auth):
+        """Test that authenticated requests succeed."""
+        from ciris_manager.api.routes import create_routes
+        from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
+        from fastapi import FastAPI
 
-            assert response.status_code == 200
-            assert response.json()["agent_id"] == "test-agent-123"
+        app = FastAPI()
+        app.state.manager = mock_manager
+        app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
 
-    def test_prod_mode_requires_auth(self, mock_manager):
-        """Test that production mode requires authentication."""
-        # In production mode, the auth dependency should be applied
-        # This is more of a unit test - the actual auth flow is tested elsewhere
-        with patch.dict(os.environ, {"CIRIS_AUTH_MODE": "production"}):
-            # Just verify the mode is correctly set
-            assert os.getenv("CIRIS_AUTH_MODE") == "production"
+        router = create_routes(mock_manager)
+        app.include_router(router, prefix="/manager/v1")
 
-            # The actual auth enforcement is tested in test_auth_routes.py
-            # This test just verifies the mode is set correctly
+        client = TestClient(app)
 
-    def test_dev_mode_status_endpoint(self, mock_manager):
+        # Make request with mocked auth
+        response = client.post(
+            "/manager/v1/agents", json={"template": "scout", "name": "Test Agent"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["agent_id"] == "test-agent-123"
+
+    def test_unauthenticated_request_fails(self, mock_manager):
+        """Test that unauthenticated requests fail with 401."""
+        from ciris_manager.api.routes import create_routes
+        from ciris_manager.api.auth_routes import init_auth_service
+        from fastapi import FastAPI
+
+        # Initialize auth service so it can validate (and reject) requests
+        init_auth_service(google_client_id="test-id", google_client_secret="test-secret")
+
+        app = FastAPI()
+        app.state.manager = mock_manager
+
+        router = create_routes(mock_manager)
+        app.include_router(router, prefix="/manager/v1")
+
+        client = TestClient(app)
+
+        # Make request without any auth
+        response = client.post(
+            "/manager/v1/agents", json={"template": "scout", "name": "Test Agent"}
+        )
+
+        # Should fail without authentication
+        assert response.status_code == 401
+
+    def test_dev_mode_status_endpoint(self, mock_manager, mock_auth):
         """Test that dev mode status endpoint includes auth_mode."""
         with patch.dict(os.environ, {"CIRIS_AUTH_MODE": "development"}):
             from ciris_manager.api.routes import create_routes
+            from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
             from fastapi import FastAPI
 
             app = FastAPI()
             app.state.manager = mock_manager
+            app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
+
             router = create_routes(mock_manager)
             app.include_router(router, prefix="/manager/v1")
 
@@ -108,14 +136,17 @@ class TestAuthIntegration:
             assert response.status_code == 200
             assert response.json()["auth_mode"] == "development"
 
-    def test_prod_mode_status_endpoint(self, mock_manager):
+    def test_prod_mode_status_endpoint(self, mock_manager, mock_auth):
         """Test that prod mode status endpoint includes auth_mode."""
         with patch.dict(os.environ, {"CIRIS_AUTH_MODE": "production"}):
             from ciris_manager.api.routes import create_routes
+            from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
             from fastapi import FastAPI
 
             app = FastAPI()
             app.state.manager = mock_manager
+            app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
+
             router = create_routes(mock_manager)
             app.include_router(router, prefix="/manager/v1")
 

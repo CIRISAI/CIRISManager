@@ -51,17 +51,23 @@ class TestEnhancedSettings:
         return manager
 
     @pytest.fixture
-    def app(self, mock_manager):
+    def mock_auth(self):
+        """Mock authentication dependency."""
+
+        def override_get_current_user():
+            return {"id": "test-user-id", "email": "test@example.com", "name": "Test User"}
+
+        return override_get_current_user
+
+    @pytest.fixture
+    def app(self, mock_manager, mock_auth):
         """Create a FastAPI app with routes."""
         from fastapi import FastAPI
+        from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
 
         app = FastAPI()
         app.state.manager = mock_manager
-
-        # Set dev mode to bypass auth
-        import os
-
-        os.environ["CIRIS_AUTH_MODE"] = "development"
+        app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
 
         router = create_routes(mock_manager)
         app.include_router(router, prefix="/manager/v1")

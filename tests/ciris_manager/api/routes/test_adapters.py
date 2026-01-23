@@ -75,16 +75,12 @@ class TestAdapterRoutes:
     @pytest.fixture
     def client(self, mock_manager, mock_auth):
         """Create test client with auth mocked."""
-        import os
-
-        os.environ["CIRIS_AUTH_MODE"] = "development"
-
         app = FastAPI()
         app.state.manager = mock_manager
 
-        from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+        from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
 
-        app.dependency_overrides[get_current_user] = mock_auth
+        app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
 
         router = create_routes(mock_manager)
         app.include_router(router, prefix="/manager/v1")
@@ -212,16 +208,12 @@ class TestWizardSessionEndpoints:
 
     @pytest.fixture
     def client(self, mock_manager, mock_auth):
-        import os
-
-        os.environ["CIRIS_AUTH_MODE"] = "development"
-
         app = FastAPI()
         app.state.manager = mock_manager
 
-        from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+        from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
 
-        app.dependency_overrides[get_current_user] = mock_auth
+        app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
 
         router = create_routes(mock_manager)
         app.include_router(router, prefix="/manager/v1")
@@ -348,16 +340,12 @@ class TestRemoveAdapterConfig:
         return agent
 
     def test_remove_config_success(self, mock_manager, mock_auth, mock_agent):
-        import os
-
-        os.environ["CIRIS_AUTH_MODE"] = "development"
-
         app = FastAPI()
         app.state.manager = mock_manager
 
-        from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+        from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
 
-        app.dependency_overrides[get_current_user] = mock_auth
+        app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
 
         router = create_routes(mock_manager)
         app.include_router(router, prefix="/manager/v1")
@@ -391,19 +379,15 @@ class TestRemoveAdapterConfig:
                     assert data["config_removed"] is True
 
     def test_remove_config_not_found(self, mock_manager, mock_auth, mock_agent):
-        import os
-
-        os.environ["CIRIS_AUTH_MODE"] = "development"
-
         # Set remove_adapter_config to return False (not found)
         mock_manager.agent_registry.remove_adapter_config = Mock(return_value=False)
 
         app = FastAPI()
         app.state.manager = mock_manager
 
-        from ciris_manager.api.auth import get_current_user_dependency as get_current_user
+        from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
 
-        app.dependency_overrides[get_current_user] = mock_auth
+        app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
 
         router = create_routes(mock_manager)
         app.include_router(router, prefix="/manager/v1")

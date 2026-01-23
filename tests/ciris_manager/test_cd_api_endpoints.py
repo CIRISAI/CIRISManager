@@ -52,10 +52,17 @@ class TestCDAPIEndpoints:
         return orchestrator
 
     @pytest.fixture
-    def app_with_mocked_orchestrator(self, mock_manager, mock_orchestrator):
+    def mock_auth(self):
+        """Mock authentication dependency."""
+
+        def override_get_current_user():
+            return {"id": "test-user-id", "email": "test@example.com", "name": "Test User"}
+
+        return override_get_current_user
+
+    @pytest.fixture
+    def app_with_mocked_orchestrator(self, mock_manager, mock_orchestrator, mock_auth):
         """Create app with mocked orchestrator."""
-        # Set dev mode for mock auth
-        os.environ["CIRIS_AUTH_MODE"] = "development"
         # Set test deployment token
         os.environ["CIRIS_DEPLOY_TOKEN"] = "test-deploy-token"
 
@@ -65,6 +72,7 @@ class TestCDAPIEndpoints:
 
             # Now import and create routes
             from ciris_manager.api.routes import create_routes
+            from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
 
             app = FastAPI()
 
@@ -76,6 +84,9 @@ class TestCDAPIEndpoints:
             app.state.token_manager.get_all_tokens = Mock(
                 return_value={"agent": "", "gui": "", "legacy": "test-deploy-token"}
             )
+
+            # Mock auth dependency for status endpoint
+            app.dependency_overrides[_get_auth_dependency_runtime] = mock_auth
 
             router = create_routes(mock_manager)
             app.include_router(router, prefix="/manager/v1")
