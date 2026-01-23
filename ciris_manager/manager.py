@@ -27,7 +27,7 @@ from ciris_manager.docker_image_cleanup import DockerImageCleanup
 from ciris_manager.multi_server_docker import MultiServerDockerClient
 from ciris_manager.logging_config import log_agent_operation
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id
-from ciris_manager.utils.compose_command import compose_cmd
+from ciris_manager.utils.compose_command import compose_cmd, ComposeNotFoundError
 
 logger = logging.getLogger(__name__)
 agent_logger = logging.getLogger("ciris_manager.agent_lifecycle")
@@ -979,15 +979,33 @@ class CIRISManager:
 
         if server_config.is_local:
             # Local server: use docker compose CLI (supports both v1 and v2)
-            cmd = compose_cmd("-f", str(compose_path), "up", "-d")
+            try:
+                cmd = compose_cmd("-f", str(compose_path), "up", "-d")
+            except ComposeNotFoundError as e:
+                logger.error(
+                    f"Docker Compose not available - cannot start agent {agent_id}. "
+                    f"Install Docker Compose v2 (docker compose) or v1 (docker-compose)."
+                )
+                raise RuntimeError(
+                    f"Cannot start agent: Docker Compose is not installed. "
+                    f"Install with: apt install docker-compose-plugin"
+                ) from e
+
+            logger.debug(f"Running compose command: {' '.join(cmd)}")
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
 
             if process.returncode != 0:
-                logger.error(f"Failed to start agent {agent_id}: {stderr.decode()}")
-                raise RuntimeError(f"Failed to start agent: {stderr.decode()}")
+                stderr_text = stderr.decode().strip()
+                logger.error(
+                    f"Docker Compose failed for agent {agent_id} "
+                    f"(exit code {process.returncode}): {stderr_text}"
+                )
+                raise RuntimeError(
+                    f"Docker Compose failed (exit code {process.returncode}): {stderr_text}"
+                )
 
             logger.info(f"Started agent {agent_id} on local server")
         else:
@@ -1267,7 +1285,16 @@ class CIRISManager:
 
             if server_config.is_local:
                 # Local server: use docker compose (supports both v1 and v2)
-                cmd = compose_cmd("-f", str(compose_path), "up", "-d")
+                try:
+                    cmd = compose_cmd("-f", str(compose_path), "up", "-d")
+                except ComposeNotFoundError:
+                    logger.error(
+                        f"Cannot restart agent {agent_id}: Docker Compose is not installed. "
+                        f"Install with: apt install docker-compose-plugin"
+                    )
+                    return
+
+                logger.debug(f"Running compose command: {' '.join(cmd)}")
                 process = await asyncio.create_subprocess_exec(
                     *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
@@ -1276,7 +1303,11 @@ class CIRISManager:
                 if process.returncode == 0:
                     logger.info(f"✅ Successfully restarted crashed container for agent {agent_id}")
                 else:
-                    logger.error(f"Failed to restart container for {agent_id}: {stderr.decode()}")
+                    stderr_text = stderr.decode().strip()
+                    logger.error(
+                        f"Docker Compose failed for agent {agent_id} "
+                        f"(exit code {process.returncode}): {stderr_text}"
+                    )
             else:
                 # Remote server: use _start_agent which handles remote deployment
                 await self._start_agent(agent_id, compose_path, server_id)
@@ -1284,16 +1315,36 @@ class CIRISManager:
                     f"✅ Successfully restarted crashed container for agent {agent_id} on {server_id}"
                 )
 
+        except ComposeNotFoundError as e:
+            logger.error(
+                f"Cannot restart agent {agent_id}: Docker Compose is not installed. "
+                f"Install with: apt install docker-compose-plugin"
+            )
         except Exception as e:
-            logger.error(f"Error restarting container for {agent_id} on {server_id}: {e}")
+            logger.error(
+                f"Error restarting container for {agent_id} on {server_id}: "
+                f"{type(e).__name__}: {e}"
+            )
 
     async def _pull_agent_images(self, compose_path: Path) -> None:
         """Pull latest images for an agent."""
-        cmd = compose_cmd("-f", str(compose_path), "pull")
+        try:
+            cmd = compose_cmd("-f", str(compose_path), "pull")
+        except ComposeNotFoundError:
+            logger.warning(
+                f"Cannot pull images for {compose_path}: Docker Compose not installed"
+            )
+            return
+
         process = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
-        await process.communicate()
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            logger.warning(
+                f"Failed to pull images from {compose_path}: {stderr.decode().strip()}"
+            )
 
     async def start(self) -> None:
         """Start all manager services."""
@@ -1580,11 +1631,24 @@ class CIRISManager:
                 # Local server: use docker compose (supports both v1 and v2)
                 if compose_path.exists():
                     logger.info(f"Stopping agent {agent_id} on local server")
-                    cmd = compose_cmd("-f", str(compose_path), "down", "-v")
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                    )
-                    await process.communicate()
+                    try:
+                        cmd = compose_cmd("-f", str(compose_path), "down", "-v")
+                    except ComposeNotFoundError:
+                        logger.warning(
+                            f"Docker Compose not available to stop agent {agent_id}. "
+                            f"Container may need manual cleanup: docker rm -f ciris-{agent_id}"
+                        )
+                        cmd = None
+
+                    if cmd:
+                        process = await asyncio.create_subprocess_exec(
+                            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                        )
+                        stdout, stderr = await process.communicate()
+                        if process.returncode != 0:
+                            logger.warning(
+                                f"Docker Compose down failed for {agent_id}: {stderr.decode().strip()}"
+                            )
             else:
                 # Remote server: use Docker API
                 logger.info(f"Stopping agent {agent_id} on remote server {target_server_id}")

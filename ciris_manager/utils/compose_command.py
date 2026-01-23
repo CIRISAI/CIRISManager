@@ -6,13 +6,49 @@ Supports both Docker Compose v1 (docker-compose) and v2 (docker compose).
 
 import shutil
 import subprocess
-from typing import List
+from typing import List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Cache the result to avoid repeated checks
-_compose_command: List[str] | None = None
+_compose_command: Optional[List[str]] = None
+
+
+class ComposeNotFoundError(RuntimeError):
+    """Raised when neither Docker Compose v1 nor v2 is available."""
+
+    def __init__(self, v2_error: Optional[str] = None, v1_checked: bool = True):
+        self.v2_error = v2_error
+        self.v1_checked = v1_checked
+
+        message = (
+            "Docker Compose is not available on this system.\n"
+            "\n"
+            "Troubleshooting:\n"
+            "  1. Check if Docker is installed: docker --version\n"
+            "  2. Check Compose v2 (plugin): docker compose version\n"
+            "  3. Check Compose v1 (standalone): docker-compose --version\n"
+            "\n"
+            "Installation options:\n"
+            "  - Docker Desktop includes Compose v2 by default\n"
+            "  - Linux: apt install docker-compose-plugin (v2) or docker-compose (v1)\n"
+        )
+
+        if v2_error:
+            message += f"\nDocker Compose v2 check failed: {v2_error}"
+
+        super().__init__(message)
+
+
+def reset_compose_command_cache() -> None:
+    """
+    Reset the cached compose command.
+
+    Useful for testing or when the system configuration changes.
+    """
+    global _compose_command
+    _compose_command = None
 
 
 def get_compose_command() -> List[str]:
@@ -30,6 +66,8 @@ def get_compose_command() -> List[str]:
     if _compose_command is not None:
         return _compose_command
 
+    v2_error: Optional[str] = None
+
     # Try docker compose v2 first (more common in modern installs)
     try:
         result = subprocess.run(
@@ -41,8 +79,14 @@ def get_compose_command() -> List[str]:
             _compose_command = ["docker", "compose"]
             logger.info("Using Docker Compose v2 (docker compose)")
             return _compose_command
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+        else:
+            v2_error = f"Command returned exit code {result.returncode}"
+            if result.stderr:
+                v2_error += f": {result.stderr.decode().strip()}"
+    except subprocess.TimeoutExpired:
+        v2_error = "Command timed out after 5 seconds"
+    except FileNotFoundError:
+        v2_error = "Docker binary not found in PATH"
 
     # Fall back to docker-compose v1
     if shutil.which("docker-compose"):
@@ -50,10 +94,7 @@ def get_compose_command() -> List[str]:
         logger.info("Using Docker Compose v1 (docker-compose)")
         return _compose_command
 
-    raise RuntimeError(
-        "Neither 'docker compose' (v2) nor 'docker-compose' (v1) is available. "
-        "Please install Docker Compose."
-    )
+    raise ComposeNotFoundError(v2_error=v2_error)
 
 
 def compose_cmd(*args: str) -> List[str]:
