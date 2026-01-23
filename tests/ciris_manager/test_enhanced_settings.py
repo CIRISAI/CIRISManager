@@ -8,6 +8,19 @@ import yaml
 from fastapi.testclient import TestClient
 
 from ciris_manager.api.routes import create_routes
+from ciris_manager.utils.compose_command import reset_compose_command_cache
+
+
+@pytest.fixture(autouse=True)
+def mock_compose_command():
+    """Mock compose command detection to avoid timeout in CI."""
+    reset_compose_command_cache()
+    with patch(
+        "ciris_manager.utils.compose_command.get_compose_command",
+        return_value=["docker-compose"],
+    ):
+        yield
+    reset_compose_command_cache()
 
 
 class TestEnhancedSettings:
