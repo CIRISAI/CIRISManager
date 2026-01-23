@@ -427,6 +427,12 @@ def setup_auth_parser(subparsers):
     auth_subparsers.add_parser(
         "dev-token",
         help="Get dev token (must run on manager server with CIRIS_DEV_MODE=true)",
+        description=(
+            "Get a development token for automated testing. "
+            "This command must be run on the manager server itself (localhost). "
+            "The port is extracted from --api-url or CIRIS_MANAGER_API_URL. "
+            "Requires CIRISManager >= 2.3.0 with CIRIS_DEV_MODE=true."
+        ),
     )
 
 

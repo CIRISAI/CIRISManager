@@ -223,11 +223,23 @@ class AuthManager:
         1. The manager has CIRIS_DEV_MODE=true
         2. This command is run on the manager server itself (localhost)
 
+        The port is extracted from the configured base_url to support
+        non-standard ports (e.g., 8090 instead of 8888).
+
         Returns the token if successful, None otherwise.
         """
+        # Extract port from base_url to use correct port on localhost
+        # e.g., https://scout-test.example.com:8090 -> port 8090
+        # If no explicit port (standard 443/80), default to 8888 (manager default)
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self.base_url)
+        # parsed.port is None for standard ports (443 for https, 80 for http)
+        # In that case, assume manager is on default port 8888
+        port = parsed.port if parsed.port else 8888
+
         # Dev token endpoint must be called via localhost
-        # Override base_url to localhost for this request
-        localhost_url = "http://127.0.0.1:8888"
+        localhost_url = f"http://127.0.0.1:{port}"
         url = f"{localhost_url}/manager/v1/dev/token"
 
         try:
@@ -243,6 +255,7 @@ class AuthManager:
             elif response.status_code == 404:
                 print("❌ Dev token endpoint not found.")
                 print("   Ensure CIRIS_DEV_MODE=true is set on the manager.")
+                print("   Note: This endpoint requires CIRISManager >= 2.3.0")
                 return None
             else:
                 print(f"❌ Failed to get dev token: HTTP {response.status_code}")
@@ -254,7 +267,7 @@ class AuthManager:
                 return None
 
         except requests.exceptions.ConnectionError:
-            print("❌ Cannot connect to local manager at http://127.0.0.1:8888")
+            print(f"❌ Cannot connect to local manager at {localhost_url}")
             print("   Ensure the manager is running and you're on the manager server.")
             return None
         except requests.exceptions.RequestException as e:
