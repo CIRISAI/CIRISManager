@@ -3967,8 +3967,13 @@ class DeploymentOrchestrator:
                     # Update nginx container using docker-compose
                     compose_result = await asyncio.create_subprocess_exec(
                         *compose_cmd(
-                            "-f", "/opt/ciris/docker-compose.yml",
-                            "up", "-d", "--no-deps", "--force-recreate", "nginx"
+                            "-f",
+                            "/opt/ciris/docker-compose.yml",
+                            "up",
+                            "-d",
+                            "--no-deps",
+                            "--force-recreate",
+                            "nginx",
                         ),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
@@ -4160,10 +4165,7 @@ class DeploymentOrchestrator:
 
             # Update using docker-compose
             compose_result = await asyncio.create_subprocess_exec(
-                *compose_cmd(
-                    "-f", "/opt/ciris/docker-compose.yml",
-                    "up", "-d", "--no-deps", "gui"
-                ),
+                *compose_cmd("-f", "/opt/ciris/docker-compose.yml", "up", "-d", "--no-deps", "gui"),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ, "CIRIS_GUI_IMAGE": target_image},
@@ -4214,8 +4216,7 @@ class DeploymentOrchestrator:
             # Update using docker-compose
             compose_result = await asyncio.create_subprocess_exec(
                 *compose_cmd(
-                    "-f", "/opt/ciris/docker-compose.yml",
-                    "up", "-d", "--no-deps", "nginx"
+                    "-f", "/opt/ciris/docker-compose.yml", "up", "-d", "--no-deps", "nginx"
                 ),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

@@ -987,8 +987,8 @@ class CIRISManager:
                     f"Install Docker Compose v2 (docker compose) or v1 (docker-compose)."
                 )
                 raise RuntimeError(
-                    f"Cannot start agent: Docker Compose is not installed. "
-                    f"Install with: apt install docker-compose-plugin"
+                    "Cannot start agent: Docker Compose is not installed. "
+                    "Install with: apt install docker-compose-plugin"
                 ) from e
 
             logger.debug(f"Running compose command: {' '.join(cmd)}")
@@ -1315,15 +1315,14 @@ class CIRISManager:
                     f"✅ Successfully restarted crashed container for agent {agent_id} on {server_id}"
                 )
 
-        except ComposeNotFoundError as e:
+        except ComposeNotFoundError:
             logger.error(
                 f"Cannot restart agent {agent_id}: Docker Compose is not installed. "
-                f"Install with: apt install docker-compose-plugin"
+                "Install with: apt install docker-compose-plugin"
             )
         except Exception as e:
             logger.error(
-                f"Error restarting container for {agent_id} on {server_id}: "
-                f"{type(e).__name__}: {e}"
+                f"Error restarting container for {agent_id} on {server_id}: {type(e).__name__}: {e}"
             )
 
     async def _pull_agent_images(self, compose_path: Path) -> None:
@@ -1331,9 +1330,7 @@ class CIRISManager:
         try:
             cmd = compose_cmd("-f", str(compose_path), "pull")
         except ComposeNotFoundError:
-            logger.warning(
-                f"Cannot pull images for {compose_path}: Docker Compose not installed"
-            )
+            logger.warning(f"Cannot pull images for {compose_path}: Docker Compose not installed")
             return
 
         process = await asyncio.create_subprocess_exec(
@@ -1342,9 +1339,7 @@ class CIRISManager:
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
-            logger.warning(
-                f"Failed to pull images from {compose_path}: {stderr.decode().strip()}"
-            )
+            logger.warning(f"Failed to pull images from {compose_path}: {stderr.decode().strip()}")
 
     async def start(self) -> None:
         """Start all manager services."""
