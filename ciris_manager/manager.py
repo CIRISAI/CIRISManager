@@ -7,6 +7,7 @@ API for agent discovery and lifecycle management.
 
 import asyncio
 import logging
+import os
 import signal
 import secrets
 from pathlib import Path
@@ -1435,14 +1436,21 @@ class CIRISManager:
             app.include_router(server_router, prefix="/manager/v1")
             logger.info("Server management routes mounted at /manager/v1/servers")
 
-            # Include auth routes if in production mode
-            if self.config.auth.mode == "production":
+            # Include auth routes if in production mode OR dev mode is enabled
+            # Dev mode needs auth routes for the /dev/token endpoint
+            dev_mode = os.getenv("CIRIS_DEV_MODE") == "true"
+            if self.config.auth.mode == "production" or dev_mode:
                 auth_router = create_auth_routes()
                 app.include_router(auth_router, prefix="/manager/v1")
+                if dev_mode:
+                    logger.info("Auth routes mounted (dev mode enabled)")
+                else:
+                    logger.info("Auth routes mounted (production mode)")
 
-                # Add device auth routes
-                device_auth_router = create_device_auth_routes()
-                app.include_router(device_auth_router, prefix="/manager/v1")
+                # Add device auth routes (only in production mode, not needed for dev)
+                if self.config.auth.mode == "production":
+                    device_auth_router = create_device_auth_routes()
+                    app.include_router(device_auth_router, prefix="/manager/v1")
 
             # Mount v2 API alongside v1
             try:
