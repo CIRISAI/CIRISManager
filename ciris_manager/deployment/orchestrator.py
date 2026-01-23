@@ -32,6 +32,7 @@ from ciris_manager.models import (
     AgentUpdateResponse,
 )
 from ciris_manager.docker_registry import DockerRegistryClient
+from ciris_manager.utils.compose_command import compose_cmd
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id, sanitize_for_log
 
 # Import from helper modules
@@ -3197,7 +3198,7 @@ class DeploymentOrchestrator:
                         compose_path = self.agent_dir / agent_id / "docker-compose.yml"
                         if compose_path.exists():
                             # Pull new image
-                            pull_cmd = ["docker-compose", "-f", str(compose_path), "pull"]
+                            pull_cmd = compose_cmd("-f", str(compose_path), "pull")
                             pull_process = await asyncio.create_subprocess_exec(
                                 *pull_cmd,
                                 stdout=asyncio.subprocess.PIPE,
@@ -3529,13 +3530,7 @@ class DeploymentOrchestrator:
                 # Run docker-compose up -d with --pull always to use the newly pulled image
                 logger.info(f"Starting new container for agent {agent_id}...")
                 result = await asyncio.create_subprocess_exec(
-                    "docker-compose",
-                    "-f",
-                    str(compose_file),
-                    "up",
-                    "-d",
-                    "--pull",
-                    "always",
+                    *compose_cmd("-f", str(compose_file), "up", "-d", "--pull", "always"),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=str(agent_dir),
@@ -3971,14 +3966,10 @@ class DeploymentOrchestrator:
                 else:
                     # Update nginx container using docker-compose
                     compose_result = await asyncio.create_subprocess_exec(
-                        "docker-compose",
-                        "-f",
-                        "/opt/ciris/docker-compose.yml",
-                        "up",
-                        "-d",
-                        "--no-deps",
-                        "--force-recreate",
-                        "nginx",
+                        *compose_cmd(
+                            "-f", "/opt/ciris/docker-compose.yml",
+                            "up", "-d", "--no-deps", "--force-recreate", "nginx"
+                        ),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                         env={**os.environ, "NGINX_IMAGE": nginx_image},
@@ -4169,13 +4160,10 @@ class DeploymentOrchestrator:
 
             # Update using docker-compose
             compose_result = await asyncio.create_subprocess_exec(
-                "docker-compose",
-                "-f",
-                "/opt/ciris/docker-compose.yml",
-                "up",
-                "-d",
-                "--no-deps",
-                "gui",
+                *compose_cmd(
+                    "-f", "/opt/ciris/docker-compose.yml",
+                    "up", "-d", "--no-deps", "gui"
+                ),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ, "CIRIS_GUI_IMAGE": target_image},
@@ -4225,13 +4213,10 @@ class DeploymentOrchestrator:
 
             # Update using docker-compose
             compose_result = await asyncio.create_subprocess_exec(
-                "docker-compose",
-                "-f",
-                "/opt/ciris/docker-compose.yml",
-                "up",
-                "-d",
-                "--no-deps",
-                "nginx",
+                *compose_cmd(
+                    "-f", "/opt/ciris/docker-compose.yml",
+                    "up", "-d", "--no-deps", "nginx"
+                ),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env={**os.environ, "NGINX_IMAGE": target_image},

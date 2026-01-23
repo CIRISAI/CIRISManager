@@ -15,6 +15,7 @@ import aiofiles  # type: ignore
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
 
+from ciris_manager.utils.compose_command import compose_cmd
 from .dependencies import get_manager, get_auth_dependency
 
 logger = logging.getLogger(__name__)
@@ -228,9 +229,7 @@ async def update_agent_config(
             else:
                 agent_dir = Path("/opt/ciris/agents") / agent_id
                 proc = await asyncio.create_subprocess_exec(
-                    "docker-compose",
-                    "up",
-                    "-d",
+                    *compose_cmd("up", "-d"),
                     cwd=str(agent_dir),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,

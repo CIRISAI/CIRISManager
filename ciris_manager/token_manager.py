@@ -22,6 +22,7 @@ from httpx import AsyncClient
 from ciris_manager.agent_registry import AgentRegistry, RegisteredAgent
 from ciris_manager.crypto import TokenEncryption
 from ciris_manager.agent_auth import get_agent_auth
+from ciris_manager.utils.compose_command import compose_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +298,7 @@ class TokenManager:
                 await f.writelines(env_content)
 
             # Restart container
-            cmd = ["docker-compose", "-f", str(compose_path), "up", "-d", "--force-recreate"]
+            cmd = compose_cmd("-f", str(compose_path), "up", "-d", "--force-recreate")
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )

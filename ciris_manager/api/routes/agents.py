@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
 from ciris_manager.models import CreateAgentRequest
+from ciris_manager.utils.compose_command import compose_cmd
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id
 
 from ..rate_limit import create_limit
@@ -814,13 +815,7 @@ async def start_agent(
                     compose_path = Path(registry_agent.compose_file)
                     if compose_path.exists():
                         result = await asyncio.create_subprocess_exec(
-                            "docker-compose",
-                            "-f",
-                            str(compose_path),
-                            "up",
-                            "-d",
-                            "--pull",
-                            "always",
+                            *compose_cmd("-f", str(compose_path), "up", "-d", "--pull", "always"),
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.PIPE,
                         )
@@ -869,11 +864,7 @@ async def start_agent(
                     compose_path = Path(registry_agent.compose_file)
                     if compose_path.exists():
                         result = await asyncio.create_subprocess_exec(
-                            "docker-compose",
-                            "-f",
-                            str(compose_path),
-                            "up",
-                            "-d",
+                            *compose_cmd("-f", str(compose_path), "up", "-d"),
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.PIPE,
                         )

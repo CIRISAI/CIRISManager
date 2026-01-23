@@ -15,6 +15,19 @@ from ciris_manager.config.settings import CIRISManagerConfig
 class TestCIRISManager:
     """Test cases for CIRISManager."""
 
+    @pytest.fixture(autouse=True)
+    def mock_compose_command(self):
+        """Mock get_compose_command to avoid checking for Docker Compose in tests."""
+        with patch(
+            "ciris_manager.utils.compose_command.get_compose_command",
+            return_value=["docker-compose"],
+        ):
+            # Clear the cached command so we use the mock
+            import ciris_manager.utils.compose_command as compose_module
+            compose_module._compose_command = None
+            yield
+            compose_module._compose_command = None
+
     def test_generate_agent_suffix(self):
         """Test agent suffix generation."""
         # Import just what we need to test

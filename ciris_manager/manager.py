@@ -27,6 +27,7 @@ from ciris_manager.docker_image_cleanup import DockerImageCleanup
 from ciris_manager.multi_server_docker import MultiServerDockerClient
 from ciris_manager.logging_config import log_agent_operation
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id
+from ciris_manager.utils.compose_command import compose_cmd
 
 logger = logging.getLogger(__name__)
 agent_logger = logging.getLogger("ciris_manager.agent_lifecycle")
@@ -977,8 +978,8 @@ class CIRISManager:
         server_config = self.docker_client.get_server_config(server_id)
 
         if server_config.is_local:
-            # Local server: use docker-compose CLI
-            cmd = ["docker-compose", "-f", str(compose_path), "up", "-d"]
+            # Local server: use docker compose CLI (supports both v1 and v2)
+            cmd = compose_cmd("-f", str(compose_path), "up", "-d")
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
@@ -1265,8 +1266,8 @@ class CIRISManager:
             logger.info(f"Restarting crashed container for agent {agent_id} on server {server_id}")
 
             if server_config.is_local:
-                # Local server: use docker-compose
-                cmd = ["docker-compose", "-f", str(compose_path), "up", "-d"]
+                # Local server: use docker compose (supports both v1 and v2)
+                cmd = compose_cmd("-f", str(compose_path), "up", "-d")
                 process = await asyncio.create_subprocess_exec(
                     *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
@@ -1288,7 +1289,7 @@ class CIRISManager:
 
     async def _pull_agent_images(self, compose_path: Path) -> None:
         """Pull latest images for an agent."""
-        cmd = ["docker-compose", "-f", str(compose_path), "pull"]
+        cmd = compose_cmd("-f", str(compose_path), "pull")
         process = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
@@ -1576,10 +1577,10 @@ class CIRISManager:
 
             # Stop the agent container
             if server_config.is_local:
-                # Local server: use docker-compose
+                # Local server: use docker compose (supports both v1 and v2)
                 if compose_path.exists():
                     logger.info(f"Stopping agent {agent_id} on local server")
-                    cmd = ["docker-compose", "-f", str(compose_path), "down", "-v"]
+                    cmd = compose_cmd("-f", str(compose_path), "down", "-v")
                     process = await asyncio.create_subprocess_exec(
                         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                     )
