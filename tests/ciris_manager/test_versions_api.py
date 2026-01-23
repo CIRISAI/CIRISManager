@@ -94,8 +94,7 @@ class TestVersionsAPI:
     def test_client(self, mock_manager, mock_discovery, mock_orchestrator):
         """Create test client with mocked dependencies."""
         # Mock auth dependency to bypass authentication
-        from ciris_manager.api.auth import get_current_user_dependency
-        from unittest.mock import Mock
+        from ciris_manager.api.routes.dependencies import _get_auth_dependency_runtime
 
         def mock_get_current_user():
             return {"user_id": "test_user", "email": "test@ciris.ai"}
@@ -111,12 +110,10 @@ class TestVersionsAPI:
         )
         app.state.token_manager = mock_token_manager
 
-        router = create_routes(mock_manager)
-
         # Override auth dependency
-        router.dependency_overrides_provider = app
-        app.dependency_overrides[get_current_user_dependency] = mock_get_current_user
+        app.dependency_overrides[_get_auth_dependency_runtime] = mock_get_current_user
 
+        router = create_routes(mock_manager)
         app.include_router(router, prefix="/manager/v1")
 
         return TestClient(app)
