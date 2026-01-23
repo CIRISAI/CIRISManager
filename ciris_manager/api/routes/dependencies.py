@@ -81,16 +81,11 @@ def _get_auth_dependency_runtime(
     authorization: Optional[str] = Header(None),
 ) -> Dict[str, str]:
     """
-    Runtime auth dependency that checks CIRIS_AUTH_MODE at call time.
+    Runtime auth dependency that validates JWT tokens.
 
-    This allows test fixtures to set the mode after import.
+    For test environments, use CIRIS_DEV_MODE=true and get a token
+    from POST /manager/v1/dev/token (localhost only).
     """
-    auth_mode = os.getenv("CIRIS_AUTH_MODE", "production")
-    if auth_mode == "development":
-        # Return mock user synchronously for dev mode
-        return {"id": "dev-user", "email": "dev@ciris.local", "name": "Development User"}
-
-    # For production, delegate to the real auth
     from ..auth_routes import get_auth_service
 
     auth_service = get_auth_service()
