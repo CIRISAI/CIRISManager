@@ -8,7 +8,6 @@ This module provides common dependencies used across multiple route modules:
 - Deployment authentication
 """
 
-import os
 import logging
 from typing import Any, Dict, Optional
 
