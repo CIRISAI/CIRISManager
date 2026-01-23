@@ -240,16 +240,25 @@ def create_auth_routes() -> APIRouter:
 
             logger.info(f"Dev token issued to localhost client: {client_host}")
 
-            # Create a dev user session
+            # Add dev user to user store (so is_user_authorized returns True)
+            dev_email = "dev@ciris.ai"
+            dev_user_info = {
+                "email": dev_email,
+                "name": "Dev User",
+                "picture": None,
+            }
+            auth_service.user_store.create_or_update_user(dev_email, dev_user_info)
+
+            # Create JWT token for dev user
             dev_user = {
                 "id": "dev-user-123",
-                "email": "dev@ciris.ai",
+                "email": dev_email,
                 "name": "Dev User",
             }
 
             from ciris_manager.models import OAuthUser
 
-            user = OAuthUser(id="dev-user", email="dev@ciris.ai", name="Dev User")
+            user = OAuthUser(id="dev-user", email=dev_email, name="Dev User")
             token = auth_service.create_jwt_token(dev_user)
             return TokenResponse.create(access_token=token, user=user)
 
