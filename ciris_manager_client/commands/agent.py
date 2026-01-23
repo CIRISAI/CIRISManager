@@ -1041,13 +1041,18 @@ class AgentCommands:
                     print(f"  Error: {db.get('error')}")
                 elif db.get("type") == "postgresql":
                     print("  Type: PostgreSQL")
+                    if db.get("env_var"):
+                        print(f"  Env Var: {db.get('env_var')}")
                     print(f"  URL: {db.get('url')}")
-                    if db.get("raw_url"):
-                        print(f"  Raw URL: {db.get('raw_url')}")
                 elif db.get("type") == "sqlite":
                     print("  Type: SQLite")
                     print(f"  Host Path: {db.get('path')}")
                     print(f"  Container Path: {db.get('container_path')}")
+                elif db.get("type") == "database":
+                    print(f"  Type: {db.get('type')}")
+                    if db.get("env_var"):
+                        print(f"  Env Var: {db.get('env_var')}")
+                    print(f"  URL: {db.get('url')}")
                 else:
                     print("  Type: Unknown")
 
@@ -1057,6 +1062,13 @@ class AgentCommands:
                     print("\nServer:")
                     print(f"  Hostname: {server.get('hostname')}")
                     print(f"  VPC IP: {server.get('vpc_ip')}")
+
+                # SSH access info
+                ssh = result.get("ssh")
+                if ssh:
+                    print("\nSSH Access:")
+                    print(f"  Command: {ssh.get('command')}")
+                    print(f"  IP: {ssh.get('ip')}")
             else:
                 # JSON/YAML format
                 output = formatter.format_output(result, ctx.output_format)

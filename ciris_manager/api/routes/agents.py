@@ -323,27 +323,42 @@ async def get_agent_access(
                 k, v = env.split("=", 1)
                 env_dict[k] = v
 
-        # Check for PostgreSQL config
-        if env_dict.get("CIRIS_DATABASE_URL"):
-            db_url = env_dict["CIRIS_DATABASE_URL"]
-            # Redact password in URL for display
-            import re
+        # Check for PostgreSQL config - try multiple common env var names
+        import re
 
+        postgres_env_vars = [
+            "CIRIS_DB_URL",
+            "CIRIS_DATABASE_URL",
+            "DATABASE_URL",
+            "POSTGRES_URL",
+            "PG_URL",
+            "DB_URL",
+        ]
+        db_url = None
+        db_env_var = None
+        for env_var in postgres_env_vars:
+            if env_dict.get(env_var):
+                db_url = env_dict[env_var]
+                db_env_var = env_var
+                break
+
+        if db_url and ("postgresql" in db_url or "postgres" in db_url):
+            # Redact password in URL for display
             redacted_url = re.sub(r"://([^:]+):([^@]+)@", r"://\1:***@", db_url)
             database_info = {
                 "type": "postgresql",
                 "url": redacted_url,
                 "raw_url": db_url,  # Include full URL for actual access
+                "env_var": db_env_var,
             }
-        elif env_dict.get("DATABASE_URL"):
-            db_url = env_dict["DATABASE_URL"]
-            import re
-
+        elif db_url:
+            # Some other database URL
             redacted_url = re.sub(r"://([^:]+):([^@]+)@", r"://\1:***@", db_url)
             database_info = {
-                "type": "postgresql",
+                "type": "database",
                 "url": redacted_url,
                 "raw_url": db_url,
+                "env_var": db_env_var,
             }
         else:
             # Default to SQLite
@@ -379,6 +394,24 @@ async def get_agent_access(
     else:
         api_endpoint = f"https://agents.ciris.ai/api/{agent_id}/v1/"
 
+    # Build SSH access info from known server IPs
+    ssh_info = None
+    if server_config:
+        # Map server_id to public IP for SSH access
+        server_ssh_ips = {
+            "main": "45.76.231.182",
+            "scout1": "144.202.55.195",
+            "scout2": "45.76.18.133",
+        }
+        ssh_ip = server_ssh_ips.get(agent.server_id)
+        if ssh_ip:
+            ssh_info = {
+                "command": f"ssh -i ~/.ssh/ciris_deploy root@{ssh_ip}",
+                "ip": ssh_ip,
+                "user": "root",
+                "key": "~/.ssh/ciris_deploy",
+            }
+
     return {
         "agent_id": agent_id,
         "registry_key": registry_key_used,
@@ -395,6 +428,7 @@ async def get_agent_access(
         }
         if server_config
         else None,
+        "ssh": ssh_info,
     }
 
 
