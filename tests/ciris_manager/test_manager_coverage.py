@@ -8,6 +8,19 @@ from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
 from ciris_manager.manager import CIRISManager, main
 from ciris_manager.config.settings import CIRISManagerConfig
+from ciris_manager.utils.compose_command import reset_compose_command_cache
+
+
+@pytest.fixture(autouse=True)
+def mock_compose_command():
+    """Mock compose command detection to use v1 format for consistent assertions."""
+    reset_compose_command_cache()
+    with patch(
+        "ciris_manager.utils.compose_command.get_compose_command",
+        return_value=["docker-compose"],
+    ):
+        yield
+    reset_compose_command_cache()
 
 
 class TestManagerCoverage:
