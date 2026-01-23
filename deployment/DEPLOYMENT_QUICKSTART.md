@@ -63,7 +63,7 @@ docker logs ciris-nginx -f
 
 # Restart services
 sudo systemctl restart ciris-manager-api
-docker-compose restart nginx
+docker compose restart nginx  # or 'docker-compose' for v1
 
 # Update CIRISManager
 cd /opt/ciris-manager

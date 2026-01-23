@@ -6,7 +6,7 @@ Deploy CIRISManager to manage CIRIS agents in production environments.
 
 - Ubuntu 22.04+ or compatible Linux distribution
 - Python 3.11+
-- Docker and docker-compose
+- Docker 20.10+ with Compose (v1 `docker-compose` or v2 `docker compose`)
 - SSL certificates (Let's Encrypt recommended)
 - Google OAuth credentials
 
@@ -195,13 +195,13 @@ systemctl start ciris-manager-api
 
 ### 6. Nginx Container
 
-The nginx container is managed via docker-compose. CIRISManager will:
+The nginx container is managed via Docker Compose. CIRISManager automatically detects and uses whichever version is available (v1 `docker-compose` or v2 `docker compose`). It will:
 1. Generate nginx.conf automatically
 2. Write to `/home/ciris/nginx/nginx.conf`
-3. Start container via docker-compose
+3. Start container via Docker Compose
 4. Reload on configuration changes
 
-Ensure docker-compose includes:
+Ensure your docker-compose.yml includes:
 ```yaml
 nginx:
   image: nginx:alpine

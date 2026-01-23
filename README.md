@@ -84,10 +84,13 @@ ciris-manager system status
 
 - Python 3.11+
 - Docker 20.10+
+- Docker Compose v1 (`docker-compose`) or v2 (`docker compose`)
 - nginx (via Docker container)
 - systemd (for production deployment)
 - 2GB RAM minimum
 - 10GB disk space
+
+> **Note:** CIRISManager automatically detects and uses whichever Docker Compose version is available on your system. Both v1 (standalone `docker-compose`) and v2 (Docker plugin `docker compose`) are fully supported.
 
 ### Production Installation
 
@@ -1301,9 +1304,9 @@ htop -p $(pgrep -f ciris-manager)
    pip install -r requirements.txt
    sudo systemctl restart ciris-manager
 
-   # Update containers
-   docker-compose pull
-   docker-compose up -d
+   # Update containers (use 'docker-compose' for v1 or 'docker compose' for v2)
+   docker compose pull
+   docker compose up -d
    ```
 
 5. **Backup Configuration**
