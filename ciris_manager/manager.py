@@ -1228,9 +1228,7 @@ class CIRISManager:
                                 )
                         else:
                             # Remote server: use Docker API to restart container directly
-                            await self._restart_remote_container(
-                                agent_id, container, server_id
-                            )
+                            await self._restart_remote_container(agent_id, container, server_id)
 
                     except docker.errors.NotFound:
                         # Container doesn't exist - might be newly created or deleted
@@ -1371,9 +1369,7 @@ class CIRISManager:
                     f"✅ Successfully restarted container for {agent_id} on remote server {server_id}"
                 )
             else:
-                logger.warning(
-                    f"Container for {agent_id} started but status is {container.status}"
-                )
+                logger.warning(f"Container for {agent_id} started but status is {container.status}")
 
         except Exception as e:
             logger.error(
