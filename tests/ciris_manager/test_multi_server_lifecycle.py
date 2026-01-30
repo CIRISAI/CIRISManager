@@ -363,13 +363,15 @@ class TestMultiServerCrashRecovery:
         mock_container = Mock()
         mock_container.status = "exited"
         mock_container.attrs = {"State": {"ExitCode": 1, "FinishedAt": "2024-01-01T00:00:00Z"}}
+        # After start and reload, status should be "running"
+        mock_container.reload = Mock(side_effect=lambda: setattr(mock_container, "status", "running"))
+        mock_container.start = Mock()
 
         mock_scout_client = Mock()
         # First call returns crashed container, subsequent calls for nginx container fail (triggers Alpine fallback)
         mock_scout_client.containers.get = Mock(
             side_effect=[mock_container] + [Exception("No nginx")] * 10
         )
-        mock_scout_client.containers.run = Mock()
 
         multi_server_manager.docker_client.get_client = Mock(return_value=mock_scout_client)
 
@@ -378,9 +380,8 @@ class TestMultiServerCrashRecovery:
 
         await multi_server_manager._recover_crashed_containers()
 
-        # Verify container was restarted via Docker API
-        # Will be called multiple times (directory creation + agent container)
-        assert mock_scout_client.containers.run.call_count >= 1
+        # Verify container was restarted via container.start() (Docker API)
+        assert mock_container.start.call_count == 1
 
 
 class TestRemoteDockerExecution:

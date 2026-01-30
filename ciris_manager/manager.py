@@ -11,7 +11,10 @@ import os
 import signal
 import secrets
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import docker.models.containers
 import time
 from datetime import datetime, timezone
 import dateutil.parser
@@ -1191,7 +1194,7 @@ class CIRISManager:
 
                         # Check if this agent is part of an active deployment
                         # by looking for recent deployment activity
-                        if await self._is_agent_in_deployment(agent_id):
+                        if await self._is_agent_in_deployment(agent_id, server_id):
                             logger.debug(
                                 f"Container {container_name} is part of active deployment, skipping recovery"
                             )
@@ -1208,12 +1211,26 @@ class CIRISManager:
                         )
 
                         logger.info(f"Attempting recovery for {agent_id} on server {server_id}")
-                        # Restart using appropriate method for server type
-                        compose_path = Path(agent_info.compose_file)
-                        if compose_path.exists():
-                            await self._restart_crashed_container(agent_id, compose_path, server_id)
+
+                        # Get server config to determine restart method
+                        server_config = self.docker_client.get_server_config(server_id)
+
+                        if server_config.is_local:
+                            # Local server: use docker compose if file exists
+                            compose_path = Path(agent_info.compose_file)
+                            if compose_path.exists():
+                                await self._restart_crashed_container(
+                                    agent_id, compose_path, server_id
+                                )
+                            else:
+                                logger.error(
+                                    f"Compose file not found for {agent_id}: {compose_path}"
+                                )
                         else:
-                            logger.error(f"Compose file not found for {agent_id}: {compose_path}")
+                            # Remote server: use Docker API to restart container directly
+                            await self._restart_remote_container(
+                                agent_id, container, server_id
+                            )
 
                     except docker.errors.NotFound:
                         # Container doesn't exist - might be newly created or deleted
@@ -1230,8 +1247,12 @@ class CIRISManager:
         except Exception as e:
             logger.error(f"Unexpected error in crash recovery: {e}")
 
-    async def _is_agent_in_deployment(self, agent_id: str) -> bool:
+    async def _is_agent_in_deployment(self, agent_id: str, server_id: str = "main") -> bool:
         """Check if an agent is part of an active deployment.
+
+        Args:
+            agent_id: Agent identifier
+            server_id: Server where the agent is running
 
         Returns True if the agent has been part of a deployment in the last 5 minutes.
         This prevents us from interfering with deployment-related shutdowns.
@@ -1243,12 +1264,6 @@ class CIRISManager:
         # Simple implementation: assume any container that stopped in the last 5 minutes
         # might be part of a deployment
         try:
-            # Get agent info to determine which server to check
-            agent_info = self.agent_registry.get_agent(agent_id)
-            server_id = (
-                agent_info.server_id if agent_info and hasattr(agent_info, "server_id") else "main"
-            )
-
             client = self.docker_client.get_client(server_id)
             container_name = f"ciris-{agent_id}"
 
@@ -1323,6 +1338,46 @@ class CIRISManager:
         except Exception as e:
             logger.error(
                 f"Error restarting container for {agent_id} on {server_id}: {type(e).__name__}: {e}"
+            )
+
+    async def _restart_remote_container(
+        self, agent_id: str, container: "docker.models.containers.Container", server_id: str
+    ) -> None:
+        """Restart a crashed container on a remote server using Docker API.
+
+        This method is used for remote servers where the compose file is not
+        available locally. It uses the Docker API to restart the container
+        directly, preserving the existing container configuration.
+
+        Args:
+            agent_id: Agent identifier
+            container: Docker container object (already fetched from remote)
+            server_id: Target server ID
+        """
+        try:
+            logger.info(
+                f"Restarting crashed container for {agent_id} on remote server {server_id} via Docker API"
+            )
+
+            # Simply start the existing container - Docker preserves the config
+            container.start()
+
+            # Wait briefly and verify it's running
+            await asyncio.sleep(2)
+            container.reload()
+
+            if container.status == "running":
+                logger.info(
+                    f"✅ Successfully restarted container for {agent_id} on remote server {server_id}"
+                )
+            else:
+                logger.warning(
+                    f"Container for {agent_id} started but status is {container.status}"
+                )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to restart container for {agent_id} on {server_id}: {type(e).__name__}: {e}"
             )
 
     async def _pull_agent_images(self, compose_path: Path) -> None:
