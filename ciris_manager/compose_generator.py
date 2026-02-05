@@ -109,6 +109,14 @@ class ComposeGenerator:
         else:
             base_env["CIRIS_BILLING_ENABLED"] = "false"
 
+        # Add covenant metrics consent (required for ethical traces)
+        # All managed agents consent to basic covenant metrics collection
+        base_env["CIRIS_COVENANT_METRICS_CONSENT"] = "true"
+        base_env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = datetime.now(
+            timezone.utc
+        ).isoformat()
+        base_env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "generic"
+
         # Add database configuration
         if database_url:
             base_env["CIRIS_DB_URL"] = database_url
