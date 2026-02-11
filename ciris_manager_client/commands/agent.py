@@ -1069,6 +1069,18 @@ class AgentCommands:
                     print("\nSSH Access:")
                     print(f"  Command: {ssh.get('command')}")
                     print(f"  IP: {ssh.get('ip')}")
+
+                # Environment variables
+                env = result.get("environment")
+                if env:
+                    print("\nEnvironment Variables:")
+                    # Sort keys for consistent output
+                    for key in sorted(env.keys()):
+                        value = env[key]
+                        # Truncate long values
+                        if len(str(value)) > 80:
+                            value = str(value)[:77] + "..."
+                        print(f"  {key}={value}")
             else:
                 # JSON/YAML format
                 output = formatter.format_output(result, ctx.output_format)

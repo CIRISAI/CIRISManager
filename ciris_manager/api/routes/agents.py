@@ -413,6 +413,13 @@ async def get_agent_access(
                 "key": "~/.ssh/ciris_deploy",
             }
 
+    # Filter environment variables - redact sensitive values
+    filtered_env = {}
+    sensitive_patterns = ["KEY", "SECRET", "PASSWORD", "TOKEN", "CREDENTIAL", "PRIVATE"]
+    for key, value in env_dict.items():
+        is_sensitive = any(pattern in key.upper() for pattern in sensitive_patterns)
+        filtered_env[key] = "***REDACTED***" if is_sensitive else value
+
     return {
         "agent_id": agent_id,
         "registry_key": registry_key_used,
@@ -423,6 +430,7 @@ async def get_agent_access(
         "api_endpoint": api_endpoint,
         "service_token": service_token,
         "database": database_info,
+        "environment": filtered_env,
         "server": {
             "hostname": server_config.hostname if server_config else None,
             "vpc_ip": server_config.vpc_ip if server_config else None,
