@@ -24,6 +24,7 @@ class TestCIRISManager:
         ):
             # Clear the cached command so we use the mock
             import ciris_manager.utils.compose_command as compose_module
+
             compose_module._compose_command = None
             yield
             compose_module._compose_command = None
@@ -1102,9 +1103,9 @@ class TestCIRISManager:
             all_server_ids = set()
             for server_agents in grouped_agents.values():
                 for agent in server_agents:
-                    assert agent.server_id not in all_server_ids, (
-                        f"Agent with server_id={agent.server_id} appears on multiple servers!"
-                    )
+                    assert (
+                        agent.server_id not in all_server_ids
+                    ), f"Agent with server_id={agent.server_id} appears on multiple servers!"
                     all_server_ids.add(agent.server_id)
 
             assert len(all_server_ids) == 3  # Each agent on exactly one server
@@ -1381,7 +1382,7 @@ class TestRegenerateAgentCompose:
         )
 
         # Regenerate compose
-        result = await manager.regenerate_agent_compose("test-agent-2")
+        _ = await manager.regenerate_agent_compose("test-agent-2")
 
         # Verify compose file was updated
         with open(compose_path) as f:

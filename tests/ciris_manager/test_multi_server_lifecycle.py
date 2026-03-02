@@ -364,7 +364,9 @@ class TestMultiServerCrashRecovery:
         mock_container.status = "exited"
         mock_container.attrs = {"State": {"ExitCode": 1, "FinishedAt": "2024-01-01T00:00:00Z"}}
         # After start and reload, status should be "running"
-        mock_container.reload = Mock(side_effect=lambda: setattr(mock_container, "status", "running"))
+        mock_container.reload = Mock(
+            side_effect=lambda: setattr(mock_container, "status", "running")
+        )
         mock_container.start = Mock()
 
         mock_scout_client = Mock()

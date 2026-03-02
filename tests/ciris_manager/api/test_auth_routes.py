@@ -382,25 +382,26 @@ class TestDevTokenEndpoint:
         app.include_router(router, prefix="/manager/v1")
 
         # Mock request.client.host to return localhost
-        with patch("ciris_manager.api.auth_routes.Request") as mock_request_class:
+        with patch("ciris_manager.api.auth_routes.Request"):
             client = TestClient(app)
             # Patch the request's client property for all requests
-            with patch.object(client, "post", wraps=client.post) as mock_post:
+            with patch.object(client, "post", wraps=client.post):
                 # Use middleware or direct patching approach
                 pass
 
         # Alternative: just verify the endpoint exists by checking with patched host check
         from starlette.testclient import TestClient as StarletteClient
+
         client = StarletteClient(app)
 
         # Patch the is_localhost check directly in the endpoint
-        with patch("ciris_manager.api.auth_routes.Request", autospec=True) as MockRequest:
+        with patch("ciris_manager.api.auth_routes.Request", autospec=True):
             # Configure the mock to return localhost
             mock_request_instance = Mock()
             mock_request_instance.client.host = "127.0.0.1"
             mock_request_instance.headers.get.return_value = ""
 
-            response = client.post("/manager/v1/dev/token")
+            _ = client.post("/manager/v1/dev/token")
 
             # The test should pass with proper mocking, but TestClient doesn't easily allow
             # mocking request.client. Let's test the logic differently.
