@@ -3614,13 +3614,14 @@ class DeploymentOrchestrator:
                     )
 
                     # Sync compose file to remote server so manual restarts use correct image
-                    await self._sync_compose_to_remote_server(
-                        agent_id=agent_id,
-                        server_id=server_id,
-                        docker_client=docker_client,
-                        target_image=target_image,
-                        updated_environment=updated_environment,
-                    )
+                    if server_id is not None:
+                        await self._sync_compose_to_remote_server(
+                            agent_id=agent_id,
+                            server_id=server_id,
+                            docker_client=docker_client,
+                            target_image=target_image,
+                            updated_environment=updated_environment,
+                        )
                 except Exception as e:
                     logger.error(f"Failed to create container via Docker API: {e}")
                     return False
