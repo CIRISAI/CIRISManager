@@ -3612,6 +3612,15 @@ class DeploymentOrchestrator:
                     logger.info(
                         f"Successfully created and started container {container_name} on remote server"
                     )
+
+                    # Sync compose file to remote server so manual restarts use correct image
+                    await self._sync_compose_to_remote_server(
+                        agent_id=agent_id,
+                        server_id=server_id,
+                        docker_client=docker_client,
+                        target_image=target_image,
+                        updated_environment=updated_environment,
+                    )
                 except Exception as e:
                     logger.error(f"Failed to create container via Docker API: {e}")
                     return False
@@ -3684,6 +3693,158 @@ class DeploymentOrchestrator:
 
         except Exception as e:
             logger.error(f"Error recreating container for agent {agent_id}: {e}")
+            return False
+
+    async def _sync_compose_to_remote_server(
+        self,
+        agent_id: str,
+        server_id: str,
+        docker_client: Any,
+        target_image: Optional[str] = None,
+        updated_environment: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """
+        Sync the docker-compose.yml file to a remote server.
+
+        This ensures the remote server's compose file is updated after deployment,
+        so manual restarts on the remote server will use the correct image/config.
+
+        Args:
+            agent_id: Agent identifier
+            server_id: Remote server ID
+            docker_client: Docker client for the remote server
+            target_image: New image to use (if updating)
+            updated_environment: Updated environment variables (if any)
+
+        Returns:
+            True if sync succeeded, False otherwise
+        """
+        import base64
+        import yaml
+
+        try:
+            # Read compose file from manager's local filesystem
+            agent_dir = self.agent_dir / agent_id
+            compose_file = agent_dir / "docker-compose.yml"
+
+            compose_config = None
+            if compose_file.exists():
+                with open(compose_file, "r") as f:
+                    compose_config = yaml.safe_load(f)
+            else:
+                # Try to generate compose file if it doesn't exist
+                logger.info(
+                    f"No local compose file for {agent_id}, generating from environment/image"
+                )
+                if target_image and updated_environment:
+                    # Create minimal compose config from provided data
+                    agent_dir.mkdir(parents=True, exist_ok=True)
+                    compose_config = {
+                        "version": "3.8",
+                        "services": {
+                            agent_id: {
+                                "container_name": f"ciris-{agent_id}",
+                                "image": target_image,
+                                "environment": updated_environment,
+                                "restart": "no",
+                            }
+                        },
+                    }
+                    # Save locally for future use
+                    with open(compose_file, "w") as f:
+                        yaml.dump(
+                            compose_config,
+                            f,
+                            default_flow_style=False,
+                            sort_keys=False,
+                            width=120,
+                        )
+                    logger.info(f"Generated local compose file: {compose_file}")
+                else:
+                    logger.warning(
+                        f"Cannot generate compose for {agent_id}: missing image or environment"
+                    )
+                    return False
+
+            # Update image tag if provided
+            if target_image and "services" in compose_config:
+                for service_config in compose_config["services"].values():
+                    if "image" in service_config:
+                        old_image = service_config["image"]
+                        service_config["image"] = target_image
+                        logger.info(
+                            f"Updating compose image for remote sync: {old_image} -> {target_image}"
+                        )
+
+            # Update environment if provided
+            if updated_environment and "services" in compose_config:
+                for service_config in compose_config["services"].values():
+                    service_config["environment"] = updated_environment
+
+            # Serialize compose config to YAML
+            compose_content = yaml.dump(
+                compose_config,
+                default_flow_style=False,
+                sort_keys=False,
+                width=120,
+            )
+
+            # Encode for safe transport via shell
+            encoded_content = base64.b64encode(compose_content.encode()).decode()
+
+            # Remote path for compose file
+            remote_compose_path = f"/opt/ciris/agents/{agent_id}/docker-compose.yml"
+
+            # Get nginx container to exec into (has /opt/ciris mounted)
+            try:
+                nginx_container = docker_client.containers.get("ciris-nginx")
+
+                # Create directory if needed and write compose file
+                write_cmd = (
+                    f"mkdir -p /opt/ciris/agents/{agent_id} && "
+                    f"echo '{encoded_content}' | base64 -d > {remote_compose_path}"
+                )
+                exec_result = nginx_container.exec_run(f'sh -c "{write_cmd}"', user="root")
+
+                if exec_result.exit_code != 0:
+                    logger.error(f"Failed to write compose file to remote: {exec_result.output}")
+                    return False
+
+                logger.info(
+                    f"✅ Synced compose file to remote server {server_id}: {remote_compose_path}"
+                )
+
+                # Also save the updated compose file locally for consistency
+                try:
+                    agent_dir.mkdir(parents=True, exist_ok=True)
+                    with open(compose_file, "w") as f:
+                        f.write(compose_content)
+                    logger.info(f"Updated local compose file: {compose_file}")
+                except Exception as e:
+                    logger.warning(f"Could not update local compose file: {e}")
+                return True
+
+            except Exception as e:
+                logger.warning(f"Could not use nginx container for compose sync: {e}")
+                # Try using alpine container as fallback
+                try:
+                    docker_client.containers.run(
+                        "alpine:latest",
+                        command=f"sh -c \"mkdir -p /opt/ciris/agents/{agent_id} && echo '{encoded_content}' | base64 -d > {remote_compose_path}\"",
+                        volumes={"/opt/ciris": {"bind": "/opt/ciris", "mode": "rw"}},
+                        remove=True,
+                        detach=False,
+                    )
+                    logger.info(
+                        f"✅ Synced compose file to remote server {server_id} (via alpine): {remote_compose_path}"
+                    )
+                    return True
+                except Exception as alpine_e:
+                    logger.error(f"Failed to sync compose via alpine: {alpine_e}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"Error syncing compose file to remote server {server_id}: {e}")
             return False
 
     async def _recover_interrupted_deployment(self, deployment: DeploymentStatus) -> None:
