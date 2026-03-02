@@ -109,13 +109,11 @@ class ComposeGenerator:
         else:
             base_env["CIRIS_BILLING_ENABLED"] = "false"
 
-        # Add covenant metrics consent (required for ethical traces)
-        # All managed agents consent to basic covenant metrics collection
-        base_env["CIRIS_COVENANT_METRICS_CONSENT"] = "true"
-        base_env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = datetime.now(
-            timezone.utc
-        ).isoformat()
-        base_env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "detailed"
+        # Add accord metrics consent (required for ethical traces to CIRISLens)
+        # All managed agents consent to accord metrics collection
+        base_env["CIRIS_ACCORD_METRICS_CONSENT"] = "true"
+        base_env["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = datetime.now(timezone.utc).isoformat()
+        base_env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = "detailed"
 
         # Add database configuration
         if database_url:
@@ -135,6 +133,11 @@ class ComposeGenerator:
         # API is always enabled for management and monitoring
         channels.append("api")
         logger.info("Communication channel enabled: API (Web GUI access)")
+
+        # Accord metrics adapter is always enabled for managed agents
+        # This sends ethical compliance traces to CIRISLens
+        channels.append("ciris_accord_metrics")
+        logger.info("Adapter enabled: ciris_accord_metrics (CIRISLens traces)")
 
         # Check if Discord should be enabled
         if enable_discord:

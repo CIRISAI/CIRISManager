@@ -374,11 +374,11 @@ class TestComposeGenerator:
                     "HOME_ASSISTANT_TOKEN": "secret_token_123",
                 },
             },
-            "covenant_metrics": {
+            "ciris_accord_metrics": {
                 "enabled": True,
                 "consent_given": True,
                 "env_vars": {
-                    "CIRIS_COVENANT_METRICS_CONSENT": "true",
+                    "CIRIS_ACCORD_METRICS_CONSENT": "true",
                 },
             },
         }
@@ -398,12 +398,12 @@ class TestComposeGenerator:
         adapters = env["CIRIS_ADAPTER"].split(",")
         assert "api" in adapters
         assert "home_assistant" in adapters
-        assert "covenant_metrics" in adapters
+        assert "ciris_accord_metrics" in adapters
 
         # Check env vars are applied
         assert env["HOME_ASSISTANT_URL"] == "http://192.168.1.100:8123"
         assert env["HOME_ASSISTANT_TOKEN"] == "secret_token_123"
-        assert env["CIRIS_COVENANT_METRICS_CONSENT"] == "true"
+        assert env["CIRIS_ACCORD_METRICS_CONSENT"] == "true"
 
     def test_generate_compose_adapter_configs_with_discord(self, generator, temp_agent_dir):
         """Test that adapter_configs works alongside enable_discord flag."""

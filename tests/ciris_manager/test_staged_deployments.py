@@ -530,8 +530,8 @@ class TestUIDeploymentControls:
         assert "confirm(" in js_content
         assert "Are you sure you want to launch this deployment?" in js_content
 
-    def test_covenant_alignment_in_ui(self):
-        """Test that UI aligns with CIRIS Covenant principles."""
+    def test_accord_alignment_in_ui(self):
+        """Test that UI aligns with CIRIS Accord principles."""
         with open("/home/emoore/CIRISManager/static/manager/index.html", "r") as f:
             html_content = f.read()
 
