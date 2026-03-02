@@ -115,7 +115,7 @@ class ComposeGenerator:
         base_env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = datetime.now(
             timezone.utc
         ).isoformat()
-        base_env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "generic"
+        base_env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "detailed"
 
         # Add database configuration
         if database_url:
