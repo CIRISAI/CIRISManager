@@ -776,15 +776,21 @@ class CIRISManager:
             exec_result = nginx_container.exec_run(["sh", "-c", read_cmd])
 
             if exec_result.exit_code != 0:
-                logger.error(
-                    f"Failed to read compose file from {server_id}: {exec_result.output.decode()}"
-                )
+                # output is bytes when stream=False (the default)
+                output = exec_result.output
+                error_msg = output.decode() if isinstance(output, bytes) else str(output)
+                logger.error(f"Failed to read compose file from {server_id}: {error_msg}")
                 return None
 
             # Decode base64 and parse YAML
             import base64
 
-            compose_content = base64.b64decode(exec_result.output).decode()
+            # output is bytes when stream=False (the default)
+            output = exec_result.output
+            if not isinstance(output, bytes):
+                logger.error(f"Unexpected output type from exec_run: {type(output)}")
+                return None
+            compose_content = base64.b64decode(output).decode()
             result: Dict[str, Any] = yaml.safe_load(compose_content)
             return result
 
@@ -838,9 +844,10 @@ class CIRISManager:
             exec_result = nginx_container.exec_run(["sh", "-c", write_cmd], user="root")
 
             if exec_result.exit_code != 0:
-                logger.error(
-                    f"Failed to write compose file to {server_id}: {exec_result.output.decode()}"
-                )
+                # output is bytes when stream=False (the default)
+                output = exec_result.output
+                error_msg = output.decode() if isinstance(output, bytes) else str(output)
+                logger.error(f"Failed to write compose file to {server_id}: {error_msg}")
                 return False
 
             logger.info(f"✅ Synced compose file to remote server {server_id}: {compose_path}")
@@ -965,7 +972,9 @@ class CIRISManager:
             nginx_container = docker_client.containers.get("ciris-nginx")
             exec_result = nginx_container.exec_run(f"sh -c '{shared_dir_cmd}'", user="root")
             if exec_result.exit_code != 0:
-                raise RuntimeError(f"Failed to create shared directory: {exec_result.output}")
+                output = exec_result.output
+                error_msg = output.decode() if isinstance(output, bytes) else str(output)
+                raise RuntimeError(f"Failed to create shared directory: {error_msg}")
         except Exception as e:
             logger.warning(f"Could not use nginx container for shared directory: {e}")
             docker_client.containers.run(
@@ -991,9 +1000,9 @@ class CIRISManager:
                 nginx_container = docker_client.containers.get("ciris-nginx")
                 exec_result = nginx_container.exec_run(f"sh -c '{write_cmd}'", user="root")
                 if exec_result.exit_code != 0:
-                    raise RuntimeError(
-                        f"Failed to write fix_agent_permissions.sh: {exec_result.output}"
-                    )
+                    output = exec_result.output
+                    error_msg = output.decode() if isinstance(output, bytes) else str(output)
+                    raise RuntimeError(f"Failed to write fix_agent_permissions.sh: {error_msg}")
             except Exception as e:
                 logger.warning(f"Could not use nginx container for script copy: {e}")
                 docker_client.containers.run(
@@ -1044,7 +1053,9 @@ class CIRISManager:
                 nginx_container = docker_client.containers.get("ciris-nginx")
                 exec_result = nginx_container.exec_run(f"sh -c '{base_dir_cmd}'", user="root")
                 if exec_result.exit_code != 0:
-                    raise RuntimeError(f"Failed to create base directory: {exec_result.output}")
+                    output = exec_result.output
+                    error_msg = output.decode() if isinstance(output, bytes) else str(output)
+                    raise RuntimeError(f"Failed to create base directory: {error_msg}")
             except Exception as e:
                 logger.warning(f"Could not use nginx container for base directory: {e}")
                 docker_client.containers.run(
@@ -1067,7 +1078,9 @@ class CIRISManager:
                     nginx_container = docker_client.containers.get("ciris-nginx")
                     exec_result = nginx_container.exec_run(f"sh -c '{create_cmd}'", user="root")
                     if exec_result.exit_code != 0:
-                        raise RuntimeError(f"Failed to create directory: {exec_result.output}")
+                        output = exec_result.output
+                        error_msg = output.decode() if isinstance(output, bytes) else str(output)
+                        raise RuntimeError(f"Failed to create directory: {error_msg}")
                 except Exception as e:
                     logger.warning(f"Could not use nginx container for {dir_name}: {e}")
                     docker_client.containers.run(
