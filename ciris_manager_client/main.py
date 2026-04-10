@@ -620,6 +620,42 @@ def setup_llm_parser(subparsers):
     )
     add_common_args(set_parser)
 
+    # llm patch (update model without re-providing API keys)
+    patch_parser = llm_subparsers.add_parser(
+        "patch",
+        help="Update LLM model without re-providing API keys",
+        description="Partially update LLM config. Only provided fields are changed.",
+    )
+    patch_parser.add_argument("agent_id", help="Agent ID")
+    patch_parser.add_argument(
+        "--primary-model", dest="primary_model", help="New primary model identifier"
+    )
+    patch_parser.add_argument(
+        "--primary-provider",
+        dest="primary_provider",
+        choices=["openai", "together", "groq", "openrouter", "custom"],
+        help="New primary provider",
+    )
+    patch_parser.add_argument(
+        "--primary-api-base", dest="primary_api_base", help="New primary API base URL"
+    )
+    patch_parser.add_argument(
+        "--backup-model", dest="backup_model", help="New backup model identifier"
+    )
+    patch_parser.add_argument(
+        "--backup-provider",
+        dest="backup_provider",
+        choices=["openai", "together", "groq", "openrouter", "custom"],
+        help="New backup provider",
+    )
+    patch_parser.add_argument(
+        "--backup-api-base", dest="backup_api_base", help="New backup API base URL"
+    )
+    patch_parser.add_argument(
+        "--no-restart", action="store_true", help="Don't restart container after update"
+    )
+    add_common_args(patch_parser)
+
     # llm delete
     delete_parser = llm_subparsers.add_parser(
         "delete", help="Delete LLM configuration for an agent"
@@ -930,7 +966,7 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
             if not args.llm_command:
                 print("Error: No llm subcommand specified", file=sys.stderr)
                 print(
-                    "Available commands: get, set, delete, validate",
+                    "Available commands: get, set, patch, delete, validate",
                     file=sys.stderr,
                 )
                 return EXIT_INVALID_ARGS

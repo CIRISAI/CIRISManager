@@ -245,6 +245,51 @@ class LLMConfigUpdate(BaseModel):
     )
 
 
+class LLMConfigPatch(BaseModel):
+    """
+    Request model for partial LLM configuration updates.
+
+    All fields are optional - only provided fields will be updated.
+    Existing API keys are preserved when not provided.
+
+    Used with PATCH /agents/{id}/llm endpoint.
+    """
+
+    primary_model: Optional[str] = Field(
+        None,
+        description="Primary model identifier",
+    )
+    primary_provider: Optional[LLMProvider] = Field(
+        None,
+        description="Primary provider name",
+    )
+    primary_api_base: Optional[str] = Field(
+        None,
+        description="Primary custom API base URL",
+    )
+    backup_model: Optional[str] = Field(
+        None,
+        description="Backup model identifier",
+    )
+    backup_provider: Optional[LLMProvider] = Field(
+        None,
+        description="Backup provider name",
+    )
+    backup_api_base: Optional[str] = Field(
+        None,
+        description="Backup custom API base URL",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "primary_model": "google/gemma-4-31B-it",
+                "backup_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            }
+        }
+    )
+
+
 class LLMValidateRequest(BaseModel):
     """
     Request model for validating LLM configuration without saving.

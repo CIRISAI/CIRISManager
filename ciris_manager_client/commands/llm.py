@@ -182,6 +182,72 @@ class LLMCommands:
             return EXIT_ERROR
 
     @staticmethod
+    def patch(ctx: CommandContext, args: Namespace) -> int:
+        """
+        Partially update LLM configuration (change model without re-providing API keys).
+
+        Args:
+            ctx: Command context
+            args: Parsed arguments
+
+        Returns:
+            Exit code
+        """
+        try:
+            agent_id = args.agent_id
+
+            if not ctx.quiet:
+                print(f"Updating LLM configuration for agent '{agent_id}'...")
+
+            # Call SDK method
+            result = ctx.client.patch_llm_config(
+                agent_id=agent_id,
+                primary_model=getattr(args, "primary_model", None),
+                primary_provider=getattr(args, "primary_provider", None),
+                primary_api_base=getattr(args, "primary_api_base", None),
+                backup_model=getattr(args, "backup_model", None),
+                backup_provider=getattr(args, "backup_provider", None),
+                backup_api_base=getattr(args, "backup_api_base", None),
+                restart=not getattr(args, "no_restart", False),
+                occurrence_id=getattr(args, "occurrence_id", None),
+                server_id=getattr(args, "server_id", None),
+            )
+
+            if ctx.output_format == "json":
+                print(json.dumps(result, indent=2))
+            else:
+                message = result.get("message", "LLM configuration updated")
+                print(f"\n{message}")
+
+                changes = result.get("changes", [])
+                if changes:
+                    print("\nChanges applied:")
+                    for change in changes:
+                        print(f"  - {change}")
+
+                if result.get("warning"):
+                    print(f"\nWarning: {result['warning']}")
+
+            return EXIT_SUCCESS
+
+        except AuthenticationError as e:
+            print(f"Authentication error: {e}", file=sys.stderr)
+            return EXIT_AUTH_ERROR
+        except APIError as e:
+            if e.status_code == 404:
+                print(f"Agent '{args.agent_id}' not found or no LLM config exists", file=sys.stderr)
+                return EXIT_NOT_FOUND
+            print(f"API error: {e}", file=sys.stderr)
+            return EXIT_API_ERROR
+        except Exception as e:
+            print(f"Error updating LLM config: {e}", file=sys.stderr)
+            if ctx.verbose:
+                import traceback
+
+                traceback.print_exc()
+            return EXIT_ERROR
+
+    @staticmethod
     def delete(ctx: CommandContext, args: Namespace) -> int:
         """
         Delete LLM configuration for an agent.

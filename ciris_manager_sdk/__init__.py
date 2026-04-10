@@ -1380,6 +1380,71 @@ class CIRISManagerClient:
         )
         return response.json()
 
+    def patch_llm_config(
+        self,
+        agent_id: str,
+        primary_model: Optional[str] = None,
+        primary_provider: Optional[str] = None,
+        primary_api_base: Optional[str] = None,
+        backup_model: Optional[str] = None,
+        backup_provider: Optional[str] = None,
+        backup_api_base: Optional[str] = None,
+        restart: bool = True,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Partially update LLM configuration for an agent.
+
+        Only updates the fields provided. Existing API keys are preserved.
+        This allows changing the model without re-providing API keys.
+
+        Args:
+            agent_id: Agent identifier
+            primary_model: New primary model identifier (optional)
+            primary_provider: New primary provider (optional)
+            primary_api_base: New primary API base URL (optional)
+            backup_model: New backup model identifier (optional)
+            backup_provider: New backup provider (optional)
+            backup_api_base: New backup API base URL (optional)
+            restart: Restart container after update (default: True)
+            occurrence_id: Optional occurrence ID for multi-instance agents
+            server_id: Optional server ID for multi-server setups
+
+        Returns:
+            Dict with result including changes made
+        """
+        self._validate_agent_id(agent_id)
+        safe_id = quote(agent_id, safe="")
+
+        params = {"restart": str(restart).lower()}
+        if occurrence_id:
+            params["occurrence_id"] = occurrence_id
+        if server_id:
+            params["server_id"] = server_id
+
+        payload: Dict[str, Any] = {}
+        if primary_model is not None:
+            payload["primary_model"] = primary_model
+        if primary_provider is not None:
+            payload["primary_provider"] = primary_provider
+        if primary_api_base is not None:
+            payload["primary_api_base"] = primary_api_base
+        if backup_model is not None:
+            payload["backup_model"] = backup_model
+        if backup_provider is not None:
+            payload["backup_provider"] = backup_provider
+        if backup_api_base is not None:
+            payload["backup_api_base"] = backup_api_base
+
+        response = self._request(
+            "PATCH",
+            f"/manager/v1/agents/{safe_id}/llm",
+            params=params,
+            json=payload,
+        )
+        return response.json()
+
     def delete_llm_config(
         self,
         agent_id: str,

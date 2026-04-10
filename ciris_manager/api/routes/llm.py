@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ciris_manager.models.llm import (
     LLMConfig,
     LLMConfigUpdate,
+    LLMConfigPatch,
     LLMValidateRequest,
     LLMValidateResponse,
     redact_llm_config,
@@ -210,6 +211,127 @@ async def set_llm_configuration(
             await manager.regenerate_agent_compose(agent.agent_id)
 
             # Restart the container
+            container_name = f"ciris-agent-{agent.name}"
+            restarted = await manager.restart_container(container_name, server_id=agent.server_id)
+            result["restarted"] = restarted
+            if restarted:
+                result["message"] += " and container restarted"
+            else:
+                result["warning"] = "Config saved but container restart failed"
+        except Exception as e:
+            logger.error(f"Failed to restart container for {agent_id}: {e}")
+            result["warning"] = f"Config saved but restart failed: {str(e)}"
+    else:
+        result["message"] += " (restart skipped)"
+
+    return result
+
+
+@router.patch("/agents/{agent_id}/llm")
+async def patch_llm_configuration(
+    agent_id: str,
+    patch: LLMConfigPatch,
+    restart: bool = Query(True, description="Restart agent container after update"),
+    occurrence_id: Optional[str] = Query(None, description="Occurrence ID for disambiguation"),
+    server_id: Optional[str] = Query(None, description="Server ID for disambiguation"),
+    manager: Any = Depends(get_manager),
+    _user: Dict[str, str] = auth_dependency,
+) -> Dict[str, Any]:
+    """
+    Partially update LLM configuration for an agent.
+
+    Only updates the fields provided in the request. Existing API keys and
+    other settings are preserved. This allows changing just the model without
+    needing to re-provide API keys.
+
+    Args:
+        agent_id: The agent ID
+        patch: Partial LLM configuration update
+        restart: Whether to restart container after update (default: true)
+        occurrence_id: Optional occurrence ID for multi-instance disambiguation
+        server_id: Optional server ID for multi-server disambiguation
+
+    Returns:
+        Success message with updated configuration summary
+    """
+    # Resolve agent
+    agent = resolve_agent(manager, agent_id, occurrence_id, server_id)
+
+    # Get existing config (with full API keys)
+    existing_config = manager.agent_registry.get_llm_config(
+        agent.agent_id,
+        occurrence_id=agent.occurrence_id,
+        server_id=agent.server_id,
+    )
+
+    if not existing_config:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No LLM configuration exists for agent '{agent_id}'. Use PUT to create one.",
+        )
+
+    # Build updated config by merging existing with patch
+    updated_config: Dict[str, Any] = {"primary": dict(existing_config["primary"])}
+
+    # Update primary fields if provided
+    if patch.primary_model is not None:
+        updated_config["primary"]["model"] = patch.primary_model
+    if patch.primary_provider is not None:
+        updated_config["primary"]["provider"] = patch.primary_provider
+    if patch.primary_api_base is not None:
+        updated_config["primary"]["api_base"] = patch.primary_api_base
+
+    # Handle backup config
+    if existing_config.get("backup"):
+        updated_config["backup"] = dict(existing_config["backup"])
+        if patch.backup_model is not None:
+            updated_config["backup"]["model"] = patch.backup_model
+        if patch.backup_provider is not None:
+            updated_config["backup"]["provider"] = patch.backup_provider
+        if patch.backup_api_base is not None:
+            updated_config["backup"]["api_base"] = patch.backup_api_base
+
+    # Track what changed
+    changes = []
+    if patch.primary_model is not None:
+        changes.append(f"primary_model={patch.primary_model}")
+    if patch.primary_provider is not None:
+        changes.append(f"primary_provider={patch.primary_provider}")
+    if patch.backup_model is not None:
+        changes.append(f"backup_model={patch.backup_model}")
+    if patch.backup_provider is not None:
+        changes.append(f"backup_provider={patch.backup_provider}")
+
+    if not changes:
+        return {
+            "agent_id": agent.agent_id,
+            "message": "No changes provided",
+        }
+
+    # Save updated config
+    success = manager.agent_registry.set_llm_config(
+        agent.agent_id,
+        updated_config,
+        occurrence_id=agent.occurrence_id,
+        server_id=agent.server_id,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to save LLM configuration",
+        )
+
+    result: Dict[str, Any] = {
+        "agent_id": agent.agent_id,
+        "message": f"LLM configuration updated: {', '.join(changes)}",
+        "changes": changes,
+    }
+
+    # Restart container if requested
+    if restart:
+        try:
+            await manager.regenerate_agent_compose(agent.agent_id)
             container_name = f"ciris-agent-{agent.name}"
             restarted = await manager.restart_container(container_name, server_id=agent.server_id)
             result["restarted"] = restarted
