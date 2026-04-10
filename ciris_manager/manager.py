@@ -637,6 +637,10 @@ class CIRISManager:
         Used to apply adapter configuration changes from the wizard.
         Preserves existing environment variables while adding adapter env vars.
 
+        Supports both local and remote servers:
+        - Local: reads/writes compose file directly from filesystem
+        - Remote: fetches/syncs compose file via Docker exec on nginx container
+
         Args:
             agent_id: Agent identifier
             occurrence_id: Occurrence ID for multi-instance agents
@@ -648,6 +652,8 @@ class CIRISManager:
         Raises:
             ValueError: If agent not found
         """
+        import yaml
+
         # Get the registered agent
         target_server_id = server_id or "main"
         agent = self.agent_registry.get_agent(
@@ -656,23 +662,28 @@ class CIRISManager:
         if not agent:
             raise ValueError(f"Agent {agent_id} not found")
 
+        # Get server config
+        server_config = self.docker_client.get_server_config(target_server_id)
         compose_path = Path(agent.compose_file)
-        if not compose_path.exists():
-            raise ValueError(f"Compose file not found: {compose_path}")
 
-        # Read current compose to extract environment
-        import yaml
+        # Handle local vs remote servers differently
+        if server_config.is_local:
+            # Local server: read compose file directly
+            if not compose_path.exists():
+                raise ValueError(f"Compose file not found: {compose_path}")
 
-        with open(compose_path) as f:
-            current_compose = yaml.safe_load(f)
+            with open(compose_path) as f:
+                current_compose = yaml.safe_load(f)
+        else:
+            # Remote server: fetch compose file via Docker exec
+            current_compose = await self._fetch_remote_compose(target_server_id, str(compose_path))
+            if current_compose is None:
+                raise ValueError(f"Could not fetch compose file from remote server: {compose_path}")
 
         # Get the service config (agent_id is the service name)
         services = current_compose.get("services", {})
         service_config = services.get(agent_id, {})
         current_env = service_config.get("environment", {})
-
-        # Get server config for hostname
-        server_config = self.docker_client.get_server_config(target_server_id)
 
         # Get adapter configs from registry
         adapter_configs = agent.adapter_configs or {}
@@ -712,11 +723,20 @@ class CIRISManager:
         )
 
         # Write updated compose file
-        self.compose_generator.write_compose_file(new_compose, compose_path)
+        if server_config.is_local:
+            # Local server: write directly
+            self.compose_generator.write_compose_file(new_compose, compose_path)
+        else:
+            # Remote server: sync via Docker exec
+            success = await self._sync_compose_to_remote_server(
+                target_server_id, str(compose_path), new_compose
+            )
+            if not success:
+                raise ValueError(f"Failed to sync compose file to remote server: {compose_path}")
 
         logger.info(
             f"Regenerated compose file for agent {agent_id} with "
-            f"{len(adapter_configs)} adapter config(s)"
+            f"{len(adapter_configs)} adapter config(s) (server: {target_server_id})"
         )
 
         return {
@@ -725,6 +745,110 @@ class CIRISManager:
             "adapter_configs_applied": list(adapter_configs.keys()),
             "message": "Compose file regenerated. Restart agent to apply changes.",
         }
+
+    async def _fetch_remote_compose(
+        self, server_id: str, compose_path: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch compose file content from a remote server via Docker exec.
+
+        Uses the nginx container which has /opt/ciris mounted.
+
+        Args:
+            server_id: Remote server ID
+            compose_path: Path to compose file on remote server
+
+        Returns:
+            Parsed compose dict, or None if failed
+        """
+        import yaml
+
+        try:
+            docker_client = self.docker_client.get_client(server_id)
+            if not docker_client:
+                logger.error(f"No Docker client for server {server_id}")
+                return None
+
+            nginx_container = docker_client.containers.get("ciris-nginx")
+
+            # Read file via cat and base64 encode to avoid shell issues
+            read_cmd = f"cat {compose_path} | base64"
+            exec_result = nginx_container.exec_run(["sh", "-c", read_cmd])
+
+            if exec_result.exit_code != 0:
+                logger.error(
+                    f"Failed to read compose file from {server_id}: {exec_result.output.decode()}"
+                )
+                return None
+
+            # Decode base64 and parse YAML
+            import base64
+
+            compose_content = base64.b64decode(exec_result.output).decode()
+            result: Dict[str, Any] = yaml.safe_load(compose_content)
+            return result
+
+        except Exception as e:
+            logger.error(f"Error fetching compose from remote server {server_id}: {e}")
+            return None
+
+    async def _sync_compose_to_remote_server(
+        self, server_id: str, compose_path: str, compose_config: Dict[str, Any]
+    ) -> bool:
+        """
+        Sync compose file content to a remote server via Docker exec.
+
+        Uses the nginx container which has /opt/ciris mounted.
+
+        Args:
+            server_id: Remote server ID
+            compose_path: Path to compose file on remote server
+            compose_config: Compose configuration dict to write
+
+        Returns:
+            True if successful, False otherwise
+        """
+        import base64
+        import yaml
+
+        try:
+            docker_client = self.docker_client.get_client(server_id)
+            if not docker_client:
+                logger.error(f"No Docker client for server {server_id}")
+                return False
+
+            nginx_container = docker_client.containers.get("ciris-nginx")
+
+            # Convert compose dict to YAML string
+            compose_content = yaml.dump(
+                compose_config,
+                default_flow_style=False,
+                sort_keys=False,
+                width=120,
+            )
+
+            # Ensure directory exists and write compose file via base64
+            compose_dir = str(Path(compose_path).parent)
+            encoded_content = base64.b64encode(compose_content.encode()).decode()
+
+            write_cmd = (
+                f"mkdir -p {compose_dir} && "
+                f"echo '{encoded_content}' | base64 -d > {compose_path}"
+            )
+            exec_result = nginx_container.exec_run(["sh", "-c", write_cmd], user="root")
+
+            if exec_result.exit_code != 0:
+                logger.error(
+                    f"Failed to write compose file to {server_id}: {exec_result.output.decode()}"
+                )
+                return False
+
+            logger.info(f"✅ Synced compose file to remote server {server_id}: {compose_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error syncing compose to remote server {server_id}: {e}")
+            return False
 
     async def update_nginx_config(self) -> bool:
         """Update nginx configuration with all current agents across all servers."""
