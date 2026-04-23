@@ -77,9 +77,9 @@ class CrashLoopWatchdog:
             try:
                 await self._task
             except asyncio.CancelledError:
-                # Re-raise after logging cleanup
+                # Expected: we just cancelled the task. Swallow so graceful
+                # shutdown can complete and the process exits with code 0.
                 logger.debug("Watchdog task cancelled as expected")
-                raise
         logger.info("Crash loop watchdog stopped")
 
     async def _watchdog_loop(self) -> None:

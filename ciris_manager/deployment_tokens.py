@@ -22,11 +22,14 @@ class DeploymentTokenManager:
         self.config_dir = Path(config_dir)
         self.tokens_file = self.config_dir / "deployment_tokens.json"
         self.env_file = self.config_dir / "environment"
+        # Log env-file sync failures at most once per process to avoid spam.
+        self._env_file_warned = False
         self.tokens = self._load_tokens()
 
     def _load_tokens(self) -> Dict[str, str]:
         """Load existing tokens or generate new ones."""
-        tokens = {}
+        tokens: Dict[str, str] = {}
+        changed = False
 
         # First, try to load from JSON file (persistent storage)
         if self.tokens_file.exists():
@@ -48,6 +51,7 @@ class DeploymentTokenManager:
         for repo, token in env_tokens.items():
             if token and repo not in tokens:
                 tokens[repo] = token
+                changed = True
                 logger.info(f"Loaded {repo} token from environment")
 
         # Generate any missing tokens
@@ -55,10 +59,14 @@ class DeploymentTokenManager:
         for repo in required_repos:
             if repo not in tokens or not tokens[repo]:
                 tokens[repo] = self._generate_token()
+                changed = True
                 logger.info(f"Generated new deployment token for {repo}")
 
-        # Save all tokens
-        self._save_tokens(tokens)
+        # Only persist if we generated new tokens or picked up any from env.
+        # Otherwise the JSON file is already up-to-date and re-saving is wasted
+        # work that can trigger benign permission errors on the env-file sync.
+        if changed:
+            self._save_tokens(tokens)
 
         return tokens
 
@@ -68,23 +76,36 @@ class DeploymentTokenManager:
         return secrets.token_urlsafe(32)
 
     def _save_tokens(self, tokens: Dict[str, str]) -> None:
-        """Save tokens to persistent storage and environment file."""
-        try:
-            # Ensure config directory exists
-            self.config_dir.mkdir(parents=True, exist_ok=True)
+        """Save tokens to persistent storage.
 
-            # Save to JSON file for persistence
+        The JSON file is the source of truth at runtime. The env file sync is
+        best-effort — systemd only reads EnvironmentFile at service start, so a
+        runtime write doesn't affect the running process, but it keeps the file
+        consistent for the next restart. If the process lacks permission, we
+        warn once and keep going rather than spamming errors each startup.
+        """
+        # JSON file must succeed — this is where we persist tokens.
+        try:
+            self.config_dir.mkdir(parents=True, exist_ok=True)
             with open(self.tokens_file, "w") as f:
                 json.dump(tokens, f, indent=2)
-            # Set secure permissions
             self.tokens_file.chmod(0o600)
             logger.info(f"Saved deployment tokens to {self.tokens_file}")
-
-            # Update environment file for systemd service
-            self._update_environment_file(tokens)
-
         except Exception as e:
-            logger.error(f"Failed to save deployment tokens: {e}")
+            logger.error(f"Failed to save deployment tokens to {self.tokens_file}: {e}")
+            return
+
+        # Env file sync is best-effort.
+        try:
+            self._update_environment_file(tokens)
+        except Exception as e:
+            if not self._env_file_warned:
+                logger.warning(
+                    f"Could not sync deployment tokens to {self.env_file}: {e}. "
+                    "Tokens persist in the JSON file; restart the service after "
+                    "granting write access to pick up env-file sync."
+                )
+                self._env_file_warned = True
 
     def _update_environment_file(self, tokens: Dict[str, str]) -> None:
         """Update the environment file with deployment tokens using sudo for privileged access."""
@@ -196,7 +217,8 @@ class DeploymentTokenManager:
                             f"Updated environment file directly (test environment): {self.env_file}"
                         )
                     except PermissionError as perm_error:
-                        logger.error(f"Direct write also failed: {perm_error}")
+                        # Caller (_save_tokens) logs once via _env_file_warned;
+                        # don't log ERROR here to avoid duplicate noise.
                         raise Exception(f"Could not update environment file: {perm_error}")
 
             finally:
@@ -206,8 +228,9 @@ class DeploymentTokenManager:
                 except OSError:
                     pass
 
-        except Exception as e:
-            logger.error(f"Failed to update environment file: {e}")
+        except Exception:
+            # Re-raise so the caller can apply its once-per-process warning
+            # policy; don't log here (caller handles user-facing message).
             raise
 
     def get_token(self, repo: str) -> Optional[str]:

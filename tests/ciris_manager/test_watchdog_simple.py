@@ -2,6 +2,10 @@
 Simple unit tests for CrashLoopWatchdog.
 """
 
+import asyncio
+
+import pytest
+
 from ciris_manager.core.watchdog import CrashLoopWatchdog, ContainerTracker, CrashEvent
 from datetime import datetime, timedelta
 
@@ -41,3 +45,33 @@ class TestWatchdogSimple:
         assert event.container == "test"
         assert event.exit_code == 1
         assert event.timestamp is not None
+
+    @pytest.mark.asyncio
+    async def test_stop_swallows_cancelled_error(self):
+        """stop() must not re-raise CancelledError from the cancelled task.
+
+        The watchdog loop awaits asyncio.sleep(); cancelling it via stop() raises
+        CancelledError inside the loop. If stop() propagates that error, it
+        unwinds through manager.stop() -> run()'s finally -> asyncio.run(), and
+        systemd sees a non-zero exit code for what was a clean shutdown.
+        """
+        watchdog = CrashLoopWatchdog(check_interval=3600)
+        await watchdog.start()
+        assert watchdog._running is True
+        assert watchdog._task is not None
+
+        # Let the loop enter asyncio.sleep() so cancellation hits the sleep.
+        await asyncio.sleep(0)
+
+        # Must return cleanly, not raise CancelledError.
+        await watchdog.stop()
+
+        assert watchdog._running is False
+        assert watchdog._task.done()
+        assert watchdog._task.cancelled()
+
+    @pytest.mark.asyncio
+    async def test_stop_is_idempotent_when_not_started(self):
+        """stop() on a never-started watchdog should be a no-op."""
+        watchdog = CrashLoopWatchdog()
+        await watchdog.stop()  # Must not raise.
