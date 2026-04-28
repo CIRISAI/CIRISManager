@@ -24,7 +24,7 @@ from ciris_manager.config.settings import CIRISManagerConfig
 from ciris_manager.port_manager import PortManager
 from ciris_manager.template_verifier import TemplateVerifier
 from ciris_manager.agent_registry import AgentRegistry
-from ciris_manager.compose_generator import ComposeGenerator
+from ciris_manager.compose_generator import ComposeGenerator, normalize_compose_env
 from ciris_manager.nginx_manager import NginxManager
 from ciris_manager.docker_image_cleanup import DockerImageCleanup
 from ciris_manager.multi_server_docker import MultiServerDockerClient
@@ -683,7 +683,10 @@ class CIRISManager:
         # Get the service config (agent_id is the service name)
         services = current_compose.get("services", {})
         service_config = services.get(agent_id, {})
-        current_env = service_config.get("environment", {})
+        # Normalize: Compose accepts env as dict or list-of-"KEY=value" strings.
+        # Without this, list-form input crashes downstream `.get(...)` calls and
+        # the orchestrator silently falls back to stale env from the old container.
+        current_env = normalize_compose_env(service_config.get("environment"))
 
         # Get adapter configs from registry
         adapter_configs = agent.adapter_configs or {}
@@ -1170,7 +1173,8 @@ class CIRISManager:
 
             # Extract container configuration
             image = service_config.get("image")
-            environment = service_config.get("environment", {})
+            # Normalize env so downstream consumers can index by key safely.
+            environment = normalize_compose_env(service_config.get("environment"))
             ports = service_config.get("ports", [])
             volumes_config = service_config.get("volumes", [])
             container_name = service_config.get("container_name", f"ciris-{agent_id}")

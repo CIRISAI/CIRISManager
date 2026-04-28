@@ -8,9 +8,36 @@ import yaml
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_compose_env(env: Union[Dict[str, Any], List[str], None]) -> Dict[str, str]:
+    """Normalize a Docker Compose `environment:` field to a dict.
+
+    Compose accepts both forms; Docker SDK's `Config.Env` always returns the
+    list form. Callers that index env by key (`.get("CIRIS_ADAPTER")`) must
+    normalize first, otherwise list-form input crashes with
+    `'list' object has no attribute 'get'` and the regen path silently falls
+    back to stale env.
+    """
+    if env is None:
+        return {}
+    if isinstance(env, dict):
+        return {k: "" if v is None else str(v) for k, v in env.items()}
+    if isinstance(env, list):
+        result: Dict[str, str] = {}
+        for item in env:
+            if not isinstance(item, str):
+                continue
+            key, sep, value = item.partition("=")
+            if sep:  # well-formed KEY=VALUE
+                result[key] = value
+            elif key:  # bare KEY (Compose passes through host env value)
+                result[key] = ""
+        return result
+    raise TypeError(f"Unsupported environment type: {type(env).__name__}")
 
 
 class ComposeGenerator:
