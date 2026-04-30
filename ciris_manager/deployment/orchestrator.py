@@ -46,6 +46,13 @@ from ciris_manager.deployment.containers import ContainerOperations
 
 logger = logging.getLogger(__name__)
 
+# Maximum minutes the canary will wait for an agent to transition WAKEUP -> WORK
+# before declaring the phase failed. Empirically the post-2.7.x CIRIS agent takes
+# 6-9 minutes to complete WAKEUP on the production fleet (LLM-bound), so the
+# previous 5-min cap was producing false-negative phase failures while agents
+# were still healthily progressing through cognitive bootstrap.
+DEFAULT_WAIT_FOR_WORK_MINUTES = 15
+
 # Global deployment orchestrator instance
 _orchestrator: Optional["DeploymentOrchestrator"] = None
 
@@ -465,7 +472,7 @@ class DeploymentOrchestrator:
                     deployment_id=deployment_id,
                     agents=[agent],
                     phase_name="single_agent",
-                    wait_for_work_minutes=5,  # 5 minutes for single agent
+                    wait_for_work_minutes=DEFAULT_WAIT_FOR_WORK_MINUTES,
                     stability_minutes=1,  # 1 minute stability
                 )
 
@@ -2479,7 +2486,11 @@ class DeploymentOrchestrator:
 
             # Wait for at least one explorer to reach WORK state and be stable
             success, results = await self._check_canary_group_health(
-                deployment_id, explorers, "explorer", wait_for_work_minutes=5, stability_minutes=1
+                deployment_id,
+                explorers,
+                "explorer",
+                wait_for_work_minutes=DEFAULT_WAIT_FOR_WORK_MINUTES,
+                stability_minutes=1,
             )
 
             if success:
@@ -2542,7 +2553,7 @@ class DeploymentOrchestrator:
                 deployment_id,
                 early_adopters,
                 "early adopter",
-                wait_for_work_minutes=5,
+                wait_for_work_minutes=DEFAULT_WAIT_FOR_WORK_MINUTES,
                 stability_minutes=1,
             )
 
@@ -2604,7 +2615,11 @@ class DeploymentOrchestrator:
 
             # For general population, just log if they don't reach WORK state (don't fail deployment)
             success, results = await self._check_canary_group_health(
-                deployment_id, general, "general", wait_for_work_minutes=5, stability_minutes=1
+                deployment_id,
+                general,
+                "general",
+                wait_for_work_minutes=DEFAULT_WAIT_FOR_WORK_MINUTES,
+                stability_minutes=1,
             )
             if success:
                 logger.info(
