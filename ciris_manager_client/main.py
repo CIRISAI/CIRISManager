@@ -784,6 +784,45 @@ def setup_debug_parser(subparsers):
     add_multi_occurrence_args(schema_parser)
 
 
+def setup_status_parser(subparsers):
+    """Set up status command subparser."""
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Fleet ops/security status",
+        description=(
+            "Roll up fleet health, classified incident counts, deployments, and "
+            "security signals across all servers. Replaces ad-hoc SSH+docker-exec "
+            "pipelines used for 'is everything OK?' checks. Honors --format."
+        ),
+    )
+    status_subparsers = status_parser.add_subparsers(dest="status_command", help="Status sections")
+
+    status_subparsers.add_parser("fleet", help="Per-agent state + version uniformity (manager API)")
+
+    incidents_parser = status_subparsers.add_parser(
+        "incidents",
+        help="Per-agent incident counts classified by category (today UTC by default)",
+    )
+    incidents_parser.add_argument(
+        "--since", default=None, help="UTC date prefix for log scan (default: today, YYYY-MM-DD)"
+    )
+
+    status_subparsers.add_parser("deployments", help="Pending deployments + manager status")
+
+    status_subparsers.add_parser(
+        "security",
+        help="Manager log errors + sshd auth failures + OAuth 401s (24h window)",
+    )
+
+    all_parser = status_subparsers.add_parser(
+        "all",
+        help="Composite: fleet + deployments + incidents + security. Exits non-zero if anything notable.",
+    )
+    all_parser.add_argument(
+        "--since", default=None, help="UTC date prefix for incident scan (default: today)"
+    )
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the main argument parser."""
     parser = argparse.ArgumentParser(
@@ -853,6 +892,7 @@ Token File:
     setup_llm_parser(subparsers)
     setup_admin_parser(subparsers)
     setup_debug_parser(subparsers)
+    setup_status_parser(subparsers)
 
     return parser
 
@@ -1020,6 +1060,24 @@ def route_command(ctx: CommandContext, args: argparse.Namespace) -> int:
                 return cast(int, handler(ctx, args))
             else:
                 print(f"Error: Unknown debug command: {args.debug_command}", file=sys.stderr)
+                return EXIT_INVALID_ARGS
+
+        elif args.command == "status":
+            from ciris_manager_client.commands.status import StatusCommands
+
+            if not args.status_command:
+                print("Error: No status subcommand specified", file=sys.stderr)
+                print(
+                    "Available commands: fleet, incidents, deployments, security, all",
+                    file=sys.stderr,
+                )
+                return EXIT_INVALID_ARGS
+
+            handler = getattr(StatusCommands, args.status_command.replace("-", "_"), None)
+            if handler:
+                return cast(int, handler(ctx, args))
+            else:
+                print(f"Error: Unknown status command: {args.status_command}", file=sys.stderr)
                 return EXIT_INVALID_ARGS
 
         else:
