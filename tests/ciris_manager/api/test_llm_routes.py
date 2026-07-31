@@ -42,9 +42,12 @@ class TestLLMRoutes:
         # Mock docker_client to prevent discovery issues
         manager.docker_client = None
 
-        # Mock regenerate_agent_compose and restart_container
+        # Mock regenerate_agent_compose and the container recreate. Config
+        # changes require a RECREATE: a Docker restart replays the old
+        # environment, so a restarted agent comes back on the previous
+        # provider while the API reports success.
         manager.regenerate_agent_compose = AsyncMock()
-        manager.restart_container = AsyncMock(return_value=True)
+        manager.recreate_agent_container = AsyncMock(return_value=True)
 
         return manager
 
@@ -274,11 +277,11 @@ class TestLLMRoutes:
 
         data = response.json()
         assert data["restarted"] is True
-        assert "container restarted" in data["message"]
+        assert "container recreated" in data["message"]
 
         # Verify restart was called
         mock_manager.regenerate_agent_compose.assert_called_once()
-        mock_manager.restart_container.assert_called_once()
+        mock_manager.recreate_agent_container.assert_called_once()
 
     def test_patch_llm_config_provider_change(
         self, client, mock_manager, sample_agent, sample_llm_config

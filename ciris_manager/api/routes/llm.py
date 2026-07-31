@@ -29,19 +29,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["llm"])
 
 
-def _container_name(agent: Any) -> str:
-    """Derive the real container name for an agent.
-
-    Mirrors the compose generator: `ciris-{agent_id}`, with the occurrence id
-    appended for non-default occurrences (e.g. the second scout).
-    """
-    agent_id = getattr(agent, "agent_id", "")
-    occurrence = getattr(agent, "occurrence_id", None)
-    if occurrence and occurrence != "default":
-        return f"ciris-{agent_id}-{occurrence}"
-    return f"ciris-{agent_id}"
-
-
 @router.get("/agents/{agent_id}/llm")
 async def get_llm_configuration(
     agent_id: str,
@@ -224,22 +211,24 @@ async def set_llm_configuration(
             await manager.regenerate_agent_compose(agent.agent_id)
 
             # Restart the container
-            # Production containers are `ciris-{agent_id}` (plus the occurrence
-            # suffix for extra instances). The old `ciris-agent-{name}` form
-            # matches nothing, so the restart would have failed even once
-            # `restart_container` existed.
-            container_name = _container_name(agent)
-            restarted = await manager.restart_container(container_name, server_id=agent.server_id)
+            # RECREATE, not restart. A Docker restart replays the container's
+            # original environment, so a restarted agent comes back on the OLD
+            # provider while the API cheerfully reports the new config applied.
+            # Environment is fixed at container creation, so config changes
+            # only take effect by recreating from the regenerated compose.
+            restarted = await manager.recreate_agent_container(
+                agent.agent_id, server_id=agent.server_id or "main"
+            )
             result["restarted"] = restarted
             if restarted:
-                result["message"] += " and container restarted"
+                result["message"] += " and container recreated"
             else:
-                result["warning"] = "Config saved but container restart failed"
+                result["warning"] = "Config saved but container recreate failed"
         except Exception as e:
             logger.error(f"Failed to restart container for {agent_id}: {e}")
-            result["warning"] = f"Config saved but restart failed: {str(e)}"
+            result["warning"] = f"Config saved but recreate failed: {str(e)}"
     else:
-        result["message"] += " (restart skipped)"
+        result["message"] += " (recreate skipped)"
 
     return result
 
@@ -349,22 +338,24 @@ async def patch_llm_configuration(
     if restart:
         try:
             await manager.regenerate_agent_compose(agent.agent_id)
-            # Production containers are `ciris-{agent_id}` (plus the occurrence
-            # suffix for extra instances). The old `ciris-agent-{name}` form
-            # matches nothing, so the restart would have failed even once
-            # `restart_container` existed.
-            container_name = _container_name(agent)
-            restarted = await manager.restart_container(container_name, server_id=agent.server_id)
+            # RECREATE, not restart. A Docker restart replays the container's
+            # original environment, so a restarted agent comes back on the OLD
+            # provider while the API cheerfully reports the new config applied.
+            # Environment is fixed at container creation, so config changes
+            # only take effect by recreating from the regenerated compose.
+            restarted = await manager.recreate_agent_container(
+                agent.agent_id, server_id=agent.server_id or "main"
+            )
             result["restarted"] = restarted
             if restarted:
-                result["message"] += " and container restarted"
+                result["message"] += " and container recreated"
             else:
-                result["warning"] = "Config saved but container restart failed"
+                result["warning"] = "Config saved but container recreate failed"
         except Exception as e:
             logger.error(f"Failed to restart container for {agent_id}: {e}")
-            result["warning"] = f"Config saved but restart failed: {str(e)}"
+            result["warning"] = f"Config saved but recreate failed: {str(e)}"
     else:
-        result["message"] += " (restart skipped)"
+        result["message"] += " (recreate skipped)"
 
     return result
 
@@ -417,16 +408,18 @@ async def delete_llm_configuration(
     if restart:
         try:
             await manager.regenerate_agent_compose(agent.agent_id)
-            # Production containers are `ciris-{agent_id}` (plus the occurrence
-            # suffix for extra instances). The old `ciris-agent-{name}` form
-            # matches nothing, so the restart would have failed even once
-            # `restart_container` existed.
-            container_name = _container_name(agent)
-            restarted = await manager.restart_container(container_name, server_id=agent.server_id)
+            # RECREATE, not restart. A Docker restart replays the container's
+            # original environment, so a restarted agent comes back on the OLD
+            # provider while the API cheerfully reports the new config applied.
+            # Environment is fixed at container creation, so config changes
+            # only take effect by recreating from the regenerated compose.
+            restarted = await manager.recreate_agent_container(
+                agent.agent_id, server_id=agent.server_id or "main"
+            )
             result["restarted"] = restarted
         except Exception as e:
             logger.error(f"Failed to restart container for {agent_id}: {e}")
-            result["warning"] = f"Config deleted but restart failed: {str(e)}"
+            result["warning"] = f"Config deleted but recreate failed: {str(e)}"
 
     return result
 
