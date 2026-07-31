@@ -44,6 +44,38 @@ def _isolate_environ():
 
 
 @pytest.fixture(autouse=True)
+def _no_docker_compose_probing(request):
+    """Stop tests shelling out to discover Docker Compose on the host.
+
+    `get_compose_command` probes the machine with `docker compose version` /
+    `docker-compose --version` under a 5 second timeout, and raises if neither
+    answers. On a loaded CI runner that probe times out intermittently:
+
+        Docker Compose v2 check failed: Command timed out after 5 seconds
+        Error recreating container: Docker Compose is not available on this system
+
+    which fails tests based on runner load rather than on the code under test.
+    Several test classes already patched this ad hoc; doing it once here covers
+    the rest.
+
+    Tests that own this functionality - they mock `subprocess.run` themselves to
+    exercise real v1/v2 discovery - are exempt via the
+    `uses_real_compose_discovery` marker; patching them would defeat their point.
+    """
+    import ciris_manager.utils.compose_command as compose_module
+
+    if request.node.get_closest_marker("uses_real_compose_discovery"):
+        yield
+        return
+
+    original = compose_module._compose_command
+    compose_module._compose_command = None
+    with patch.object(compose_module, "get_compose_command", return_value=["docker-compose"]):
+        yield
+    compose_module._compose_command = original
+
+
+@pytest.fixture(autouse=True)
 def _no_host_port_probing():
     """Stop port allocation from depending on the host's real sockets.
 

@@ -14,6 +14,7 @@ from ciris_manager.utils.compose_command import (
 )
 
 
+@pytest.mark.uses_real_compose_discovery
 class TestGetComposeCommand:
     """Tests for get_compose_command function."""
 
@@ -132,6 +133,7 @@ class TestGetComposeCommand:
                 assert "Using Docker Compose v1 (docker-compose)" in caplog.text
 
 
+@pytest.mark.uses_real_compose_discovery
 class TestComposeCmd:
     """Tests for compose_cmd function."""
 
