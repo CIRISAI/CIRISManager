@@ -271,10 +271,18 @@ CIRISManager is a lightweight systemd service that manages CIRIS agent lifecycle
    - Handles container lifecycle (start, stop, restart)
    - Automatically pulls latest images when configured
 
-2. **Crash Loop Detection** (`core/watchdog.py`)
+2. **Liveness Watchdog** (`core/watchdog.py`)
    - Detects when containers crash repeatedly (3 crashes in 5 minutes)
    - Prevents infinite restart loops
-   - Provides notifications for crash loops
+   - **Detects absence**: a registered agent with no running container. This is
+     a different failure from a crash loop - the container exits once, stays
+     exited, and `RestartCount` never leaves zero, so crash counting is blind
+     to it. Alerts after 5 consecutive missed checks (~2.5 min).
+   - Driven by the **agent registry**, not a container name filter, and reaches
+     each agent through its own server's Docker API. A local `docker ps` finds
+     nothing: the manager runs on its own host with no agent containers.
+   - Alerts only; it does not auto-restart, because agents are `restart: 'no'`
+     by design. Recovery is `ciris-manager-client agent start <id>`.
 
 3. **API Service** (`api/routes.py`)
    - RESTful API at `/manager/v1/*`
@@ -327,7 +335,16 @@ CIRISManager handles all deployment orchestration through a clean API:
    - Manager calls agent's `/v1/system/update` endpoint
    - Agent responds with decision: accept/defer/reject
    - Manager respects agent autonomy
-   - Docker's restart policy handles container swap
+   - **The manager performs the container swap explicitly.** Agent containers
+     are created with `restart: 'no'` so that CIRISManager owns agent lifecycle
+     exclusively and nothing restarts an agent behind its back. Do not rely on
+     Docker's restart policy to bring an agent back - it will not.
+
+   **Consequence:** a host reboot leaves every agent on that host stopped until
+   something restarts it. That is why the watchdog does absence detection (see
+   below); it is the only thing standing between a reboot and a silent outage.
+   In 2026-07 a scout agent stayed down for three weeks after a Vultr
+   maintenance reboot because nothing was watching for this.
 
 4. **Progress Tracking**:
    ```bash
@@ -481,6 +498,29 @@ ssh -i ~/.ssh/ciris_deploy root@45.76.18.133
 
 2. **Cloudflare Full SSL mode** - All origin servers must have valid SSL certs. Certs are Let's Encrypt, stored in `/etc/letsencrypt/live/{hostname}/`
 
+   **Renewal uses the `webroot` authenticator, never `standalone`.** Standalone
+   binds TCP :80 to answer the ACME challenge, but `ciris-nginx` holds :80
+   permanently, so every renewal fails with "Could not bind TCP port 80". This
+   is latent: the initial issuance succeeds during provisioning (before nginx
+   exists) and only fails 90 days later at first renewal. In 2026-06 it left
+   `agents.ciris.ai` on an expired cert for 46 days, returning Cloudflare 526
+   for the manager API, all agent APIs, and the CD notify endpoint - while
+   `certbot.timer` sat there `active`, failing twice a day, unmonitored.
+
+   - Webroot is `/etc/letsencrypt/acme-webroot`, chosen because `/etc/letsencrypt`
+     is already bind-mounted into every `ciris-nginx` container. The nginx config
+     generator emits the matching `location ^~ /.well-known/acme-challenge/`
+     block **above** the catch-all HTTPS redirect - if the redirect wins,
+     renewal 301s to the very cert it is trying to replace.
+   - `renew_hook = docker exec ciris-nginx kill -HUP 1` (not `nginx -s reload`).
+   - `scoutapilb.ciris.ai` is served by **both** scout origins behind Cloudflare,
+     so an HTTP-01 challenge can land on either. scout1 owns the lineage; scout2
+     proxies `/.well-known/acme-challenge/` to scout1 over the VPC so validation
+     is deterministic. scout2's cert is currently **hand-copied** and does not
+     auto-renew - `ciris-manager-client status endpoints` checks each origin's
+     cert separately so this cannot expire silently.
+   - Monitor cert expiry, not certbot's exit code: `ciris-manager-client status endpoints`.
+
 3. **Nginx reload in Docker** - Use `kill -HUP 1` not `nginx -s reload` because containers run with `daemon off;`
 
 4. **API startup takes ~4 minutes** - Due to remote Docker TLS connections, image cleanup, and ASGI lifespan
@@ -584,7 +624,13 @@ API Endpoint: https://agents.ciris.ai/api/datum/v1/
 Production containers follow the naming pattern:
 - `ciris-nginx` - Reverse proxy
 - `ciris-gui` - Frontend interface
-- `ciris-agent-{name}` - Individual agents (e.g., ciris-agent-datum)
+- `ciris-{agent_id}` - Individual agents (e.g., `ciris-datum`, `ciris-echo-core-jm2jy2`)
+- `ciris-{agent_id}-{occurrence_id}` - Non-default occurrences (e.g., `ciris-scout-remote-test-dahrb9-002`)
+
+**There is no `ciris-agent-` prefix.** This doc previously claimed there was,
+and the watchdog filtered on `name=ciris-agent-` accordingly - matching zero
+containers in production while reporting itself healthy. Verify any name filter
+against `docker ps` on a real host before trusting it.
 
 ### CIRISManager Service
 CIRISManager runs as a systemd service, NOT as a Docker container:
@@ -744,7 +790,11 @@ CIRISManager supports deploying agents across multiple physical servers while ma
 ### Server Types
 
 **Manager Server** (45.76.226.222):
-- Runs CIRISManager systemd service ONLY (no nginx, no agents)
+- Runs the CIRISManager systemd service. It manages no agents of its own, and
+  no agent should be scheduled here. (As of 2026-07-30 the host does still run
+  a `ciris-nginx` container and a stray `ciris-scout-remote-test-dahrb9`
+  container left over from the May migration, exited cleanly since 2026-05-23 -
+  both are debris, not part of the design.)
 - Manages ALL remote servers via Docker API over TLS
 - Stores agent registry (`/opt/ciris/agents/metadata.json`)
 - API proxied through agents server nginx
