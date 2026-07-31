@@ -44,6 +44,30 @@ def _isolate_environ():
 
 
 @pytest.fixture(autouse=True)
+def _no_host_port_probing():
+    """Stop port allocation from depending on the host's real sockets.
+
+    `PortManager.allocate_port` calls `_is_port_in_use`, which opens a socket
+    against the machine running the tests. If anything happens to be listening
+    on a port in the configured range, allocation silently skips it - so tests
+    asserting `port == 8080` fail depending on what else is running on the box.
+
+    That produced a genuine heisenbug: the same test failed repeatedly while
+    something held 8080 locally, then passed six times in a row once the port
+    was released, and was reproducible on demand by binding 8080. On a CI
+    runner it is a coin flip.
+
+    Unit tests should exercise allocation bookkeeping, not the host's network
+    state, so the probe always reports "free" here. A test that specifically
+    wants the real probe can patch it back.
+    """
+    from ciris_manager.port_manager import PortManager
+
+    with patch.object(PortManager, "_is_port_in_use", return_value=False):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_module_caches():
     """Clear process-global caches between tests.
 
