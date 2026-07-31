@@ -330,3 +330,40 @@ class TestLLMRoutes:
         call_args = mock_manager.agent_registry.set_llm_config.call_args
         saved_config = call_args[0][1]
         assert "backup" not in saved_config
+
+    def test_compose_regeneration_receives_composite_key(
+        self, client, mock_manager, sample_llm_config
+    ):
+        """regenerate_agent_compose must get occurrence_id and server_id.
+
+        Without them it defaults to server "main", so any agent on a remote
+        server or a non-default occurrence failed with "Agent <id> not found"
+        and its LLM config was saved but never applied. Both scout agents hit
+        this: config validated and stored, container untouched.
+        """
+        from ciris_manager.agent_registry import RegisteredAgent
+
+        scout = RegisteredAgent(
+            agent_id="scout-remote-test-dahrb9",
+            name="Scout",
+            port=8000,
+            template="scout",
+            compose_file="/opt/ciris/agents/scout/docker-compose.yml",
+            server_id="scout2",
+            occurrence_id="002",
+        )
+        mock_manager.agent_registry.get_agents_by_agent_id.return_value = [scout]
+        mock_manager.agent_registry.get_agent.return_value = scout
+        mock_manager.agent_registry.get_llm_config.return_value = sample_llm_config
+        mock_manager.agent_registry.set_llm_config.return_value = True
+
+        response = client.patch(
+            "/manager/v1/agents/scout-remote-test-dahrb9/llm?occurrence_id=002&server_id=scout2",
+            json={"primary_model": "google/gemma-4-31B-it"},
+        )
+        assert response.status_code == 200
+
+        mock_manager.regenerate_agent_compose.assert_called_once()
+        kwargs = mock_manager.regenerate_agent_compose.call_args.kwargs
+        assert kwargs.get("occurrence_id") == "002"
+        assert kwargs.get("server_id") == "scout2"
