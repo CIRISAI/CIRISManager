@@ -1,8 +1,27 @@
 """
-Crash loop detection watchdog for CIRISManager.
+Liveness watchdog for CIRISManager.
 
-Monitors containers for repeated crashes and stops them
-to prevent infinite restart loops.
+Monitors agent containers for two distinct failure modes:
+
+1. **Crash loops** - a container restarting repeatedly. Detected by counting
+   non-zero exits inside a sliding window; the container is stopped so it
+   cannot thrash forever.
+
+2. **Absence** - a registered agent with no running container at all. This is
+   NOT a crash loop: the container exits once, stays exited, and RestartCount
+   never leaves zero. The 2026-07-30 soak review found the scout2 agent had
+   been down for three weeks after a host reboot precisely because nothing
+   looked for this. Agent containers run with `restart: 'no'` (the manager owns
+   lifecycle exclusively), so a host reboot leaves them dead until something
+   notices.
+
+Container discovery is driven by the **agent registry**, not by a container
+name filter. The previous implementation ran `docker ps --filter
+name=ciris-agent-` against the *local* Docker socket, which matched nothing in
+production twice over: real containers are named `ciris-{agent_id}` (no
+`agent-` infix), and the manager runs on its own server with no agent
+containers on it at all. The watchdog therefore reported healthy while
+monitoring an empty set.
 """
 
 import asyncio
@@ -12,6 +31,15 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+# Consecutive checks an agent must be absent before alerting. At the default
+# 30s interval this is ~2.5 minutes, which rides out a normal deploy/restart
+# window without alerting, while still catching a reboot within minutes rather
+# than weeks.
+_ABSENCE_ALERT_THRESHOLD = 5
+
+# Container states that mean "this agent is not serving traffic".
+_DEAD_STATES = {"exited", "dead", "created", "removing", "paused"}
 
 
 @dataclass
@@ -30,6 +58,10 @@ class ContainerTracker:
     container: str
     crashes: List[CrashEvent] = field(default_factory=list)
     stopped: bool = False
+    # Consecutive checks this agent has been absent/not-running. Reset to 0 the
+    # moment it is seen running again.
+    absent_checks: int = 0
+    absence_alerted: bool = False
 
 
 class CrashLoopWatchdog:
@@ -40,6 +72,8 @@ class CrashLoopWatchdog:
         check_interval: int = 30,
         crash_threshold: int = 3,
         crash_window: int = 300,  # 5 minutes
+        agent_registry: Any = None,
+        docker_client_manager: Any = None,
     ):
         """
         Initialize watchdog.
@@ -48,14 +82,43 @@ class CrashLoopWatchdog:
             check_interval: Seconds between checks
             crash_threshold: Number of crashes to trigger intervention
             crash_window: Time window in seconds to count crashes
+            agent_registry: AgentRegistry used to enumerate expected agents.
+                Required for absence detection - without it the watchdog can
+                only see containers that exist, never ones that should.
+            docker_client_manager: MultiServerDockerClient used to reach each
+                agent's own server. Without it the watchdog falls back to the
+                local Docker socket, which on the manager host holds no agents.
         """
         self.check_interval = check_interval
         self.crash_threshold = crash_threshold
         self.crash_window = timedelta(seconds=crash_window)
+        self.agent_registry = agent_registry
+        self.docker_client_manager = docker_client_manager
 
         self._trackers: Dict[str, ContainerTracker] = {}
         self._running = False
         self._task: Optional[asyncio.Task] = None
+
+    @property
+    def registry_driven(self) -> bool:
+        """True when the watchdog can enumerate expected agents.
+
+        Absence detection is only possible in this mode.
+        """
+        return self.agent_registry is not None and self.docker_client_manager is not None
+
+    @staticmethod
+    def _container_name(agent: Any) -> str:
+        """Derive a container name from a registered agent.
+
+        Mirrors the compose generator: `ciris-{agent_id}`, with the occurrence
+        id appended for non-default occurrences (e.g. the second scout).
+        """
+        agent_id = getattr(agent, "agent_id", "")
+        occurrence = getattr(agent, "occurrence_id", None)
+        if occurrence and occurrence != "default":
+            return f"ciris-{agent_id}-{occurrence}"
+        return f"ciris-{agent_id}"
 
     async def start(self) -> None:
         """Start the watchdog monitoring loop."""
@@ -97,32 +160,73 @@ class CrashLoopWatchdog:
             await asyncio.sleep(self.check_interval)
 
     async def _get_all_containers(self) -> List[Dict]:
-        """Get all CIRIS agent containers."""
-        cmd = ["docker", "ps", "-a", "--format", "json", "--filter", "name=ciris-agent-"]
+        """Enumerate expected agents and resolve each one's actual container.
 
-        process = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            logger.error(f"Failed to list containers: {stderr.decode()}")
+        Returns one record per REGISTERED agent, whether or not a container
+        exists for it. A record with ``Present=False`` is an absent agent -
+        the case a container listing can never surface, because you cannot
+        list something that is not there.
+        """
+        if not self.registry_driven:
+            logger.debug("Watchdog not registry-driven; absence detection disabled")
             return []
 
-        # Parse JSON output
-        import json
+        try:
+            agents = await asyncio.to_thread(self.agent_registry.list_agents)
+        except Exception as e:
+            logger.error(f"Watchdog could not list registered agents: {e}")
+            return []
 
-        containers = []
-        for line in stdout.decode().strip().split("\n"):
-            if line:
-                containers.append(json.loads(line))
+        records: List[Dict] = []
+        for agent in agents:
+            server_id = getattr(agent, "server_id", None) or "main"
+            name = self._container_name(agent)
+            record: Dict[str, Any] = {
+                "Names": name,
+                "AgentId": getattr(agent, "agent_id", ""),
+                "ServerId": server_id,
+                "Present": False,
+                "State": "absent",
+                "ExitCode": None,
+            }
+            try:
+                record.update(await self._inspect_remote(server_id, name))
+            except Exception as e:
+                # Could not reach the server at all. Do NOT treat that as
+                # absence - "we couldn't look" and "it isn't there" are
+                # different, and conflating them alerts on every network blip.
+                logger.warning(f"Watchdog could not inspect {name} on {server_id}: {e}")
+                record["State"] = "unknown"
+                record["Unreachable"] = True
+            records.append(record)
 
-        return containers
+        return records
+
+    async def _inspect_remote(self, server_id: str, name: str) -> Dict[str, Any]:
+        """Inspect one container on its own server. Blocking Docker SDK call."""
+
+        def _inspect() -> Dict[str, Any]:
+            import docker.errors
+
+            client = self.docker_client_manager.get_client(server_id)
+            try:
+                container = client.containers.get(name)
+            except docker.errors.NotFound:
+                return {"Present": False, "State": "absent", "ExitCode": None}
+            state = container.attrs.get("State", {}) or {}
+            return {
+                "Present": True,
+                "State": (state.get("Status") or "").lower(),
+                "ExitCode": state.get("ExitCode"),
+            }
+
+        result: Dict[str, Any] = await asyncio.to_thread(_inspect)
+        return result
 
     async def _check_container(self, container: Dict) -> None:
-        """Check a container for crash loops."""
+        """Check one agent for crash loops and for absence."""
         name = container["Names"]
-        state = container["State"]
+        state = container.get("State", "")
 
         # Initialize tracker if needed
         if name not in self._trackers:
@@ -134,9 +238,33 @@ class CrashLoopWatchdog:
         if tracker.stopped:
             return
 
-        # Check if container exited with error
+        # We couldn't reach the server. Hold the previous absence state rather
+        # than counting an unreachable host as a down agent.
+        if container.get("Unreachable"):
+            return
+
+        running = state == "running"
+
+        # --- absence detection -------------------------------------------
+        # A registered agent that is missing entirely, or present but parked
+        # in a non-running state, is not serving traffic. Agent containers use
+        # `restart: 'no'`, so nothing will bring it back on its own.
+        if running:
+            if tracker.absence_alerted:
+                logger.info(f"Agent container {name} is running again")
+            tracker.absent_checks = 0
+            tracker.absence_alerted = False
+        elif state in _DEAD_STATES or not container.get("Present", False):
+            tracker.absent_checks += 1
+            if tracker.absent_checks >= _ABSENCE_ALERT_THRESHOLD and not tracker.absence_alerted:
+                tracker.absence_alerted = True
+                await self._handle_absence(container, tracker)
+
+        # --- crash loop detection ----------------------------------------
         if state == "exited":
-            exit_code = await self._get_exit_code(name)
+            exit_code = container.get("ExitCode")
+            if exit_code is None:
+                exit_code = await self._get_exit_code(name)
 
             if exit_code != 0:
                 # Record crash
@@ -150,6 +278,24 @@ class CrashLoopWatchdog:
                 # Check for crash loop
                 if len(tracker.crashes) >= self.crash_threshold:
                     await self._handle_crash_loop(tracker)
+
+    async def _handle_absence(self, container: Dict, tracker: ContainerTracker) -> None:
+        """Alert that a registered agent has no running container.
+
+        Deliberately does NOT restart it. Agent containers are `restart: 'no'`
+        so that the manager owns lifecycle exclusively; auto-recovery here
+        would restart agents a human had deliberately stopped. Recovery stays
+        an explicit operator action via `ciris-manager-client agent start`.
+        """
+        agent_id = container.get("AgentId") or tracker.container
+        server_id = container.get("ServerId", "?")
+        state = container.get("State", "absent")
+        elapsed = tracker.absent_checks * self.check_interval
+        await self._send_alert(
+            f"Agent {agent_id} ({tracker.container}) on server {server_id} has had no "
+            f"running container for ~{elapsed}s (state={state}). Nothing will restart "
+            f"it automatically - run `ciris-manager-client agent start {agent_id}`."
+        )
 
     async def _get_exit_code(self, container: str) -> int:
         """Get exit code of a container."""
@@ -208,10 +354,18 @@ class CrashLoopWatchdog:
             "check_interval": self.check_interval,
             "crash_threshold": self.crash_threshold,
             "crash_window": self.crash_window.total_seconds(),
+            # False means absence detection is inactive - surfaced explicitly so
+            # a degraded watchdog cannot masquerade as a healthy one.
+            "registry_driven": self.registry_driven,
+            "agents_absent": [
+                name for name, tracker in self._trackers.items() if tracker.absence_alerted
+            ],
             "containers": {
                 name: {
                     "crashes": len(tracker.crashes),
                     "stopped": tracker.stopped,
+                    "absent_checks": tracker.absent_checks,
+                    "absence_alerted": tracker.absence_alerted,
                     "recent_crashes": [
                         {"timestamp": crash.timestamp.isoformat(), "exit_code": crash.exit_code}
                         for crash in tracker.crashes[-5:]  # Last 5 crashes
