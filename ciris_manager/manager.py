@@ -673,15 +673,18 @@ class CIRISManager:
         compose_path = Path(agent.compose_file)
 
         # Handle local vs remote servers differently
-        if server_config.is_local:
-            # Local server: read compose file directly
-            if not compose_path.exists():
-                raise ValueError(f"Compose file not found: {compose_path}")
-
+        # The manager's own copy is authoritative. It is what the deployment
+        # orchestrator reads when it recreates a container, so it - not the copy
+        # sitting on the agent host - decides what environment an agent actually
+        # boots with. Prefer it whenever it exists, for local and remote alike.
+        if compose_path.exists():
             with open(compose_path) as f:
                 current_compose = yaml.safe_load(f)
+        elif server_config.is_local:
+            raise ValueError(f"Compose file not found: {compose_path}")
         else:
-            # Remote server: fetch compose file via Docker exec
+            # No local copy yet (e.g. an agent adopted from another manager):
+            # seed from the remote host so we do not lose its current settings.
             current_compose = await self._fetch_remote_compose(target_server_id, str(compose_path))
             if current_compose is None:
                 raise ValueError(f"Could not fetch compose file from remote server: {compose_path}")
@@ -731,17 +734,36 @@ class CIRISManager:
             llm_config=llm_config,
         )
 
-        # Write updated compose file
-        if server_config.is_local:
-            # Local server: write directly
-            self.compose_generator.write_compose_file(new_compose, compose_path)
-        else:
-            # Remote server: sync via Docker exec
-            success = await self._sync_compose_to_remote_server(
+        # ALWAYS write the manager-local copy first. This is the durable,
+        # authoritative artifact: the orchestrator reads it to build the
+        # environment for a recreated container.
+        #
+        # Previously, for a remote server this branch was skipped entirely and
+        # the only write went to the agent host via `docker exec` into
+        # ciris-nginx - a container with no /opt/ciris bind mount. That write
+        # landed in the container's ephemeral layer, reported success, and
+        # vanished on the next nginx recreate, while the manager's local copy
+        # stayed stale. Net effect: no LLM or adapter config change ever
+        # reached an agent on a remote server, and nothing surfaced an error.
+        compose_path.parent.mkdir(parents=True, exist_ok=True)
+        self.compose_generator.write_compose_file(new_compose, compose_path)
+
+        if not server_config.is_local:
+            # Best-effort convenience copy on the agent host so an operator
+            # running `docker compose` there sees current settings. Not
+            # authoritative: a failure here must not fail the whole operation,
+            # but it must be reported honestly rather than logged as success.
+            synced = await self._sync_compose_to_remote_server(
                 target_server_id, str(compose_path), new_compose
             )
-            if not success:
-                raise ValueError(f"Failed to sync compose file to remote server: {compose_path}")
+            if not synced:
+                logger.warning(
+                    "Compose for %s written locally but NOT mirrored to server %s. "
+                    "Container recreation still uses the manager's copy, so config "
+                    "changes will apply; the on-host file is stale.",
+                    agent_id,
+                    target_server_id,
+                )
 
         logger.info(
             f"Regenerated compose file for agent {agent_id} with "
@@ -811,9 +833,22 @@ class CIRISManager:
         self, server_id: str, compose_path: str, compose_config: Dict[str, Any]
     ) -> bool:
         """
-        Sync compose file content to a remote server via Docker exec.
+        Mirror the compose file onto a remote agent host, best-effort.
 
-        Uses the nginx container which has /opt/ciris mounted.
+        Writes via `docker exec` into ciris-nginx. NOTE: this only reaches the
+        host filesystem if that container actually bind-mounts the compose
+        directory. On our servers it does not - ciris-nginx mounts only
+        /etc/letsencrypt, nginx.conf and the static dir - so the write lands in
+        the container's ephemeral layer and disappears when nginx is recreated.
+
+        This used to report success unconditionally, which made every LLM and
+        adapter config change look applied when nothing had reached the host.
+        The write is now verified by reading the file back and comparing it to
+        what we intended, so a write into a throwaway layer is still detected
+        as a failure of the mirror.
+
+        The manager's local copy is the authoritative one; the caller treats a
+        False return as a warning, not an error.
 
         Args:
             server_id: Remote server ID
@@ -821,9 +856,10 @@ class CIRISManager:
             compose_config: Compose configuration dict to write
 
         Returns:
-            True if successful, False otherwise
+            True only if the file was written AND verified on the target.
         """
         import base64
+        import hashlib
         import yaml
 
         try:
@@ -857,6 +893,32 @@ class CIRISManager:
                 output = exec_result.output
                 error_msg = output.decode() if isinstance(output, bytes) else str(output)
                 logger.error(f"Failed to write compose file to {server_id}: {error_msg}")
+                return False
+
+            # Verify the write actually landed where we think it did. Writing
+            # into a container layer that is not bind-mounted succeeds at the
+            # exec level while changing nothing on the host, so exit_code == 0
+            # is not evidence of anything.
+            verify = nginx_container.exec_run(
+                ["sh", "-c", f"cat {compose_path} 2>/dev/null | md5sum | cut -d' ' -f1"],
+                user="root",
+            )
+            expected = hashlib.md5(compose_content.encode()).hexdigest()
+            observed = ""
+            if verify.exit_code == 0:
+                out = verify.output
+                observed = (out.decode() if isinstance(out, bytes) else str(out)).strip()
+
+            if observed != expected:
+                logger.warning(
+                    "Compose mirror to %s could not be verified at %s "
+                    "(expected md5 %s, read %r). The write likely landed in a "
+                    "container layer that is not bind-mounted to the host.",
+                    server_id,
+                    compose_path,
+                    expected[:12],
+                    observed[:32],
+                )
                 return False
 
             logger.info(f"✅ Synced compose file to remote server {server_id}: {compose_path}")
@@ -1484,6 +1546,43 @@ class CIRISManager:
             logger.error(
                 f"Error restarting container for {agent_id} on {server_id}: {type(e).__name__}: {e}"
             )
+
+    async def restart_container(self, container_name: str, server_id: str = "main") -> bool:
+        """Restart an agent container on the server it actually runs on.
+
+        The LLM config routes called this method to apply new provider settings,
+        but it did not exist - so every `llm set` reported
+        "Config saved but restart failed: 'CIRISManager' object has no attribute
+        'restart_container'" and left the agent running with the old provider.
+        The config was persisted, so the failure looked cosmetic while the agent
+        kept using the credentials that had just been replaced.
+
+        Args:
+            container_name: Docker container name (e.g. `ciris-datum`)
+            server_id: Server the container runs on
+
+        Returns:
+            True if the container is running after the restart.
+        """
+
+        def _restart() -> bool:
+            client = self.docker_client.get_client(server_id)
+            container = client.containers.get(container_name)
+            container.restart(timeout=30)
+            container.reload()
+            return bool(container.status == "running")
+
+        try:
+            # Docker SDK is synchronous; keep it off the event loop.
+            result: bool = await asyncio.to_thread(_restart)
+            if result:
+                logger.info(f"Restarted container {container_name} on {server_id}")
+            else:
+                logger.warning(f"Container {container_name} did not report running after restart")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to restart container {container_name} on {server_id}: {e}")
+            return False
 
     async def _restart_remote_container(
         self, agent_id: str, container: "docker.models.containers.Container", server_id: str

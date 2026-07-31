@@ -29,6 +29,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["llm"])
 
 
+def _container_name(agent: Any) -> str:
+    """Derive the real container name for an agent.
+
+    Mirrors the compose generator: `ciris-{agent_id}`, with the occurrence id
+    appended for non-default occurrences (e.g. the second scout).
+    """
+    agent_id = getattr(agent, "agent_id", "")
+    occurrence = getattr(agent, "occurrence_id", None)
+    if occurrence and occurrence != "default":
+        return f"ciris-{agent_id}-{occurrence}"
+    return f"ciris-{agent_id}"
+
+
 @router.get("/agents/{agent_id}/llm")
 async def get_llm_configuration(
     agent_id: str,
@@ -211,7 +224,11 @@ async def set_llm_configuration(
             await manager.regenerate_agent_compose(agent.agent_id)
 
             # Restart the container
-            container_name = f"ciris-agent-{agent.name}"
+            # Production containers are `ciris-{agent_id}` (plus the occurrence
+            # suffix for extra instances). The old `ciris-agent-{name}` form
+            # matches nothing, so the restart would have failed even once
+            # `restart_container` existed.
+            container_name = _container_name(agent)
             restarted = await manager.restart_container(container_name, server_id=agent.server_id)
             result["restarted"] = restarted
             if restarted:
@@ -332,7 +349,11 @@ async def patch_llm_configuration(
     if restart:
         try:
             await manager.regenerate_agent_compose(agent.agent_id)
-            container_name = f"ciris-agent-{agent.name}"
+            # Production containers are `ciris-{agent_id}` (plus the occurrence
+            # suffix for extra instances). The old `ciris-agent-{name}` form
+            # matches nothing, so the restart would have failed even once
+            # `restart_container` existed.
+            container_name = _container_name(agent)
             restarted = await manager.restart_container(container_name, server_id=agent.server_id)
             result["restarted"] = restarted
             if restarted:
@@ -396,7 +417,11 @@ async def delete_llm_configuration(
     if restart:
         try:
             await manager.regenerate_agent_compose(agent.agent_id)
-            container_name = f"ciris-agent-{agent.name}"
+            # Production containers are `ciris-{agent_id}` (plus the occurrence
+            # suffix for extra instances). The old `ciris-agent-{name}` form
+            # matches nothing, so the restart would have failed even once
+            # `restart_container` existed.
+            container_name = _container_name(agent)
             restarted = await manager.restart_container(container_name, server_id=agent.server_id)
             result["restarted"] = restarted
         except Exception as e:
