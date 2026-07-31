@@ -167,3 +167,55 @@ def test_port_allocation_is_independent_of_host_sockets():
             )
     finally:
         holder.close()
+
+
+# -----------------------------------------------------------------------------
+# Config changes require a RECREATE, not a restart
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_llm_config_change_recreates_rather_than_restarts(monkeypatch):
+    """Applying LLM config must recreate the container, not restart it.
+
+    Docker fixes a container's environment at creation time, so `restart()`
+    replays the OLD env. A restarted agent therefore comes back on the previous
+    provider while the API reports the new configuration applied - which is
+    exactly what happened when together.xyz ran out of credit and the switch to
+    a new provider appeared to succeed three times without taking effect.
+
+    `agent deploy` is not an alternative: it short-circuits when the agent
+    already runs the target image, the normal case for a pure config change.
+    """
+    from ciris_manager.manager import CIRISManager
+
+    mgr = CIRISManager.__new__(CIRISManager)
+    calls = {}
+
+    class _Orch:
+        async def _recreate_agent_container(self, agent_id, server_id="main", new_image=None):
+            calls["agent_id"] = agent_id
+            calls["server_id"] = server_id
+            calls["new_image"] = new_image
+            return True
+
+    monkeypatch.setattr("ciris_manager.deployment.get_deployment_orchestrator", lambda: _Orch())
+
+    ok = await mgr.recreate_agent_container("datum", server_id="main")
+
+    assert ok is True
+    assert calls["agent_id"] == "datum"
+    # new_image None keeps the running image; only the environment is refreshed.
+    assert calls["new_image"] is None
+
+
+def test_llm_routes_do_not_use_plain_restart():
+    """Guard against reverting to restart_container in the LLM routes."""
+    from pathlib import Path
+
+    src = Path("ciris_manager/api/routes/llm.py").read_text()
+    assert "recreate_agent_container" in src
+    assert "restart_container(" not in src, (
+        "LLM config application must recreate the container; a plain restart "
+        "silently replays the previous environment"
+    )

@@ -1547,6 +1547,40 @@ class CIRISManager:
                 f"Error restarting container for {agent_id} on {server_id}: {type(e).__name__}: {e}"
             )
 
+    async def recreate_agent_container(self, agent_id: str, server_id: str = "main") -> bool:
+        """Recreate an agent's container so configuration changes take effect.
+
+        A Docker restart replays the container's ORIGINAL environment - env is
+        fixed at creation time. So restarting after an LLM or adapter config
+        change appears to work and changes nothing: the agent comes back on the
+        old provider. Applying config requires recreating the container from
+        the manager's (authoritative) compose file.
+
+        `agent deploy` cannot be used for this either: it short-circuits when
+        the agent already runs the target image, which is the normal case for a
+        pure config change.
+
+        Args:
+            agent_id: Agent to recreate
+            server_id: Server the agent runs on
+
+        Returns:
+            True if the container was recreated successfully.
+        """
+        from ciris_manager.deployment import get_deployment_orchestrator
+
+        orchestrator = get_deployment_orchestrator()
+        # new_image=None keeps the image the agent already runs; only the
+        # environment is refreshed from the regenerated compose.
+        result: bool = await orchestrator._recreate_agent_container(
+            agent_id, server_id=server_id, new_image=None
+        )
+        if result:
+            logger.info(f"Recreated container for {agent_id} on {server_id} to apply config")
+        else:
+            logger.error(f"Failed to recreate container for {agent_id} on {server_id}")
+        return result
+
     async def restart_container(self, container_name: str, server_id: str = "main") -> bool:
         """Restart an agent container on the server it actually runs on.
 
