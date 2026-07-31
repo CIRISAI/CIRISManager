@@ -26,8 +26,11 @@ jobs:
 
     - name: Run Python linting
       run: |
-        ruff check ciris_manager/
-        ruff format --check ciris_manager/
+        # Lint everything we ship, not just the service package. The CLI client
+        # and SDK were previously unlinted, so real errors (e.g. an unused
+        # variable in `adapter.py`) sat on main without ever failing a build.
+        ruff check ciris_manager/ ciris_manager_client/ ciris_manager_sdk/ tests/
+        ruff format --check ciris_manager/ ciris_manager_client/ ciris_manager_sdk/ tests/
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -50,6 +53,17 @@ jobs:
       run: |
         echo "Running tests with python -m pytest..."
         python -m pytest tests/ -n 4 -v --cov=ciris_manager --cov-report=term-missing
+
+    # Parallel runs distribute tests across worker processes, which can hide
+    # order dependence: a test that pollutes global state and a test that trips
+    # over it may simply land on different workers. That is exactly what
+    # happened with CIRIS_DEPLOY_TOKEN leaking from test_cd_api_endpoints into
+    # test_deployment_tokens - green under `-n 4`, red in a serial run.
+    # `--dist loadfile` + a single worker forces a deterministic serial order so
+    # cross-test contamination fails the build instead of hiding.
+    - name: Run tests serially (isolation check)
+      run: |
+        python -m pytest tests/ -p no:cacheprovider -q --dist loadfile -n 1
 
   # Docker build removed - deployment via git clone instead
 

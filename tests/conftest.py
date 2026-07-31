@@ -18,6 +18,89 @@ def pytest_configure(config):
     os.environ["CIRIS_ENCRYPTION_SALT"] = "test-salt-sixteen-chars-long"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_environ():
+    """Snapshot and restore os.environ around every test.
+
+    Several tests mutate os.environ directly instead of using monkeypatch, and
+    the mutations leaked into whatever ran next. Concretely: test_cd_api_endpoints
+    set CIRIS_DEPLOY_TOKEN="test-deploy-token" (17 chars) with no cleanup, and
+    test_deployment_tokens::test_save_runs_when_tokens_generated then asserted
+    every generated token was >20 chars - so it failed depending only on test
+    ORDER. It passed under `pytest -n 4` because xdist happened to schedule the
+    two files on different workers, and failed in a serial run. That is a green
+    CI that proves nothing about the next scheduling change.
+
+    Restoring here fixes the whole class of bug at once, including future ones,
+    rather than chasing individual call sites. Tests that genuinely need an env
+    var should still prefer monkeypatch.setenv for clarity.
+    """
+    original = os.environ.copy()
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(original)
+
+
+@pytest.fixture(autouse=True)
+def _reset_module_caches():
+    """Clear process-global caches between tests.
+
+    These live at module scope, so under both serial runs and xdist (where a
+    worker runs many tests in one process) they carry state from one test into
+    the next. Each is a genuine cross-test hazard:
+
+    - `crypto._token_encryption` is derived from MANAGER_JWT_SECRET /
+      CIRIS_ENCRYPTION_SALT at first use. Now that `_isolate_environ` restores
+      those per test, a cached instance would be keyed to another test's
+      secrets - so it MUST be dropped alongside the env reset.
+    - `multi_server_docker._server_failures` is circuit-breaker state. One test
+      tripping a breaker leaves later tests believing a server is down.
+    - `docker_discovery._discovery_cache` has a 30s TTL, comfortably longer
+      than a test run, so cached agent lists leak between tests.
+    - `device_auth_routes._device_codes` / `_user_codes` are in-flight auth
+      state that should never span tests.
+
+    Cleared before AND after: a module imported mid-session can populate its
+    cache during collection, so clearing only on teardown still leaves the
+    first test in a run reading someone else's state.
+    """
+
+    def _clear():
+        try:
+            from ciris_manager import crypto
+
+            crypto._token_encryption = None
+        except Exception:
+            pass
+        try:
+            from ciris_manager import multi_server_docker
+
+            multi_server_docker._server_failures.clear()
+        except Exception:
+            pass
+        try:
+            from ciris_manager import docker_discovery
+
+            docker_discovery._discovery_cache.clear()
+        except Exception:
+            pass
+        try:
+            from ciris_manager.api import device_auth_routes
+
+            device_auth_routes._device_codes.clear()
+            device_auth_routes._user_codes.clear()
+        except Exception:
+            pass
+
+    _clear()
+    try:
+        yield
+    finally:
+        _clear()
+
+
 @pytest.fixture
 def mock_docker_client():
     """Mock Docker client for tests."""

@@ -194,3 +194,9 @@ terraform/*_override.tf
 terraform/*_override.tf.json
 terraform/tfplan
 .ciris_keys/
+
+# Test fixtures are verbatim captures of production logs and MUST be
+# version-controlled - the incident classifier is regression-tested against
+# them. Without this negation the *.log rule above silently excludes them,
+# so the test passes locally and fails on a fresh clone.
+!tests/**/fixtures/*.log

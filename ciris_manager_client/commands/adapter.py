@@ -568,8 +568,9 @@ class AdapterCommands:
 
             summary = result.get("summary", {})
             synced = result.get("synced", [])
-            skipped = result.get("skipped", [])
             errors = result.get("errors", [])
+            # Skipped adapters are reported via summary["skipped_count"] below;
+            # the per-item list is not printed, so it is not unpacked here.
 
             if not ctx.quiet:
                 print(f"\nSync Summary for {agent_id}:")
