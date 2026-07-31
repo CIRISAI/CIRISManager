@@ -3366,7 +3366,14 @@ class DeploymentOrchestrator:
         assuming `<agents>/<agent_id>/docker-compose.yml` reads the wrong file
         (or none) and silently falls back to stale environment.
         """
-        default = Path("/opt/ciris/agents") / agent_id / "docker-compose.yml"
+        # Same convention as CIRISManager.compose_filename: occurrences share a
+        # directory, so the filename carries the occurrence id.
+        filename = (
+            f"docker-compose-{occurrence_id}.yml"
+            if occurrence_id and occurrence_id != "default"
+            else "docker-compose.yml"
+        )
+        default = Path("/opt/ciris/agents") / agent_id / filename
         registry = getattr(self, "agent_registry", None)
         if not registry:
             return default

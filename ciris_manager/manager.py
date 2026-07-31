@@ -464,8 +464,10 @@ class CIRISManager:
             oauth_allowed_domains=[server_config.hostname],  # Default to server hostname
         )
 
-        # Write compose file
-        compose_path = agent_dir / "docker-compose.yml"
+        # Write compose file. Occurrences of the same agent share agent_dir, so
+        # the filename must be occurrence-qualified or a second occurrence
+        # silently overwrites the first one's compose.
+        compose_path = agent_dir / self.compose_filename(agent_occurrence_id)
         self.compose_generator.write_compose_file(compose_config, compose_path)
 
         # Ensure compose file has correct permissions for manager to update later
@@ -687,7 +689,18 @@ class CIRISManager:
             # seed from the remote host so we do not lose its current settings.
             current_compose = await self._fetch_remote_compose(target_server_id, str(compose_path))
             if current_compose is None:
-                raise ValueError(f"Could not fetch compose file from remote server: {compose_path}")
+                # The compose file may never have existed - an agent created
+                # directly through the Docker API has no compose anywhere. Adopt
+                # its environment from the running container, which is the only
+                # authoritative record and is always reachable.
+                current_compose = await self._compose_from_running_container(
+                    agent_id, agent.occurrence_id, target_server_id
+                )
+            if current_compose is None:
+                raise ValueError(
+                    f"No compose file for {agent_id} at {compose_path}, and no running "
+                    f"container on {target_server_id} to adopt its environment from"
+                )
 
         # Get the service config (agent_id is the service name)
         services = current_compose.get("services", {})
@@ -1546,6 +1559,74 @@ class CIRISManager:
             logger.error(
                 f"Error restarting container for {agent_id} on {server_id}: {type(e).__name__}: {e}"
             )
+
+    @staticmethod
+    def compose_filename(occurrence_id: Optional[str] = None) -> str:
+        """Compose filename for an occurrence.
+
+        THE convention, in one place:
+          - default occurrence -> docker-compose.yml
+          - any other          -> docker-compose-<occurrence_id>.yml
+
+        Both occurrences of an agent share `<agents_dir>/<agent_id>/`, so
+        without the suffix a second occurrence overwrites the first's compose
+        file. `create_agent` hard-coded "docker-compose.yml" regardless, which
+        is why scout2's registry entry had to be hand-edited to
+        docker-compose-002.yml.
+        """
+        if occurrence_id and occurrence_id != "default":
+            return f"docker-compose-{occurrence_id}.yml"
+        return "docker-compose.yml"
+
+    async def _compose_from_running_container(
+        self, agent_id: str, occurrence_id: Optional[str], server_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Build a minimal compose dict from a running container's environment.
+
+        Adoption path for agents that never had a compose file. scout2 was
+        created directly through the Docker API, so its registry pointed at a
+        docker-compose-002.yml that existed on no filesystem - the manager had
+        nothing to regenerate from and every config change failed with
+        "Could not fetch compose file from remote server".
+
+        The running container is the one authoritative record of that agent's
+        environment, and it is always reachable, so use it as the seed.
+        """
+
+        def _inspect() -> Optional[Dict[str, Any]]:
+            import docker.errors
+
+            client = self.docker_client.get_client(server_id)
+            name = (
+                f"ciris-{agent_id}-{occurrence_id}"
+                if occurrence_id and occurrence_id != "default"
+                else f"ciris-{agent_id}"
+            )
+            try:
+                container = client.containers.get(name)
+            except docker.errors.NotFound:
+                return None
+            env_list = container.attrs.get("Config", {}).get("Env", []) or []
+            env: Dict[str, str] = {}
+            for item in env_list:
+                if "=" in item:
+                    key, _, value = item.partition("=")
+                    env[key] = value
+            if not env:
+                return None
+            return {"services": {agent_id: {"environment": env}}}
+
+        try:
+            result: Optional[Dict[str, Any]] = await asyncio.to_thread(_inspect)
+        except Exception as e:
+            logger.warning(f"Could not adopt env from running container for {agent_id}: {e}")
+            return None
+        if result:
+            logger.info(
+                f"Seeded compose for {agent_id} (occurrence={occurrence_id}) from its "
+                f"running container on {server_id}"
+            )
+        return result
 
     async def recreate_agent_container(
         self,
