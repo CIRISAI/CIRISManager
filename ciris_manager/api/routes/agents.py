@@ -26,6 +26,51 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agents"])
 
+
+def _resolve_unique_agent(
+    agents: List[Any],
+    agent_id: str,
+    occurrence_id: Optional[str] = None,
+    server_id: Optional[str] = None,
+) -> Any:
+    """Resolve exactly one discovered agent, or raise.
+
+    `agent_id` alone is NOT unique: the same agent can run as several
+    occurrences across servers (e.g. `scout-remote-test-dahrb9` exists on both
+    scout1 and scout2). Every lifecycle route used to take the first match via
+    `next(...)`, so a request aimed at a dead instance could be serviced by an
+    unrelated healthy one and answered "success" while the intended target
+    stayed down. Force the caller to disambiguate rather than guessing.
+
+    Raises:
+        HTTPException: 404 if nothing matches, 409 if the selector is ambiguous.
+    """
+    matches = [
+        a
+        for a in agents
+        if a.agent_id == agent_id
+        and (occurrence_id is None or a.occurrence_id == occurrence_id)
+        and (server_id is None or a.server_id == server_id)
+    ]
+
+    if not matches:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+    if len(matches) > 1:
+        candidates = ", ".join(
+            f"(server={a.server_id}, occurrence={a.occurrence_id})" for a in matches
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Agent '{agent_id}' is ambiguous - {len(matches)} instances match: "
+                f"{candidates}. Specify server_id and/or occurrence_id."
+            ),
+        )
+
+    return matches[0]
+
+
 # Get auth dependency based on mode
 auth_dependency = get_auth_dependency()
 
@@ -601,19 +646,7 @@ async def get_agent_logs(
         )
         agents = discovery.discover_agents()
 
-        discovered_agent = next(
-            (
-                a
-                for a in agents
-                if a.agent_id == agent_id
-                and (occurrence_id is None or a.occurrence_id == occurrence_id)
-                and (server_id is None or a.server_id == server_id)
-            ),
-            None,
-        )
-
-        if not discovered_agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        discovered_agent = _resolve_unique_agent(agents, agent_id, occurrence_id, server_id)
 
         container_name = discovered_agent.container_name
         client = manager.docker_client.get_client(discovered_agent.server_id)
@@ -774,19 +807,7 @@ async def start_agent(
         )
         agents = discovery.discover_agents()
 
-        discovered_agent = next(
-            (
-                a
-                for a in agents
-                if a.agent_id == agent_id
-                and (occurrence_id is None or a.occurrence_id == occurrence_id)
-                and (server_id is None or a.server_id == server_id)
-            ),
-            None,
-        )
-
-        if not discovered_agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        discovered_agent = _resolve_unique_agent(agents, agent_id, occurrence_id, server_id)
 
         container_name = discovered_agent.container_name
 
@@ -844,6 +865,25 @@ async def start_agent(
                                 status_code=500,
                                 detail=f"Failed to recreate agent: {stderr.decode()}",
                             )
+                    else:
+                        # The compose file lives on the AGENT's host, not the
+                        # manager's, so for every remote agent this path does not
+                        # exist locally. Previously there was no `else` here and
+                        # control fell through to the success return below, so
+                        # `POST /agents/{id}/start` answered 200 "is starting"
+                        # without touching the container - which is how the
+                        # scout2 agent stayed down for four weeks while the API
+                        # reported every recovery attempt as successful.
+                        # The container already exists with the right image, so
+                        # starting it over the remote Docker API is correct.
+                        logger.info(
+                            "Compose file %s is not present on the manager host; agent %s runs on "
+                            "server %s. Starting the existing container via the remote Docker API.",
+                            compose_path,
+                            agent_id,
+                            discovered_agent.server_id,
+                        )
+                        container.start()
                 else:
                     container.start()
             else:
@@ -919,19 +959,7 @@ async def stop_agent(
         )
         agents = discovery.discover_agents()
 
-        discovered_agent = next(
-            (
-                a
-                for a in agents
-                if a.agent_id == agent_id
-                and (occurrence_id is None or a.occurrence_id == occurrence_id)
-                and (server_id is None or a.server_id == server_id)
-            ),
-            None,
-        )
-
-        if not discovered_agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        discovered_agent = _resolve_unique_agent(agents, agent_id, occurrence_id, server_id)
 
         container_name = discovered_agent.container_name
         client = manager.docker_client.get_client(discovered_agent.server_id)
@@ -1056,19 +1084,7 @@ async def restart_agent(
         )
         agents = discovery.discover_agents()
 
-        discovered_agent = next(
-            (
-                a
-                for a in agents
-                if a.agent_id == agent_id
-                and (occurrence_id is None or a.occurrence_id == occurrence_id)
-                and (server_id_param is None or a.server_id == server_id_param)
-            ),
-            None,
-        )
-
-        if not discovered_agent:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+        discovered_agent = _resolve_unique_agent(agents, agent_id, occurrence_id, server_id_param)
 
         container_name = discovered_agent.container_name
         server_id = discovered_agent.server_id
