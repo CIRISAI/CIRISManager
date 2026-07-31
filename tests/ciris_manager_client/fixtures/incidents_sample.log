@@ -1,0 +1,19 @@
+2026-07-30 19:24:26.605 - ERROR    - ciris_adapters.ciris_accord_metrics.services - services.py:875 - ❌ [default] FLUSH FAILED: 6 events: RuntimeError: RuntimeError('CIRISLens API error 401: {"error":"verify_unknown_key"}')
+2026-07-30 19:24:33.885 - WARNING  - ciris_engine.logic.services.graph.config_service.service - service.py:138 - Failed to convert node accord_metrics/events_total to ConfigNode: 'key'
+2026-07-30 19:24:41.224 - ERROR    - ciris_engine.logic.persistence.models.thoughts - thoughts.py:152 - Failed to add thought thought_1785439481.222031: FOREIGN KEY constraint failed
+sqlite3.IntegrityError: FOREIGN KEY constraint failed
+sqlite3.IntegrityError: FOREIGN KEY constraint failed
+2026-07-30 19:24:41.226 - ERROR    - ciris_engine.logic.services.lifecycle.scheduler.service - service.py:291 - Failed to trigger task task_1780753242.616828: task execution error
+2026-07-30 19:24:43.938 - WARNING  - ciris_engine.logic.services.graph.config_service.service - service.py:138 - Failed to convert node accord_metrics/events_total to ConfigNode: 'key'
+2026-07-30 19:24:48.319 - WARNING  - ciris_verify - __init__.py:104 - [ciris_verify_core::dns] DNS DISAGREEMENT: US/doh-native rev=1 vs EU/doh-native rev=0, first_source="US", first_approach="doh-native", first_rev=1, this_source="EU", this_approach="doh-native", this_rev=0
+2026-07-30 19:24:48.319 - WARNING  - ciris_verify - __init__.py:104 - [ciris_verify_core::dns] DNS DISAGREEMENT: US/doh-native rev=1 vs EU/doh-bundled rev=0, first_source="US", first_approach="doh-native", first_rev=1, this_source="EU", this_approach="doh-bundled", this_rev=0
+2026-07-30 19:24:48.320 - WARNING  - ciris_verify - __init__.py:104 - [ciris_verify_core::dns] DNS DISAGREEMENT: US/doh-native rev=1 vs EU/json-api rev=0, first_source="US", first_approach="doh-native", first_rev=1, this_source="EU", this_approach="json-api", this_rev=0
+2026-07-30 19:24:48.624 - WARNING  - ciris_verify - __init__.py:104 - [ciris_verify_core::https] HTTPS: Failed to parse JSON response, url=https://api.registry.ciris-services-1.ai/v1/steward-key, error=error decoding response body
+2026-07-30 19:24:48.625 - WARNING  - ciris_verify - __init__.py:104 - [ciris_verify_core::validation] HTTPS query failed: HTTPS error: Failed to parse response from https://api.registry.ciris-services-1.ai/v1/steward-key: error decoding response body
+2026-07-30 19:24:48.625 - WARNING  - ciris_verify - __init__.py:104 - [ciris_verify_core::validation] HTTPS unreachable — falling back to DNS-only consensus (degraded)
+2026-07-30 19:24:48.625 - ERROR    - ciris_verify - __init__.py:104 - [ciris_verify_core::validation] DNS sources disagree and HTTPS unreachable — cannot establish trusted consensus
+2026-06-06 13:31:24.947 - ERROR    - ciris_engine.logic.processors.states.shutdown_processor - shutdown_processor.py:130 - Shutdown task disappeared!
+2026-06-06 13:31:25.954 - ERROR    - ciris_engine.logic.processors.states.shutdown_processor - shutdown_processor.py:130 - Shutdown task disappeared!
+2026-07-30 17:19:25.182 - WARNING  - ciris_verify - __init__.py:120 - [ciris_verify_core::security::file_integrity] verify_manifest_integrity: HASH MISMATCH! This could mean:
+2026-07-30 22:25:06.491 - ERROR    - ciris_verify - __init__.py:104 - [ciris_verify_core::engine] SECURITY ALERT: Sources disagree - possible attack
+2026-07-30 22:23:29.608 - ERROR    - ciris_adapters.ciris_accord_metrics.services - services.py:875 - ❌ [default] FLUSH FAILED: 5 events: RuntimeError: RuntimeError('CIRISLens API error 401: {"error":"verify_unknown_key"}')
