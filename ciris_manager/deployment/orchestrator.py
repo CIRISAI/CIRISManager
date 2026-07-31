@@ -3354,8 +3354,38 @@ class DeploymentOrchestrator:
         logger.warning(f"Timeout waiting for container {container_name} to stop")
         return False
 
+    def _registry_compose_path(
+        self,
+        agent_id: str,
+        occurrence_id: Optional[str] = None,
+        server_id: Optional[str] = None,
+    ) -> Path:
+        """Resolve an agent's compose file from the registry.
+
+        Multi-occurrence agents record paths like `docker-compose-002.yml`, so
+        assuming `<agents>/<agent_id>/docker-compose.yml` reads the wrong file
+        (or none) and silently falls back to stale environment.
+        """
+        default = Path("/opt/ciris/agents") / agent_id / "docker-compose.yml"
+        registry = getattr(self, "agent_registry", None)
+        if not registry:
+            return default
+        try:
+            agent = registry.get_agent(
+                agent_id, occurrence_id=occurrence_id, server_id=server_id or "main"
+            )
+        except Exception:
+            return default
+        if agent and getattr(agent, "compose_file", None):
+            return Path(agent.compose_file)
+        return default
+
     async def _recreate_agent_container(
-        self, agent_id: str, server_id: Optional[str] = "main", new_image: Optional[str] = None
+        self,
+        agent_id: str,
+        server_id: Optional[str] = "main",
+        new_image: Optional[str] = None,
+        occurrence_id: Optional[str] = None,
     ) -> bool:
         """
         Recreate an agent container using Docker API.
@@ -3578,10 +3608,21 @@ class DeploymentOrchestrator:
                 if self.manager and hasattr(self.manager, "regenerate_agent_compose"):
                     try:
                         logger.info(f"Regenerating compose for remote agent {agent_id}...")
-                        await self.manager.regenerate_agent_compose(agent_id)
-                        # Read the updated environment from the regenerated compose
-                        agent_dir = Path("/opt/ciris/agents") / agent_id
-                        compose_file = agent_dir / "docker-compose.yml"
+                        # Pass the composite key. Without it the lookup defaults to
+                        # server "main", so for any agent on a remote server this
+                        # raised "Agent <id> not found", fell through to the
+                        # `except` below, and recreated the container with STALE
+                        # environment - silently reverting the config change that
+                        # triggered the recreate, then syncing that stale compose
+                        # back over the manager's authoritative copy.
+                        await self.manager.regenerate_agent_compose(
+                            agent_id, occurrence_id=occurrence_id, server_id=server_id
+                        )
+                        # Use the registry's recorded path: multi-occurrence agents
+                        # use names like docker-compose-002.yml, not the default.
+                        compose_file = self._registry_compose_path(
+                            agent_id, occurrence_id, server_id
+                        )
                         if compose_file.exists():
                             import yaml
 

@@ -225,7 +225,9 @@ async def set_llm_configuration(
             # Environment is fixed at container creation, so config changes
             # only take effect by recreating from the regenerated compose.
             restarted = await manager.recreate_agent_container(
-                agent.agent_id, server_id=agent.server_id or "main"
+                agent.agent_id,
+                server_id=agent.server_id or "main",
+                occurrence_id=agent.occurrence_id,
             )
             result["restarted"] = restarted
             if restarted:
@@ -360,7 +362,9 @@ async def patch_llm_configuration(
             # Environment is fixed at container creation, so config changes
             # only take effect by recreating from the regenerated compose.
             restarted = await manager.recreate_agent_container(
-                agent.agent_id, server_id=agent.server_id or "main"
+                agent.agent_id,
+                server_id=agent.server_id or "main",
+                occurrence_id=agent.occurrence_id,
             )
             result["restarted"] = restarted
             if restarted:
@@ -438,7 +442,9 @@ async def delete_llm_configuration(
             # Environment is fixed at container creation, so config changes
             # only take effect by recreating from the regenerated compose.
             restarted = await manager.recreate_agent_container(
-                agent.agent_id, server_id=agent.server_id or "main"
+                agent.agent_id,
+                server_id=agent.server_id or "main",
+                occurrence_id=agent.occurrence_id,
             )
             result["restarted"] = restarted
         except Exception as e:

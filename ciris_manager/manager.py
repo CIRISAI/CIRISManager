@@ -1547,7 +1547,12 @@ class CIRISManager:
                 f"Error restarting container for {agent_id} on {server_id}: {type(e).__name__}: {e}"
             )
 
-    async def recreate_agent_container(self, agent_id: str, server_id: str = "main") -> bool:
+    async def recreate_agent_container(
+        self,
+        agent_id: str,
+        server_id: str = "main",
+        occurrence_id: Optional[str] = None,
+    ) -> bool:
         """Recreate an agent's container so configuration changes take effect.
 
         A Docker restart replays the container's ORIGINAL environment - env is
@@ -1573,7 +1578,7 @@ class CIRISManager:
         # new_image=None keeps the image the agent already runs; only the
         # environment is refreshed from the regenerated compose.
         result: bool = await orchestrator._recreate_agent_container(
-            agent_id, server_id=server_id, new_image=None
+            agent_id, server_id=server_id, new_image=None, occurrence_id=occurrence_id
         )
         if result:
             logger.info(f"Recreated container for {agent_id} on {server_id} to apply config")
