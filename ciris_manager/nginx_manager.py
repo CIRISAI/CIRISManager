@@ -595,6 +595,18 @@ http {
             add_header Content-Type text/plain;
         }}
 
+        # ACME HTTP-01 challenge. MUST stay above the catch-all redirect below,
+        # and MUST be served over plain HTTP - certbot renewal breaks if this
+        # 301s to HTTPS while the cert it is trying to replace is expired.
+        # Webroot lives under /etc/letsencrypt because that path is already
+        # bind-mounted into the nginx container on every server; certbot writes
+        # it host-side, nginx reads it through the (read-only) mount.
+        location ^~ /.well-known/acme-challenge/ {{
+            root /etc/letsencrypt/acme-webroot;
+            default_type "text/plain";
+            access_log off;
+        }}
+
         # Redirect everything else to HTTPS
         location / {{
             return 301 https://$server_name$request_uri;
@@ -632,6 +644,15 @@ http {
             access_log off;
             return 200 "healthy\\n";
             add_header Content-Type text/plain;
+        }}
+
+        # ACME HTTP-01 challenge (see note in the use_ssl branch above). Kept
+        # here too so a host can be switched between Cloudflare-terminated and
+        # origin-TLS without silently losing the ability to renew.
+        location ^~ /.well-known/acme-challenge/ {{
+            root /etc/letsencrypt/acme-webroot;
+            default_type "text/plain";
+            access_log off;
         }}
 """
 
