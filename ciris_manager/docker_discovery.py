@@ -280,6 +280,7 @@ class DockerAgentDiscovery:
             api_port = None
             template = "unknown"
             deployment = "CIRIS_DISCORD_PILOT"  # Default deployment
+            canary_group = None
 
             if registry_agent:
                 # ALWAYS use port from registry - it's the allocated port
@@ -289,6 +290,13 @@ class DockerAgentDiscovery:
                 # Get deployment from metadata
                 if hasattr(registry_agent, "metadata") and registry_agent.metadata:
                     deployment = registry_agent.metadata.get("deployment", "CIRIS_DISCORD_PILOT")
+                    # Canary group decides WHICH ROLLOUT PHASE updates this agent,
+                    # yet it lived only in metadata.json on the manager host - not
+                    # in the API or the client. Operators had to read the raw file
+                    # to answer "which agents go first?", and reading the wrong key
+                    # silently returns None, which looks like "no canary configured"
+                    # rather than "you looked in the wrong place".
+                    canary_group = registry_agent.metadata.get("canary_group")
 
             # Determine deployment type based on server
             # Main server (agents.ciris.ai) has FULL deployment (GUI + API)
@@ -313,6 +321,7 @@ class DockerAgentDiscovery:
                 discord_enabled=discord_enabled,
                 template=template,
                 deployment=deployment,
+                canary_group=canary_group,
                 server_id=server_id,
                 occurrence_id=occurrence_id,  # Multi-instance agent identifier
                 deployment_type=deployment_type,

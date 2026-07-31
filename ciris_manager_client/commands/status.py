@@ -251,6 +251,7 @@ def _gather_fleet(ctx: Any) -> Dict[str, Any]:
     versions = Counter(a.get("version") or "<none>" for a in agents)
     cog_states = Counter(a.get("cognitive_state") or "<none>" for a in agents)
     healths = Counter(a.get("health") or "<unknown>" for a in agents)
+    canary = Counter(a.get("canary_group") or "unassigned" for a in agents)
 
     rows = []
     for a in sorted(agents, key=lambda x: (x.get("server_id", ""), x.get("agent_id", ""))):
@@ -258,6 +259,10 @@ def _gather_fleet(ctx: Any) -> Dict[str, Any]:
             {
                 "agent_id": a.get("agent_id"),
                 "server": a.get("server_id"),
+                # Canary group determines which rollout phase updates this agent.
+                # Without it here, the only way to answer "which agents go first?"
+                # was to read metadata.json on the manager host by hand.
+                "canary": a.get("canary_group") or "unassigned",
                 "status": a.get("status"),
                 "health": a.get("health"),
                 "cognitive_state": a.get("cognitive_state"),
@@ -265,11 +270,24 @@ def _gather_fleet(ctx: Any) -> Dict[str, Any]:
                 "update_available": a.get("update_available"),
             }
         )
+
+    # Version spread per canary group makes a partially-applied rollout obvious:
+    # during a canary you expect explorer ahead of general, and afterwards you
+    # expect them equal. Anything else is a stalled or half-applied deployment.
+    versions_by_group: Dict[str, Dict[str, int]] = {}
+    for a in agents:
+        group = a.get("canary_group") or "unassigned"
+        versions_by_group.setdefault(group, {})
+        v = a.get("version") or "<none>"
+        versions_by_group[group][v] = versions_by_group[group].get(v, 0) + 1
+
     return {
         "summary": {
             "total_agents": len(agents),
             "version_uniform": len(versions) == 1,
             "versions": dict(versions),
+            "canary_groups": dict(canary),
+            "versions_by_canary_group": versions_by_group,
             "cognitive_states": dict(cog_states),
             "health": dict(healths),
         },
