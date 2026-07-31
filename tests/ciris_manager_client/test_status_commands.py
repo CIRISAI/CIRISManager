@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 from contextlib import redirect_stdout
 from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -19,7 +20,12 @@ from ciris_manager_client.commands.status import (
     _container_name,
     _emit,
     _gather_fleet,
+    _CERT_WARN_DAYS,
+    _NOTABLE,
+    _ORIGIN_CERTS,
+    _SERVER_HOSTS,
     _SSHUnavailable,
+    _gather_reconcile,
     _ssh_run,
 )
 
@@ -245,3 +251,166 @@ def test_ssh_run_returns_stdout_on_command_failure(tmp_path, monkeypatch):
         # Must NOT raise — connection succeeded, the inner command failed
         out = _ssh_run("example.invalid", "docker exec missing true")
         assert out == ""
+
+
+# -----------------------------------------------------------------------------
+# Regression: classifier vs. real production logs
+# -----------------------------------------------------------------------------
+
+FIXTURE = Path(__file__).parent / "fixtures" / "incidents_sample.log"
+
+
+def test_classifier_scores_against_real_production_log():
+    """The classifier must actually match real agent output.
+
+    Guards the 2026-07-30 finding: every notable pattern scored zero against
+    production logs containing thousands of ERROR lines, so `status all`
+    reported "clean" while an agent had been down for three weeks. A classifier
+    that matches nothing is worse than no classifier, because it manufactures
+    a green signal. If this test fails, the log format moved - re-derive the
+    patterns from a fresh capture rather than deleting the assertion.
+    """
+    counts = _classify_log_lines(FIXTURE.read_text())
+
+    assert counts["total"] > 0, "fixture is empty"
+    # The single most important property: real logs must not classify as all-benign.
+    notable = sum(counts.get(c, 0) for c in _NOTABLE)
+    assert notable > 0, "no notable category matched a real production log"
+
+    # Each failure mode found during the soak review must stay detected.
+    for category in (
+        "telemetry_flush_fail",
+        "persistence_fk_fail",
+        "scheduler_task_fail",
+        "shutdown_livelock",
+        "verify_security_alert",
+        "verify_hash_mismatch",
+        "verify_no_consensus",
+        "verify_dns_disagree",
+        "config_warn",
+    ):
+        assert counts[category] > 0, f"{category} no longer matches production output"
+
+
+def test_ciris_verify_logger_name_is_lowercase():
+    """The old pattern was "CIRISVerify"; the logger is actually `ciris_verify`.
+
+    That single case mismatch meant no CIRISVerify line was ever classified.
+    """
+    line = "2026-07-30 19:24:48.319 - WARNING - ciris_verify - [core::dns] something"
+    counts = _classify_log_lines(line)
+    assert counts["other"] == 0
+    assert counts["verify_warn"] == 1
+
+
+def test_dns_disagreement_is_not_notable_but_security_alert_is():
+    """Registry lag is continuous background noise; the escalation is not.
+
+    Treating both as notable is what buried the real findings.
+    """
+    assert "verify_dns_disagree" not in _NOTABLE
+    assert "verify_security_alert" in _NOTABLE
+    assert "verify_no_consensus" in _NOTABLE
+
+
+# -----------------------------------------------------------------------------
+# _gather_reconcile — registry vs actually-running containers
+# -----------------------------------------------------------------------------
+
+
+def test_reconcile_flags_missing_container():
+    """A registered agent with no running container must be reported MISSING.
+
+    This is the check the crash-loop watchdog cannot make: scout2's agent
+    exited once with RestartCount=0 and stayed down for three weeks, which
+    never looked like a crash loop.
+    """
+    ctx = SimpleNamespace(
+        client=_FakeClient(
+            [
+                {"agent_id": "datum", "server_id": "main", "container_name": "ciris-datum"},
+                {"agent_id": "gone", "server_id": "scout2", "container_name": "ciris-gone"},
+            ]
+        ),
+        output_format="json",
+    )
+
+    def fake_ssh(host, cmd, timeout=30):
+        return "ciris-datum\nciris-nginx\n" if host == _SERVER_HOSTS["main"] else "ciris-nginx\n"
+
+    with patch("ciris_manager_client.commands.status._ssh_run", side_effect=fake_ssh):
+        result = _gather_reconcile(ctx)
+
+    by_id = {r["agent_id"]: r for r in result["agents"]}
+    assert by_id["datum"]["status"] == "running"
+    assert by_id["gone"]["status"] == "MISSING"
+    assert result["summary"]["missing_containers"] == 1
+    assert result["summary"]["verdict"] == "review_needed"
+
+
+def test_reconcile_clean_when_all_running():
+    ctx = SimpleNamespace(
+        client=_FakeClient(
+            [{"agent_id": "datum", "server_id": "main", "container_name": "ciris-datum"}]
+        ),
+        output_format="json",
+    )
+    with patch(
+        "ciris_manager_client.commands.status._ssh_run",
+        return_value="ciris-datum\n",
+    ):
+        result = _gather_reconcile(ctx)
+    assert result["summary"]["missing_containers"] == 0
+    assert result["summary"]["verdict"] == "ok"
+
+
+def test_reconcile_degrades_when_host_unreachable():
+    """An unreachable host must not be reported as a missing container.
+
+    Conflating "we couldn't look" with "it isn't there" would page on every
+    transient network blip.
+    """
+    ctx = SimpleNamespace(
+        client=_FakeClient(
+            [{"agent_id": "datum", "server_id": "main", "container_name": "ciris-datum"}]
+        ),
+        output_format="json",
+    )
+    with patch(
+        "ciris_manager_client.commands.status._ssh_run",
+        side_effect=_SSHUnavailable("host down"),
+    ):
+        result = _gather_reconcile(ctx)
+    assert result["agents"][0]["status"] == "host_unreachable"
+    assert result["summary"]["missing_containers"] == 0
+
+
+# -----------------------------------------------------------------------------
+# _gather_endpoints — cert expiry thresholds
+# -----------------------------------------------------------------------------
+
+
+def test_origin_certs_checked_by_ip_not_public_hostname():
+    """Origin certs must be probed at the origin IP.
+
+    The public hostname resolves to Cloudflare, whose edge cert auto-renews and
+    was perfectly healthy throughout the 46-day outage. Checking the edge would
+    have reported green the entire time.
+    """
+    for _label, ip, sni in _ORIGIN_CERTS:
+        assert ip[0].isdigit(), f"{_label} must be probed by IP, got {ip!r}"
+        assert not sni[0].isdigit(), f"{_label} needs a hostname for SNI, got {sni!r}"
+
+    # Both scout origins serve the same hostname from different filesystems and
+    # must be listed separately - scout2's cert is currently hand-copied.
+    scout_entries = [e for e in _ORIGIN_CERTS if e[2] == "scoutapilb.ciris.ai"]
+    assert len(scout_entries) == 2
+
+
+def test_cert_warn_threshold_exceeds_certbot_renewal_window():
+    """Warn only after certbot has already had a chance to renew and failed.
+
+    Certbot renews at 30 days remaining; warning above that would fire on every
+    healthy cert in its normal renewal window.
+    """
+    assert _CERT_WARN_DAYS < 30

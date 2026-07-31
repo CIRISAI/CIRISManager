@@ -11,6 +11,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, Optional, cast
 
 from ciris_manager_sdk import CIRISManagerClient, AuthenticationError, APIError
@@ -814,9 +815,22 @@ def setup_status_parser(subparsers):
         help="Manager log errors + sshd auth failures + OAuth 401s (24h window)",
     )
 
+    status_subparsers.add_parser(
+        "endpoints",
+        help="End-to-end probe of public URLs + origin cert expiry (catches Cloudflare 526s)",
+    )
+
+    status_subparsers.add_parser(
+        "reconcile",
+        help="Registered agents vs actually-running containers (catches a silently missing agent)",
+    )
+
     all_parser = status_subparsers.add_parser(
         "all",
-        help="Composite: fleet + deployments + incidents + security. Exits non-zero if anything notable.",
+        help=(
+            "Composite: fleet + endpoints + reconcile + deployments + incidents + "
+            "security. Exits non-zero if anything notable."
+        ),
     )
     all_parser.add_argument(
         "--since", default=None, help="UTC date prefix for incident scan (default: today)"
@@ -1127,6 +1141,18 @@ def main() -> int:
 
         args.base_url = api_url
         return handle_auth_command(args)
+
+    # `status endpoints` probes public URLs and origin certs only - it never
+    # calls the manager API. It must stay runnable WITHOUT a token, because the
+    # situation it exists to diagnose (expired origin cert -> Cloudflare 526)
+    # also breaks the OAuth device-code flow you would need to get a token.
+    # During the 2026-06/07 outage `auth login` failed with the same 526, so an
+    # auth-gated probe would have been unusable exactly when it was needed.
+    if args.command == "status" and getattr(args, "status_command", None) == "endpoints":
+        from ciris_manager_client.commands.status import StatusCommands
+
+        ctx = SimpleNamespace(client=None, output_format=args.format)
+        return StatusCommands.endpoints(ctx, args)
 
     if not token:
         print(

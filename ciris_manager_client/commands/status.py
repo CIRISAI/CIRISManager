@@ -11,16 +11,27 @@ Subcommands:
     incidents    Per-agent incident counts classified by category (today)
     deployments  Pending deployments + recent history
     security     Manager admin actions, OAuth failures, env drift signals
+    endpoints    End-to-end probe of public URLs + origin cert expiry
+    reconcile    Registered agents vs actually-running containers
     all          Composite of all of the above
 
 The fleet/deployments/security data come from the manager API. Per-agent
 incident classification requires reading container logs, so it falls back to
 SSH+docker exec (same pattern as `inspect`). Skipped gracefully if SSH is
 unavailable.
+
+`endpoints` and `reconcile` exist because of the 2026-07-30 soak review, where
+every other section reported green while (a) agents.ciris.ai had served an
+expired origin cert for 46 days, making the whole vhost return Cloudflare 526,
+and (b) an agent container had been gone for three weeks. Neither is visible
+from inside a container or from the manager API, so both are checked from the
+outside. `endpoints` deliberately requires no auth token - the outage it
+diagnoses also breaks the OAuth flow needed to obtain one.
 """
 
 from __future__ import annotations
 
+import datetime as datetime_mod
 import json
 import subprocess
 from argparse import Namespace
@@ -47,6 +58,13 @@ _MANAGER_HOST = "45.76.226.222"
 # If you tweak these, re-run `status incidents` and confirm the categories still
 # capture the long tail. Specifically: "All LLM services failed" must beat the
 # more general "llm_service" filter.
+#
+# These MUST be derived from real production logs, not from the failure modes we
+# expect. The 2026-07-30 soak review found every pattern below the divider
+# scoring zero against logs containing thousands of ERROR lines, so `status all`
+# reported "clean" while an agent had been down for three weeks. Any edit here
+# should be checked against tests/ciris_manager_client/fixtures/incidents_sample.log,
+# which is a verbatim capture from production.
 _INCIDENT_PATTERNS: List[Tuple[str, str]] = [
     ("All LLM services failed", "llm_total_fail"),
     ("Circuit breaker OPEN", "cb_open"),
@@ -58,13 +76,36 @@ _INCIDENT_PATTERNS: List[Tuple[str, str]] = [
     ("RATE LIMIT", "rate_limit"),
     ("ciris_secondary error", "secondary_err"),
     ("ciris_primary error", "primary_err"),
+    # --- observed in production 2026-07-30; all of these previously fell into
+    # `other` or matched nothing at all ---
+    # Persistence: a scheduled task outliving its parent row retries forever.
+    ("FOREIGN KEY constraint failed", "persistence_fk_fail"),
+    ("Failed to trigger task", "scheduler_task_fail"),
+    # Shutdown processor livelocks polling for a task that will never return.
+    ("Shutdown task disappeared", "shutdown_livelock"),
+    # Telemetry flush retrying a non-retryable auth failure on a fixed timer.
+    ("FLUSH FAILED", "telemetry_flush_fail"),
+    ("verify_unknown_key", "telemetry_auth_fail"),
+    # Secrets bootstrap corruption (see RCA-secrets-master-key-zero-byte.md).
+    ("Master key must be exactly 32 bytes", "secrets_bootstrap_corruption"),
+    # CIRISVerify. NOTE: the logger name is `ciris_verify`, lower/underscore -
+    # the old "CIRISVerify" pattern never matched a single line.
+    ("SECURITY ALERT", "verify_security_alert"),
+    ("HASH MISMATCH", "verify_hash_mismatch"),
+    ("cannot establish trusted consensus", "verify_no_consensus"),
+    ("DNS DISAGREEMENT", "verify_dns_disagree"),
+    ("ciris_verify", "verify_warn"),
     ("Failed to convert node", "config_warn"),
     ("No pricing found for model", "pricing_warn"),
-    ("CIRISVerify", "verify_warn"),
 ]
 
-# Patterns that signal cognitive-health attention (a non-zero count is worth
-# surfacing to humans). The rest is treated as background noise.
+# Patterns that signal attention (a non-zero count is worth surfacing to humans).
+# The rest is treated as background noise.
+#
+# `verify_dns_disagree` and `verify_warn` are deliberately NOT notable: the EU
+# registry lagging the US one produces a continuous stream of those, and burying
+# real findings under them is what made the category useless. The escalated
+# forms (`verify_security_alert`, `verify_no_consensus`) ARE notable.
 _NOTABLE = {
     "llm_total_fail",
     "cb_open",
@@ -72,6 +113,15 @@ _NOTABLE = {
     "speak_blocked",
     "secondary_err",
     "primary_err",
+    "persistence_fk_fail",
+    "scheduler_task_fail",
+    "shutdown_livelock",
+    "telemetry_flush_fail",
+    "telemetry_auth_fail",
+    "secrets_bootstrap_corruption",
+    "verify_security_alert",
+    "verify_hash_mismatch",
+    "verify_no_consensus",
 }
 
 _SSH_KEY = Path.home() / ".ssh" / "ciris_deploy"
@@ -278,14 +328,17 @@ def _gather_incidents(ctx: Any, since_date: Optional[str] = None) -> Dict[str, A
             rows.append(row)
             continue
 
-        # grep date-prefix on the agent's incidents log inside its container.
-        # Use single grep to keep the SSH round-trip short.
+        # grep the date prefix across ALL retained incident logs, not just the
+        # `incidents_latest.log` symlink. Under load these rotate every few
+        # hours, so reading only the current file silently redefines "today"
+        # as "the last couple of hours" - which is how a full soak window
+        # looked clean. `cat` the glob so rotated files are included.
         cmd = (
             f"docker exec {container} sh -c "
-            f"'grep \"^{since_date}\" /app/logs/incidents_latest.log 2>/dev/null'"
+            f"'cat /app/logs/incidents_*.log 2>/dev/null | grep \"^{since_date}\"'"
         )
         try:
-            text = _ssh_run(host, cmd, timeout=20)
+            text = _ssh_run(host, cmd, timeout=30)
         except _SSHUnavailable as e:
             row["status"] = "unreachable"
             row["error"] = str(e)[:120]
@@ -296,15 +349,21 @@ def _gather_incidents(ctx: Any, since_date: Optional[str] = None) -> Dict[str, A
 
         counts = _classify_log_lines(text)
         row["status"] = "ok"
-        # Promote notable categories to top-level keys; collapse rest into row["benign_total"].
+        # There are too many notable categories to give each its own column, so
+        # the row carries a total plus a compact breakdown of only the non-zero
+        # ones. Full per-category counts stay available under `counts` for
+        # --format json.
         notable_in_row = sum(counts.get(c, 0) for c in _NOTABLE)
         notable_total += notable_in_row
-        for cat in _NOTABLE:
-            row[cat] = counts.get(cat, 0)
-        row["fragility"] = counts.get("fragility", 0)
-        row["sig_retry"] = counts.get("sig_retry", 0)
-        row["benign_total"] = counts["total"] - notable_in_row - row["fragility"] - row["sig_retry"]
+        hits = {c: counts.get(c, 0) for c in sorted(_NOTABLE) if counts.get(c, 0)}
+        row["notable"] = ", ".join(f"{c}={n}" for c, n in hits.items()) or "-"
+        row["notable_total"] = notable_in_row
+        row["benign_total"] = counts["total"] - notable_in_row
         row["total"] = counts["total"]
+        if getattr(ctx, "output_format", "table") != "table":
+            # Nested dict would wreck the table layout; machine formats get the
+            # full per-category breakdown.
+            row["counts"] = {c: n for c, n in counts.items() if n and c != "total"}
         rows.append(row)
 
     return {
@@ -402,6 +461,188 @@ def _gather_security(ctx: Any) -> Dict[str, Any]:
     return sections
 
 
+# Public endpoints probed end-to-end. Every internal signal read green through
+# the 46-day agents.ciris.ai outage in 2026-06/07 because nothing ever tested
+# the path a real client uses: expired origin cert -> Cloudflare 526. Health
+# has to be measured where the user sits, not inside the container.
+_PUBLIC_ENDPOINTS: List[Tuple[str, str, int]] = [
+    ("manager_api", "https://agents.ciris.ai/manager/v1/health", 200),
+    ("manager_gui", "https://agents.ciris.ai/", 200),
+    ("scout_api", "https://scoutapilb.ciris.ai/health", 200),
+]
+
+# Origin certs to check, as (label, origin_ip, sni_hostname).
+#
+# These MUST be checked against the origin IP, not the public hostname: the
+# public name resolves to Cloudflare, whose edge cert auto-renews and is never
+# the thing that breaks. The 46-day outage was an expired *origin* cert behind
+# a perfectly healthy edge cert. Both scout origins are listed separately
+# because they serve the same hostname from different filesystems - scout2's
+# cert is currently hand-copied, so it can go stale independently of scout1.
+_ORIGIN_CERTS: List[Tuple[str, str, str]] = [
+    ("main", "45.76.231.182", "agents.ciris.ai"),
+    ("scout1", "144.202.55.195", "scoutapilb.ciris.ai"),
+    ("scout2", "45.76.18.133", "scoutapilb.ciris.ai"),
+]
+
+# Warn this far ahead of expiry. Certbot renews at 30 days remaining, so a cert
+# below this threshold means renewal has already failed at least once.
+_CERT_WARN_DAYS = 21
+
+# Cloudflare 403s requests with the default urllib User-Agent, which would make
+# every probe look like a failure. Identify ourselves honestly instead.
+_PROBE_UA = "ciris-manager-client/status-endpoints"
+
+
+def _cert_not_after(der: bytes) -> "datetime_mod.datetime":
+    """Extract notAfter (UTC) from a DER-encoded certificate.
+
+    ssl.getpeercert() only returns a parsed dict when the chain was verified,
+    and we intentionally skip verification to probe origins by IP - so parse
+    the DER ourselves.
+    """
+    from datetime import timezone
+
+    from cryptography import x509
+
+    cert = x509.load_der_x509_certificate(der)
+    try:
+        return cert.not_valid_after_utc
+    except AttributeError:  # cryptography < 42
+        return cert.not_valid_after.replace(tzinfo=timezone.utc)
+
+
+def _gather_endpoints(ctx: Any) -> Dict[str, Any]:
+    """Probe public endpoints end-to-end and check origin cert expiry.
+
+    Deliberately uses the public hostname (not localhost, not the VPC IP) so
+    that TLS, Cloudflare, and nginx routing are all in the path.
+    """
+    import ssl
+    import socket
+    from datetime import datetime, timezone
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    rows: List[Dict[str, Any]] = []
+    problems = 0
+
+    for name, url, expect in _PUBLIC_ENDPOINTS:
+        row: Dict[str, Any] = {"endpoint": name, "url": url, "expect": expect}
+        try:
+            req = Request(url, headers={"User-Agent": _PROBE_UA})  # noqa: S310 - fixed https
+            with urlopen(req, timeout=15) as resp:  # noqa: S310
+                code = resp.status
+        except HTTPError as e:
+            # An HTTP error status still means we reached an origin; record it.
+            # A 526 here is the exact signature of an expired origin cert.
+            code = e.code
+        except (URLError, socket.timeout, ssl.SSLError) as e:
+            row["status"] = "unreachable"
+            row["error"] = str(e)[:120]
+            problems += 1
+            rows.append(row)
+            continue
+        row["code"] = code
+        row["status"] = "ok" if code == expect else "unexpected_code"
+        if code != expect:
+            problems += 1
+        rows.append(row)
+
+    cert_rows: List[Dict[str, Any]] = []
+    for label, ip, sni in _ORIGIN_CERTS:
+        crow: Dict[str, Any] = {"origin": label, "host": sni, "ip": ip}
+        try:
+            # Verification is disabled deliberately: we are connecting by IP and
+            # only want the expiry date out of the presented chain. Hostname
+            # validation would fail on the IP and tell us nothing useful.
+            cctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            cctx.check_hostname = False
+            cctx.verify_mode = ssl.CERT_NONE
+            with socket.create_connection((ip, 443), timeout=15) as sock:
+                with cctx.wrap_socket(sock, server_hostname=sni) as ssock:
+                    der = ssock.getpeercert(binary_form=True)
+            not_after = _cert_not_after(der)
+            days = (not_after - datetime.now(timezone.utc)).days
+            crow["expires"] = not_after.strftime("%Y-%m-%d")
+            crow["days_left"] = days
+            crow["status"] = "ok" if days >= _CERT_WARN_DAYS else "EXPIRING"
+            if days < _CERT_WARN_DAYS:
+                problems += 1
+        except Exception as e:  # noqa: BLE001 - any failure here is a real signal
+            crow["status"] = "error"
+            crow["error"] = str(e)[:120]
+            problems += 1
+        cert_rows.append(crow)
+
+    return {
+        "summary": {
+            "endpoints_checked": len(rows),
+            "origins_checked": len(cert_rows),
+            "problems": problems,
+            "verdict": "ok" if problems == 0 else "review_needed",
+        },
+        "endpoints": rows,
+        "origin_certificates": cert_rows,
+    }
+
+
+def _gather_reconcile(ctx: Any) -> Dict[str, Any]:
+    """Reconcile the agent registry against containers actually running.
+
+    The crash-loop watchdog only fires on repeated restarts, so a container
+    that exits once and stays exited is invisible to it. That is exactly how
+    the scout2 agent stayed dead for three weeks after a host reboot with
+    RestartCount=0. This check answers the different question: for every agent
+    the registry knows about, is a container actually running for it?
+    """
+    agents = ctx.client.list_agents()
+
+    # One docker ps per host rather than per agent - keeps this to 3 round trips.
+    running_by_host: Dict[str, Any] = {}
+    for server_id, host in _SERVER_HOSTS.items():
+        try:
+            out = _ssh_run(
+                host,
+                "docker ps --filter 'name=ciris' --format '{{.Names}}'",
+                timeout=20,
+            )
+            running_by_host[server_id] = set(out.split())
+        except _SSHUnavailable as e:
+            running_by_host[server_id] = e  # sentinel: host unreachable
+
+    rows: List[Dict[str, Any]] = []
+    missing = 0
+    for agent in sorted(agents, key=lambda a: (a.get("server_id", ""), a.get("agent_id", ""))):
+        server_id = agent.get("server_id", "")
+        container = _container_name(agent)
+        row: Dict[str, Any] = {
+            "agent_id": agent.get("agent_id"),
+            "server": server_id,
+            "container": container,
+        }
+        known = running_by_host.get(server_id)
+        if known is None:
+            row["status"] = f"unknown_server:{server_id}"
+        elif isinstance(known, _SSHUnavailable):
+            row["status"] = "host_unreachable"
+        elif container in known:
+            row["status"] = "running"
+        else:
+            row["status"] = "MISSING"
+            missing += 1
+        rows.append(row)
+
+    return {
+        "summary": {
+            "registered_agents": len(rows),
+            "missing_containers": missing,
+            "verdict": "ok" if missing == 0 else "review_needed",
+        },
+        "agents": rows,
+    }
+
+
 # -----------------------------------------------------------------------------
 # Public command handlers
 # -----------------------------------------------------------------------------
@@ -432,16 +673,42 @@ class StatusCommands:
         return 0
 
     @staticmethod
+    def endpoints(ctx: Any, args: Namespace) -> int:
+        result = _gather_endpoints(ctx)
+        _emit(ctx, result)
+        return 0 if result["summary"]["problems"] == 0 else 1
+
+    @staticmethod
+    def reconcile(ctx: Any, args: Namespace) -> int:
+        result = _gather_reconcile(ctx)
+        _emit(ctx, result)
+        return 0 if result["summary"]["missing_containers"] == 0 else 1
+
+    @staticmethod
     def all(ctx: Any, args: Namespace) -> int:
         since = getattr(args, "since", None)
         composite = {
             "fleet": _gather_fleet(ctx),
+            "endpoints": _gather_endpoints(ctx),
+            "reconcile": _gather_reconcile(ctx),
             "deployments": _gather_deployments(ctx),
             "incidents": _gather_incidents(ctx, since_date=since),
             "security": _gather_security(ctx),
         }
         _emit(ctx, composite)
-        # Exit non-zero if any notable incidents OR manager errors — useful for cron.
+        # Exit non-zero if anything notable — useful for cron.
+        # `endpoints` and `reconcile` are included because they are the two
+        # checks that would have caught the 2026-07-30 P0s (46-day expired cert,
+        # agent container missing for 3 weeks) which every other section
+        # reported as green.
         notable = composite["incidents"]["summary"]["notable_incident_total"]
         mgr_err = composite["security"].get("manager_errors_last_hour", 0)
-        return 0 if notable == 0 and (not isinstance(mgr_err, int) or mgr_err == 0) else 1
+        endpoint_problems = composite["endpoints"]["summary"]["problems"]
+        missing = composite["reconcile"]["summary"]["missing_containers"]
+        ok = (
+            notable == 0
+            and (not isinstance(mgr_err, int) or mgr_err == 0)
+            and endpoint_problems == 0
+            and missing == 0
+        )
+        return 0 if ok else 1
