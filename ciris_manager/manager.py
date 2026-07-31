@@ -168,10 +168,16 @@ class CIRISManager:
 
         # Initialize existing components
 
+        # The registry + multi-server Docker client are what make absence
+        # detection possible: without them the watchdog can only see containers
+        # that exist, never ones that should exist. It previously ran a local
+        # `docker ps` on the manager host, which holds no agent containers.
         self.watchdog = CrashLoopWatchdog(
             check_interval=self.config.watchdog.check_interval,
             crash_threshold=self.config.watchdog.crash_threshold,
             crash_window=self.config.watchdog.crash_window,
+            agent_registry=self.agent_registry,
+            docker_client_manager=self.docker_client,
         )
 
         # Initialize Docker image cleanup service
