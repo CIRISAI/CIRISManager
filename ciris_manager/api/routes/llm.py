@@ -208,7 +208,15 @@ async def set_llm_configuration(
     if restart:
         try:
             # Regenerate compose file with new LLM config
-            await manager.regenerate_agent_compose(agent.agent_id)
+            # Pass the composite key through. Without occurrence_id and
+            # server_id this defaults to server 'main', so any agent on a
+            # remote server (or a non-default occurrence) failed lookup with
+            # "Agent <id> not found" and its config was never applied.
+            await manager.regenerate_agent_compose(
+                agent.agent_id,
+                occurrence_id=agent.occurrence_id,
+                server_id=agent.server_id,
+            )
 
             # Restart the container
             # RECREATE, not restart. A Docker restart replays the container's
@@ -337,7 +345,15 @@ async def patch_llm_configuration(
     # Restart container if requested
     if restart:
         try:
-            await manager.regenerate_agent_compose(agent.agent_id)
+            # Pass the composite key through. Without occurrence_id and
+            # server_id this defaults to server 'main', so any agent on a
+            # remote server (or a non-default occurrence) failed lookup with
+            # "Agent <id> not found" and its config was never applied.
+            await manager.regenerate_agent_compose(
+                agent.agent_id,
+                occurrence_id=agent.occurrence_id,
+                server_id=agent.server_id,
+            )
             # RECREATE, not restart. A Docker restart replays the container's
             # original environment, so a restarted agent comes back on the OLD
             # provider while the API cheerfully reports the new config applied.
@@ -407,7 +423,15 @@ async def delete_llm_configuration(
     # Restart container if requested
     if restart:
         try:
-            await manager.regenerate_agent_compose(agent.agent_id)
+            # Pass the composite key through. Without occurrence_id and
+            # server_id this defaults to server 'main', so any agent on a
+            # remote server (or a non-default occurrence) failed lookup with
+            # "Agent <id> not found" and its config was never applied.
+            await manager.regenerate_agent_compose(
+                agent.agent_id,
+                occurrence_id=agent.occurrence_id,
+                server_id=agent.server_id,
+            )
             # RECREATE, not restart. A Docker restart replays the container's
             # original environment, so a restarted agent comes back on the OLD
             # provider while the API cheerfully reports the new config applied.
