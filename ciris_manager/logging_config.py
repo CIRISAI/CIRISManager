@@ -72,10 +72,28 @@ class HumanReadableFormatter(logging.Formatter):
         )
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format with optional colors for console output."""
-        if self.use_colors and record.levelname in self.COLORS:
-            record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{self.RESET}"
-        return super().format(record)
+        """Format with optional colors for console output.
+
+        The colour codes are applied to a temporary mutation that is undone
+        before returning. A LogRecord is shared by every handler on the logger,
+        so permanently rewriting `record.levelname` here corrupted it for
+        everyone downstream: the rotating file handlers (which use
+        `use_colors=False` precisely to avoid escape codes) wrote
+        "\\x1b[33mWARNING\\x1b[0m" into manager.log, the CIRISLens shipper sent
+        the same, and any consumer comparing `record.levelname == "WARNING"`
+        silently stopped matching. It also made tests order-dependent: the
+        corruption only appeared once a colour-enabled console handler had been
+        installed by setup_logging().
+        """
+        if not (self.use_colors and record.levelname in self.COLORS):
+            return super().format(record)
+
+        original = record.levelname
+        record.levelname = f"{self.COLORS[original]}{original}{self.RESET}"
+        try:
+            return super().format(record)
+        finally:
+            record.levelname = original
 
 
 def setup_logging(
@@ -106,13 +124,21 @@ def setup_logging(
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
 
-    # Clear existing handlers
-    root_logger.handlers.clear()
+    # Remove only handlers WE installed, so repeat calls don't duplicate output.
+    # Deliberately not `handlers.clear()`: that also destroys handlers owned by
+    # whoever embedded us. Under pytest it silently removed caplog's capture
+    # handler, so every `caplog` assertion in tests that happened to run after
+    # this function became unverifiable - the log line was emitted and visibly
+    # printed, but `caplog.records` was empty.
+    for handler in list(root_logger.handlers):
+        if getattr(handler, "_ciris_managed", False):
+            root_logger.removeHandler(handler)
 
     # Console handler with color
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(getattr(logging, console_level))
     console_handler.setFormatter(HumanReadableFormatter(use_colors=True))
+    console_handler._ciris_managed = True  # type: ignore[attr-defined]
     root_logger.addHandler(console_handler)
 
     # Formatter for files
@@ -124,6 +150,7 @@ def setup_logging(
     )
     main_handler.setLevel(getattr(logging, file_level))
     main_handler.setFormatter(file_formatter)
+    main_handler._ciris_managed = True  # type: ignore[attr-defined]
     root_logger.addHandler(main_handler)
 
     # Error-only log for monitoring
@@ -132,6 +159,7 @@ def setup_logging(
     )
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(file_formatter)
+    error_handler._ciris_managed = True  # type: ignore[attr-defined]
     root_logger.addHandler(error_handler)
 
     # Nginx updates log
@@ -188,6 +216,7 @@ def setup_logging(
 
             # Add handler to root logger
             lens_handler = LogShipperHandler(_cirislens_shipper, min_level=logging.INFO)
+            lens_handler._ciris_managed = True  # type: ignore[attr-defined]
             root_logger.addHandler(lens_handler)
 
             root_logger.info("CIRISLens log shipping enabled")
