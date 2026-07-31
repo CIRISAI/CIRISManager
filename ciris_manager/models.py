@@ -43,6 +43,13 @@ class AgentInfo(BaseModel):
     deployment: str = Field(
         "CIRIS_DISCORD_PILOT", description="Deployment identifier (e.g., CIRIS_DISCORD_PILOT)"
     )
+    canary_group: Optional[str] = Field(
+        None,
+        description=(
+            "Canary deployment group: explorer, early_adopter, general, or None if unassigned. "
+            "Determines which rollout phase updates this agent."
+        ),
+    )
     server_id: Optional[str] = Field("main", description="Server ID where agent is deployed")
     occurrence_id: Optional[str] = Field(
         None, description="Occurrence ID for multi-instance agents (e.g., '002')"

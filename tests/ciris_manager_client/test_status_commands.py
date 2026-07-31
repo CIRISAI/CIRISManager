@@ -414,3 +414,68 @@ def test_cert_warn_threshold_exceeds_certbot_renewal_window():
     healthy cert in its normal renewal window.
     """
     assert _CERT_WARN_DAYS < 30
+
+
+# -----------------------------------------------------------------------------
+# Canary group visibility
+# -----------------------------------------------------------------------------
+
+
+def test_fleet_surfaces_canary_group():
+    """Canary group must be visible through the client.
+
+    It decides which rollout phase updates an agent, but lived only in
+    metadata.json on the manager host - absent from AgentInfo, discovery and the
+    API. The only way to answer "which agents go first?" was to read the raw
+    file, where looking up the wrong key returns None and reads as "no canary
+    configured" rather than "you looked in the wrong place".
+    """
+    ctx = SimpleNamespace(
+        client=_FakeClient(
+            [
+                {
+                    "agent_id": "datum",
+                    "server_id": "main",
+                    "canary_group": "explorer",
+                    "version": "2.9.6-stable",
+                },
+                {
+                    "agent_id": "scout",
+                    "server_id": "scout1",
+                    "canary_group": "early_adopter",
+                    "version": "2.7.6-stable",
+                },
+                {"agent_id": "echo", "server_id": "main", "version": "2.7.6-stable"},
+            ]
+        ),
+        output_format="json",
+    )
+    result = _gather_fleet(ctx)
+
+    by_id = {r["agent_id"]: r for r in result["agents"]}
+    assert by_id["datum"]["canary"] == "explorer"
+    assert by_id["scout"]["canary"] == "early_adopter"
+    # Unassigned must be explicit, never a blank that reads as "no canary setup".
+    assert by_id["echo"]["canary"] == "unassigned"
+    assert result["summary"]["canary_groups"]["explorer"] == 1
+
+
+def test_fleet_reports_version_spread_per_canary_group():
+    """A partially-applied rollout must be visible.
+
+    Mid-canary the explorer group runs ahead; afterwards every group should
+    match. Anything else means a stalled deployment.
+    """
+    ctx = SimpleNamespace(
+        client=_FakeClient(
+            [
+                {"agent_id": "datum", "canary_group": "explorer", "version": "2.9.6-stable"},
+                {"agent_id": "s1", "canary_group": "early_adopter", "version": "2.7.6-stable"},
+                {"agent_id": "e1", "canary_group": "general", "version": "2.7.6-stable"},
+            ]
+        ),
+        output_format="json",
+    )
+    spread = _gather_fleet(ctx)["summary"]["versions_by_canary_group"]
+    assert spread["explorer"] == {"2.9.6-stable": 1}
+    assert spread["general"] == {"2.7.6-stable": 1}
