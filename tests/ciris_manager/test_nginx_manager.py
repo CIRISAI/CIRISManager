@@ -265,3 +265,37 @@ class TestNginxManager:
 
         # But no agent-specific routes
         assert "/api/agent-" not in config
+
+    @pytest.mark.parametrize("use_ssl", [True, False])
+    def test_acme_challenge_location_present(self, temp_dir, use_ssl):
+        """ACME HTTP-01 challenge must be served on plain HTTP in every mode.
+
+        Regression guard for the 2026-06 outage: agents.ciris.ai sat on an
+        expired cert for 46 days because certbot was using the `standalone`
+        authenticator, which cannot bind :80 while nginx holds it. The fix
+        moved renewal to webroot, which only works if the generated config
+        actually serves the challenge path.
+        """
+        nginx_manager = NginxManager(
+            config_dir=str(temp_dir), container_name="test-nginx", use_ssl=use_ssl
+        )
+        config = nginx_manager.generate_config([])
+
+        assert "location ^~ /.well-known/acme-challenge/" in config
+        assert "root /etc/letsencrypt/acme-webroot;" in config
+
+    def test_acme_challenge_precedes_https_redirect(self, temp_dir):
+        """The challenge location must win over the catch-all HTTPS redirect.
+
+        If the redirect matched first, renewal would 301 to an HTTPS endpoint
+        whose cert is the very thing being renewed - which is how the outage
+        stayed unrecoverable without manual intervention.
+        """
+        nginx_manager = NginxManager(
+            config_dir=str(temp_dir), container_name="test-nginx", use_ssl=True
+        )
+        config = nginx_manager.generate_config([])
+
+        acme_at = config.index("location ^~ /.well-known/acme-challenge/")
+        redirect_at = config.index("return 301 https://$server_name$request_uri;")
+        assert acme_at < redirect_at, "ACME challenge must be declared before the HTTPS redirect"
