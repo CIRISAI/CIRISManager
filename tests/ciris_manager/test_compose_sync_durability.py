@@ -193,7 +193,9 @@ async def test_llm_config_change_recreates_rather_than_restarts(monkeypatch):
     calls = {}
 
     class _Orch:
-        async def _recreate_agent_container(self, agent_id, server_id="main", new_image=None):
+        async def _recreate_agent_container(
+            self, agent_id, server_id="main", new_image=None, occurrence_id=None
+        ):
             calls["agent_id"] = agent_id
             calls["server_id"] = server_id
             calls["new_image"] = new_image
@@ -219,3 +221,64 @@ def test_llm_routes_do_not_use_plain_restart():
         "LLM config application must recreate the container; a plain restart "
         "silently replays the previous environment"
     )
+
+
+# -----------------------------------------------------------------------------
+# Occurrence must survive the whole recreate chain
+# -----------------------------------------------------------------------------
+
+
+def test_registry_compose_path_honours_multi_occurrence():
+    """Compose path must come from the registry, not an assumed filename.
+
+    Multi-occurrence agents record paths like `docker-compose-002.yml`.
+    Assuming `<agents>/<agent_id>/docker-compose.yml` reads the wrong file, so
+    the recreate silently used stale environment and then wrote that stale
+    compose back over the manager's authoritative copy.
+    """
+    from types import SimpleNamespace
+
+    from ciris_manager.deployment.orchestrator import DeploymentOrchestrator
+
+    orch = DeploymentOrchestrator.__new__(DeploymentOrchestrator)
+    registry = MagicMock()
+    registry.get_agent.return_value = SimpleNamespace(
+        compose_file="/opt/ciris/agents/scout/docker-compose-002.yml"
+    )
+    orch.agent_registry = registry
+
+    path = orch._registry_compose_path("scout", occurrence_id="002", server_id="scout2")
+    assert path.name == "docker-compose-002.yml"
+    kwargs = registry.get_agent.call_args.kwargs
+    assert kwargs["occurrence_id"] == "002"
+    assert kwargs["server_id"] == "scout2"
+
+
+def test_registry_compose_path_falls_back_safely():
+    from ciris_manager.deployment.orchestrator import DeploymentOrchestrator
+
+    orch = DeploymentOrchestrator.__new__(DeploymentOrchestrator)
+    orch.agent_registry = None
+    assert orch._registry_compose_path("datum").name == "docker-compose.yml"
+
+
+@pytest.mark.asyncio
+async def test_recreate_threads_occurrence_through(monkeypatch):
+    """occurrence_id must survive manager -> orchestrator."""
+    from ciris_manager.manager import CIRISManager
+
+    mgr = CIRISManager.__new__(CIRISManager)
+    seen = {}
+
+    class _Orch:
+        async def _recreate_agent_container(
+            self, agent_id, server_id="main", new_image=None, occurrence_id=None
+        ):
+            seen["occurrence_id"] = occurrence_id
+            seen["server_id"] = server_id
+            return True
+
+    monkeypatch.setattr("ciris_manager.deployment.get_deployment_orchestrator", lambda: _Orch())
+
+    await mgr.recreate_agent_container("scout", server_id="scout2", occurrence_id="002")
+    assert seen == {"occurrence_id": "002", "server_id": "scout2"}
