@@ -3,11 +3,12 @@ Tests for deployment orchestrator.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, PropertyMock, patch
 import asyncio
 from datetime import datetime, timezone
 
 from ciris_manager.deployment import DeploymentOrchestrator
+from ciris_manager.deployment.orchestrator import SHUTDOWN_WAIT_SECONDS
 from ciris_manager.models import (
     UpdateNotification,
     AgentInfo,
@@ -673,8 +674,12 @@ class TestDeploymentOrchestrator:
                 )
 
                 # Verify the sequence of calls
+                # server_id must be threaded through: the container lives on the
+                # agent's own host, not on the manager's local Docker socket.
                 orchestrator._wait_for_container_stop.assert_called_once_with(
-                    "ciris-test-agent", timeout=60
+                    "ciris-test-agent",
+                    timeout=SHUTDOWN_WAIT_SECONDS,
+                    server_id="main",
                 )
                 orchestrator._recreate_agent_container.assert_called_once_with(
                     "test-agent", "main", "ghcr.io/cirisai/ciris-agent:v2.0"
@@ -753,59 +758,41 @@ class TestDeploymentOrchestrator:
 
     @pytest.mark.asyncio
     async def test_wait_for_container_stop(self, orchestrator):
-        """Test waiting for container to stop."""
-        # Mock the subprocess call to docker inspect
-        status_sequence = ["running", "running", "exited"]
-        call_count = [0]
+        """Polls the agent's own server until it observes a terminal state."""
+        statuses = ["running", "running", "exited"]
+        container = Mock()
+        container.reload = Mock()
+        type(container).status = PropertyMock(side_effect=statuses)
 
-        async def mock_subprocess(*args, **kwargs):
-            # Check if this is a docker inspect call
-            if "docker" in args and "inspect" in args:
-                mock_result = Mock()
-                if call_count[0] < len(status_sequence):
-                    status = status_sequence[call_count[0]]
-                    call_count[0] += 1
-                else:
-                    status = status_sequence[-1]
+        client = Mock()
+        client.containers.get.return_value = container
+        orchestrator.manager.docker_client.get_client.return_value = client
 
-                mock_result.returncode = 0
-                mock_result.communicate = AsyncMock(return_value=(status.encode(), b""))
-                return mock_result
-            return Mock()
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await orchestrator._wait_for_container_stop(
+                "test-container", timeout=10, server_id="main"
+            )
 
-        with patch("asyncio.create_subprocess_exec", side_effect=mock_subprocess):
-            # Mock asyncio.sleep to speed up test
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await orchestrator._wait_for_container_stop("test-container", timeout=10)
-
-            assert result is True
-            assert call_count[0] == 3  # Should have checked 3 times
+        assert result is True
+        assert client.containers.get.call_count == 3
 
     @pytest.mark.asyncio
     async def test_wait_for_container_stop_timeout(self, orchestrator):
-        """Test timeout when waiting for container to stop."""
+        """A container that never stops must time out, not be assumed stopped."""
+        container = Mock()
+        container.reload = Mock()
+        container.status = "running"
 
-        # Mock subprocess to always return "running" status
-        async def mock_subprocess(*args, **kwargs):
-            if "docker" in args and "inspect" in args:
-                mock_result = Mock()
-                mock_result.returncode = 0
-                mock_result.communicate = AsyncMock(return_value=(b"running", b""))
-                return mock_result
-            return Mock()
+        client = Mock()
+        client.containers.get.return_value = container
+        orchestrator.manager.docker_client.get_client.return_value = client
 
-        with patch("asyncio.create_subprocess_exec", side_effect=mock_subprocess):
-            # Mock time.time to simulate timeout - need more values for multiple calls
-            with patch("time.time") as mock_time:
-                # Provide enough values for all time.time() calls (including logging)
-                mock_time.side_effect = [0, 1, 2, 3, 61, 61, 61, 61]  # Exceeds 60 second timeout
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await orchestrator._wait_for_container_stop(
+                "test-container", timeout=1, server_id="main"
+            )
 
-                with patch("asyncio.sleep", new_callable=AsyncMock):
-                    result = await orchestrator._wait_for_container_stop(
-                        "test-container", timeout=60
-                    )
-
-            assert result is False
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_recreate_agent_container(self, orchestrator):
