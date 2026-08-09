@@ -263,18 +263,62 @@ class DockerAgentDiscovery:
             adapter_list = env_dict.get("CIRIS_ADAPTER", "api").lower()
             discord_enabled = "discord" in adapter_list
 
-            # Get occurrence_id from environment if present (for multi-instance deployments)
-            occurrence_id = env_dict.get("AGENT_OCCURRENCE_ID")
+            # Identity comes from the REGISTRY, not from the container.
+            #
+            # This used to read AGENT_OCCURRENCE_ID straight out of the
+            # container env, which created a feedback loop: discovery derived
+            # occurrence from the container, and container recreation derived
+            # its env from discovery. Once a container carried the wrong
+            # occurrence it re-asserted that identity forever, and any sibling
+            # sharing the agent_id was pulled in with it. In production this
+            # left scout1 running as occurrence "002" - scout2's identity -
+            # with both compose files rewritten to match.
+            #
+            # The container name is the reliable discriminator (it embeds the
+            # occurrence and is fixed at creation); env is only a last resort
+            # for an agent the registry has never seen.
+            registry_agent = None
+            occurrence_id = None
+            if self.agent_registry:
+                try:
+                    known = list(self.agent_registry.list_agents())
+                except Exception as e:
+                    # A registry problem must not make us drop the agent
+                    # entirely; fall through to the container-env path below.
+                    logger.debug(f"Could not list registry agents for {agent_id}: {e}")
+                    known = []
+                candidates = [
+                    a
+                    for a in known
+                    if a.agent_id == agent_id and (a.server_id or "main") == server_id
+                ]
+                if len(candidates) == 1:
+                    registry_agent = candidates[0]
+                elif len(candidates) > 1:
+                    # Multiple occurrences on one server: match on container name.
+                    for candidate in candidates:
+                        occ = candidate.occurrence_id
+                        expected = (
+                            f"ciris-{agent_id}-{occ}"
+                            if occ and occ != "default"
+                            else f"ciris-{agent_id}"
+                        )
+                        if expected == container.name:
+                            registry_agent = candidate
+                            break
+                if registry_agent is not None:
+                    occurrence_id = registry_agent.occurrence_id
 
-            # Get ALL static configuration from registry - single source of truth
-            # Use composite key lookup with occurrence_id and server_id
-            registry_agent = (
-                self.agent_registry.get_agent(
-                    agent_id, occurrence_id=occurrence_id, server_id=server_id
+            if registry_agent is None:
+                # Unknown to the registry - fall back to what the container claims.
+                occurrence_id = env_dict.get("AGENT_OCCURRENCE_ID")
+                registry_agent = (
+                    self.agent_registry.get_agent(
+                        agent_id, occurrence_id=occurrence_id, server_id=server_id
+                    )
+                    if self.agent_registry
+                    else None
                 )
-                if self.agent_registry
-                else None
-            )
 
             # Registry is the source of truth for port, template, deployment
             api_port = None

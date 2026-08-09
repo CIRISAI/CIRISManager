@@ -55,6 +55,12 @@ def mock_registry():
 
     registry.get_agent.side_effect = get_agent_side_effect
 
+    # Discovery resolves identity from the REGISTRY (list_agents + container
+    # name), not from the container's AGENT_OCCURRENCE_ID env. Reading identity
+    # from the container created a feedback loop that let scout1 re-assert
+    # scout2's occurrence indefinitely.
+    registry.list_agents.return_value = [scout_main, scout2]
+
     def update_agent_state_side_effect(
         agent_id, version, cognitive_state, occurrence_id=None, server_id=None
     ):

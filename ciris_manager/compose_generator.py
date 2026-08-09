@@ -220,7 +220,15 @@ class ComposeGenerator:
             "version": "3.8",
             "services": {
                 agent_id: {
-                    "container_name": f"ciris-{agent_id}",
+                    # Occurrences of the same agent must not share a container
+                    # name. Emitting the bare `ciris-{agent_id}` for every
+                    # occurrence let a second instance's compose claim the
+                    # first instance's container.
+                    "container_name": (
+                        f"ciris-{agent_id}-{agent_occurrence_id}"
+                        if agent_occurrence_id and agent_occurrence_id != "default"
+                        else f"ciris-{agent_id}"
+                    ),
                     "image": f"{self.docker_registry}/{self.default_image}",
                     "platform": "linux/amd64",
                     "ports": [f"{port}:8080"],
