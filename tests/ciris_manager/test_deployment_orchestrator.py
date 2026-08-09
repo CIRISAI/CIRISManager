@@ -681,8 +681,14 @@ class TestDeploymentOrchestrator:
                     timeout=SHUTDOWN_WAIT_SECONDS,
                     server_id="main",
                 )
+                # occurrence_id must be threaded through, or regeneration
+                # resolves the wrong registry entry and rebuilds the agent
+                # under another occurrence's identity.
                 orchestrator._recreate_agent_container.assert_called_once_with(
-                    "test-agent", "main", "ghcr.io/cirisai/ciris-agent:v2.0"
+                    "test-agent",
+                    "main",
+                    "ghcr.io/cirisai/ciris-agent:v2.0",
+                    occurrence_id=None,
                 )
 
                 assert response.agent_id == "test-agent"

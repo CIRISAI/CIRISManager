@@ -160,3 +160,29 @@ class TestRegenerationRepairsIdentity:
     def test_agent_id_is_reasserted(self):
         env = self._apply({"CIRIS_AGENT_ID": "wrong"}, "right", None)
         assert env["CIRIS_AGENT_ID"] == "right"
+
+
+def test_deploy_paths_pass_occurrence_to_recreate():
+    """Every recreate call must carry the occurrence.
+
+    The deploy path called `_recreate_agent_container(agent_id, server_id,
+    image)` with no occurrence, so regeneration resolved the wrong registry
+    entry and rebuilt scout1 as occurrence "002" - even after identity overlays
+    were in place everywhere else. The occurrence has to survive the whole
+    chain or the overlay just re-applies the wrong value faithfully.
+    """
+    import re
+    from pathlib import Path
+
+    src = Path("ciris_manager/deployment/orchestrator.py").read_text()
+    # Find each call and check the argument list up to its closing paren.
+    calls = [m for m in re.finditer(r"_recreate_agent_container\(\s*(?P<args>[^)]*)\)", src, re.S)]
+    # The definition itself and no-image internal retries are excluded by
+    # requiring a new_image/notification argument.
+    deploy_calls = [m for m in calls if "notification.agent_image" in m.group("args")]
+    assert deploy_calls, "expected to find deploy-path recreate calls"
+    for m in deploy_calls:
+        assert "occurrence_id" in m.group("args"), (
+            "a deploy-path _recreate_agent_container call omits occurrence_id; "
+            "it will rebuild the agent under the wrong identity"
+        )
