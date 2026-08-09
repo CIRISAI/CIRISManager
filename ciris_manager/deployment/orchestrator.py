@@ -46,6 +46,19 @@ from ciris_manager.deployment.containers import ContainerOperations
 
 logger = logging.getLogger(__name__)
 
+# How long to wait for an agent to finish its own shutdown before giving up and
+# handing off to the delayed-restart monitor. The agent's shutdown is an
+# LLM-driven ritual (DMA evaluations, model round-trips), so this is minutes-
+# scale work, not seconds. Previously the wait was a no-op - it inspected the
+# local Docker socket on a host with no agent containers and read the resulting
+# error as "stopped" - so the agent was killed ~10s after being asked to stop.
+SHUTDOWN_WAIT_SECONDS = 180
+
+# SIGTERM -> SIGKILL grace on the fallback hard stop during recreate. Only
+# reached when the graceful wait above already timed out, but 10s was short
+# enough to guarantee a mid-thought kill whenever it was reached.
+CONTAINER_STOP_GRACE_SECONDS = 30
+
 # Maximum minutes the canary will wait for an agent to transition WAKEUP -> WORK
 # before declaring the phase failed. Empirically the post-2.7.x CIRIS agent takes
 # 6-9 minutes to complete WAKEUP on the production fleet (LLM-bound), so the
@@ -2946,7 +2959,11 @@ class DeploymentOrchestrator:
 
                     # Wait for container to stop and recreate it with new image
                     logger.info(f"Waiting for container {agent.container_name} to stop...")
-                    stopped = await self._wait_for_container_stop(agent.container_name, timeout=60)
+                    stopped = await self._wait_for_container_stop(
+                        agent.container_name,
+                        timeout=SHUTDOWN_WAIT_SECONDS,
+                        server_id=agent.server_id,
+                    )
 
                     if stopped:
                         # Update state to show we're restarting
@@ -3306,52 +3323,95 @@ class DeploymentOrchestrator:
         except Exception as e:
             logger.error(f"Error in delayed restart monitor for {agent_id}: {e}")
 
-    async def _wait_for_container_stop(self, container_name: str, timeout: int = 60) -> bool:
+    async def _wait_for_container_stop(
+        self, container_name: str, timeout: int = 60, server_id: Optional[str] = "main"
+    ) -> bool:
         """
-        Wait for a container to stop.
+        Wait for a container on its own server to actually stop.
+
+        This used to shell out to the LOCAL docker CLI and, worse, treat a
+        failed inspect as success:
+
+            if result.returncode != 0:
+                return True   # "not found or error" -> reported as stopped
+
+        Every server is `is_local: false` - the manager host runs no agent
+        containers at all - so `docker inspect <agent>` always failed there and
+        the function returned True on its first poll. The `timeout` never
+        applied. Production logs show the consequence exactly:
+
+            02:28:16  Waiting for container ciris-datum to stop...
+            02:28:16  Container ciris-datum stopped, recreating with new image...
+
+        One second. The caller then recreated the container, hard-stopping it
+        ~10s later, while the agent was still running its LLM-driven shutdown
+        ritual. That is what stranded shutdown thoughts in PROCESSING on every
+        deployment (CIRISAgent#1018).
+
+        "Cannot reach the server" is now distinct from "the container is gone":
+        only a genuine NotFound, or an observed terminal state, counts as
+        stopped. Anything else keeps waiting and ultimately times out, so the
+        caller takes its delayed-shutdown path instead of killing the agent.
 
         Args:
             container_name: Name of the container to monitor
             timeout: Maximum time to wait in seconds
+            server_id: Server the container runs on
 
         Returns:
-            True if container stopped, False if timeout reached
+            True only if the container was OBSERVED stopped or absent.
         """
         import time
 
-        start_time = time.time()
-        while time.time() - start_time < timeout:
+        import docker.errors
+
+        deadline = time.time() + timeout
+
+        if not self.manager:
+            logger.warning(
+                f"No manager available to check {container_name}; cannot confirm it stopped"
+            )
+            return False
+
+        manager = self.manager
+
+        def _status() -> Optional[str]:
+            """Returns the status or "__absent__"; raises when unreachable."""
+            client = manager.docker_client.get_client(server_id or "main")
             try:
-                # Check container status
-                result = await asyncio.create_subprocess_exec(
-                    "docker",
-                    "inspect",
-                    container_name,
-                    "--format",
-                    "{{.State.Status}}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await result.communicate()
+                container = client.containers.get(container_name)
+            except docker.errors.NotFound:
+                return "__absent__"
+            container.reload()
+            return str(container.status or "").lower()
 
-                if result.returncode != 0:
-                    # Container doesn't exist or error
-                    logger.debug(f"Container {container_name} not found or error")
-                    return True
-
-                status = stdout.decode().strip()
-                if status in ["exited", "dead", "removing", "removed"]:
-                    logger.info(f"Container {container_name} has stopped (status: {status})")
-                    return True
-
-                logger.debug(f"Container {container_name} status: {status}, waiting...")
-                await asyncio.sleep(2)
-
+        while time.time() < deadline:
+            try:
+                status = await asyncio.to_thread(_status)
             except Exception as e:
-                logger.error(f"Error checking container status: {e}")
+                # Unreachable server, TLS problem, etc. We do NOT know that the
+                # container stopped, so keep waiting rather than claim it did.
+                logger.warning(
+                    f"Could not check {container_name} on {server_id}: {e}. "
+                    "Treating as unknown, not as stopped."
+                )
                 await asyncio.sleep(2)
+                continue
 
-        logger.warning(f"Timeout waiting for container {container_name} to stop")
+            if status == "__absent__":
+                logger.info(f"Container {container_name} no longer exists on {server_id}")
+                return True
+            if status in ("exited", "dead", "removing", "removed"):
+                logger.info(f"Container {container_name} has stopped (status: {status})")
+                return True
+
+            logger.debug(f"Container {container_name} status: {status}, waiting...")
+            await asyncio.sleep(2)
+
+        logger.warning(
+            f"Timeout after {timeout}s waiting for container {container_name} on {server_id} "
+            "to stop; it is still running"
+        )
         return False
 
     def _registry_compose_path(
@@ -3515,7 +3575,7 @@ class DeploymentOrchestrator:
                     logger.info(f"Captured configuration from container {container_name}")
 
                     # Stop and remove the old container
-                    old_container.stop(timeout=10)
+                    old_container.stop(timeout=CONTAINER_STOP_GRACE_SECONDS)
                     logger.info(f"Stopped container {container_name}")
                     old_container.remove()
                     logger.info(f"Removed container {container_name}")
