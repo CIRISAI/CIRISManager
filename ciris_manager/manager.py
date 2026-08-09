@@ -1614,6 +1614,19 @@ class CIRISManager:
                     env[key] = value
             if not env:
                 return None
+
+            # The container is authoritative for OPERATIONAL settings it alone
+            # knows - secrets, DB URL, adapter config. It is NOT authoritative
+            # for IDENTITY. Adopting identity from the container is how a
+            # mislabelled container re-asserts a wrong occurrence forever, and
+            # how scout1 came to run as occurrence "002". The registry is the
+            # single source of truth for who an agent is, so overlay it.
+            env["CIRIS_AGENT_ID"] = agent_id
+            if occurrence_id and occurrence_id != "default":
+                env["AGENT_OCCURRENCE_ID"] = occurrence_id
+            else:
+                env.pop("AGENT_OCCURRENCE_ID", None)
+
             return {"services": {agent_id: {"environment": env}}}
 
         try:
