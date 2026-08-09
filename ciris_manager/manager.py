@@ -710,6 +710,22 @@ class CIRISManager:
         # the orchestrator silently falls back to stale env from the old container.
         current_env = normalize_compose_env(service_config.get("environment"))
 
+        # Identity is re-asserted from the registry on EVERY regeneration,
+        # whatever the environment was read from.
+        #
+        # Overlaying it only in the container-adoption path was not enough: a
+        # compose file that had already been written with the wrong occurrence
+        # kept feeding that value back through this function, so the bad
+        # identity survived every rebuild. In production this pinned scout1 to
+        # occurrence "002" - scout2's identity - across repeated recreates.
+        # Applying it here is the single choke point that also repairs a
+        # compose file that is already wrong.
+        current_env["CIRIS_AGENT_ID"] = agent_id
+        if agent.occurrence_id and agent.occurrence_id != "default":
+            current_env["AGENT_OCCURRENCE_ID"] = agent.occurrence_id
+        else:
+            current_env.pop("AGENT_OCCURRENCE_ID", None)
+
         # Get adapter configs from registry
         adapter_configs = agent.adapter_configs or {}
 

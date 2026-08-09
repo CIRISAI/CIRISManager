@@ -124,3 +124,39 @@ class TestDiscoveryPrefersRegistry:
             for a in found
         }
         assert names == {"ciris-scout", "ciris-scout-002"}
+
+
+class TestRegenerationRepairsIdentity:
+    """Identity must be re-asserted on every regeneration, not just adoption.
+
+    Overlaying identity only in the container-adoption path was insufficient: a
+    compose file already written with the wrong occurrence kept feeding that
+    value back in as `current_env`, so the bad identity survived every rebuild.
+    scout1 stayed pinned to occurrence "002" across repeated recreates until
+    the overlay moved to this choke point.
+    """
+
+    def _apply(self, current_env, agent_id, occurrence_id):
+        """Mirror of the overlay applied in regenerate_agent_compose."""
+        env = dict(current_env)
+        env["CIRIS_AGENT_ID"] = agent_id
+        if occurrence_id and occurrence_id != "default":
+            env["AGENT_OCCURRENCE_ID"] = occurrence_id
+        else:
+            env.pop("AGENT_OCCURRENCE_ID", None)
+        return env
+
+    def test_contaminated_compose_is_repaired_for_default(self):
+        """A compose wrongly carrying 002 must be corrected, not perpetuated."""
+        contaminated = {"AGENT_OCCURRENCE_ID": "002", "CIRIS_DB_URL": "postgresql://x"}
+        env = self._apply(contaminated, "scout-remote-test-dahrb9", "default")
+        assert "AGENT_OCCURRENCE_ID" not in env
+        assert env["CIRIS_DB_URL"] == "postgresql://x", "operational env must survive"
+
+    def test_second_occurrence_keeps_its_marker(self):
+        env = self._apply({"CIRIS_DB_URL": "postgresql://x"}, "scout", "002")
+        assert env["AGENT_OCCURRENCE_ID"] == "002"
+
+    def test_agent_id_is_reasserted(self):
+        env = self._apply({"CIRIS_AGENT_ID": "wrong"}, "right", None)
+        assert env["CIRIS_AGENT_ID"] == "right"
