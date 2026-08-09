@@ -2842,7 +2842,10 @@ class DeploymentOrchestrator:
 
                     # Use the existing proper recreation method, passing server_id and new image for remote agents
                     recreated = await self._recreate_agent_container(
-                        agent.agent_id, agent.server_id, notification.agent_image
+                        agent.agent_id,
+                        agent.server_id,
+                        notification.agent_image,
+                        occurrence_id=agent.occurrence_id,
                     )
 
                     if recreated:
@@ -2974,7 +2977,10 @@ class DeploymentOrchestrator:
                             f"Container {agent.container_name} stopped, recreating with new image..."
                         )
                         recreated = await self._recreate_agent_container(
-                            agent.agent_id, agent.server_id, notification.agent_image
+                            agent.agent_id,
+                            agent.server_id,
+                            notification.agent_image,
+                            occurrence_id=agent.occurrence_id,
                         )
 
                         if recreated:
@@ -3107,7 +3113,10 @@ class DeploymentOrchestrator:
                 # Recreate container with new image
                 logger.info(f"Recreating stopped agent {agent.agent_id} with new image...")
                 recreated = await self._recreate_agent_container(
-                    agent.agent_id, agent.server_id, notification.agent_image
+                    agent.agent_id,
+                    agent.server_id,
+                    notification.agent_image,
+                    occurrence_id=agent.occurrence_id,
                 )
 
                 if recreated:
