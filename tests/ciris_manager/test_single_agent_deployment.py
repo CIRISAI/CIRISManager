@@ -348,3 +348,127 @@ class TestSingleAgentDeployment:
         )
         # Should assume update needed when can't check
         assert needs_update
+
+
+class TestDeploymentMutexHeldOnlyForTheSwap:
+    """The global deployment mutex must not be held across WORK-state verification.
+
+    Regression test for CIRISManager#19. `_execute_single_agent_deployment`
+    always cleared `current_deployment` in a `finally`, so the mutex was
+    released eventually - but only after waiting up to
+    DEFAULT_WAIT_FOR_WORK_MINUTES (15) for the agent to reach WORK. That wait
+    is verification: the container swap has already happened and nothing
+    shared is mutated.
+
+    In production every agent was stuck short of WORK, so the wait ran to its
+    full timeout on each deployment. Agents were healthy on the new image
+    within ~2 minutes and then blocked every other deployment for 13 more,
+    which forced operators to cancel already-successful deployments purely to
+    reclaim the mutex - recording five successful rollouts as operator
+    cancellations in the audit trail.
+    """
+
+    @pytest.fixture
+    def test_agent(self):
+        return AgentInfo(
+            agent_id="lock-test-agent",
+            agent_name="Lock Test Agent",
+            container_name="ciris-lock-test-agent",
+            api_port=8080,
+            status="running",
+            image="ghcr.io/cirisai/ciris-agent:2.9.25-stable",
+            server_id="main",
+        )
+
+    @pytest.mark.asyncio
+    async def test_mutex_is_free_while_waiting_for_work_state(self, orchestrator, test_agent):
+        """The mutex is released before the WORK wait, not after it."""
+        notification = UpdateNotification(
+            agent_image="ghcr.io/cirisai/ciris-agent:2.9.26-stable",
+            message="mutex scope test",
+            strategy="docker",
+        )
+
+        deployment_id = str(uuid4())
+        orchestrator.deployments[deployment_id] = DeploymentStatus(
+            deployment_id=deployment_id,
+            agents_total=1,
+            agents_updated=0,
+            agents_deferred=0,
+            agents_failed=0,
+            started_at=datetime.now(timezone.utc).isoformat(),
+            staged_at=None,
+            completed_at=None,
+            status="in_progress",
+            message="mutex scope test",
+            canary_phase=None,
+        )
+        orchestrator.current_deployment = deployment_id
+
+        observed = {}
+
+        async def capture_then_succeed(*args, **kwargs):
+            # Sampled at the moment verification begins - this is the window
+            # that used to stay locked for up to 15 minutes.
+            observed["locked_during_wait"] = orchestrator.current_deployment
+            return True, {}
+
+        orchestrator._update_single_agent = AsyncMock(
+            return_value=AgentUpdateResponse(
+                agent_id=test_agent.agent_id,
+                decision="accept",
+                reason="Container recreated with new image",
+                ready_at=None,
+            )
+        )
+        orchestrator._check_canary_group_health = AsyncMock(side_effect=capture_then_succeed)
+
+        await orchestrator._execute_single_agent_deployment(deployment_id, notification, test_agent)
+
+        assert observed["locked_during_wait"] is None, (
+            "deployment mutex was still held while waiting for WORK state; "
+            "a concurrent deployment would be rejected for up to 15 minutes "
+            "after this agent was already healthy on the new image"
+        )
+        assert orchestrator.current_deployment is None
+        assert orchestrator.deployments[deployment_id].status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_mutex_released_even_when_verification_fails(self, orchestrator, test_agent):
+        """A failed verification must not strand the mutex either."""
+        notification = UpdateNotification(
+            agent_image="ghcr.io/cirisai/ciris-agent:2.9.26-stable",
+            message="mutex scope test - failure path",
+            strategy="docker",
+        )
+
+        deployment_id = str(uuid4())
+        orchestrator.deployments[deployment_id] = DeploymentStatus(
+            deployment_id=deployment_id,
+            agents_total=1,
+            agents_updated=0,
+            agents_deferred=0,
+            agents_failed=0,
+            started_at=datetime.now(timezone.utc).isoformat(),
+            staged_at=None,
+            completed_at=None,
+            status="in_progress",
+            message="mutex scope test - failure path",
+            canary_phase=None,
+        )
+        orchestrator.current_deployment = deployment_id
+
+        orchestrator._update_single_agent = AsyncMock(
+            return_value=AgentUpdateResponse(
+                agent_id=test_agent.agent_id,
+                decision="accept",
+                reason="Container recreated with new image",
+                ready_at=None,
+            )
+        )
+        orchestrator._check_canary_group_health = AsyncMock(return_value=(False, {}))
+
+        await orchestrator._execute_single_agent_deployment(deployment_id, notification, test_agent)
+
+        assert orchestrator.current_deployment is None
+        assert orchestrator.deployments[deployment_id].status == "failed"
