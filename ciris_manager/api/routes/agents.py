@@ -16,6 +16,7 @@ from fastapi.responses import PlainTextResponse
 
 from ciris_manager.models import CreateAgentRequest
 from ciris_manager.utils.compose_command import compose_cmd
+from ciris_manager.utils.naming import container_name
 from ciris_manager.utils.log_sanitizer import sanitize_agent_id
 
 from ..rate_limit import create_limit
@@ -271,6 +272,27 @@ async def get_agents_by_deployment(
     return {"deployment": deployment, "agents": agent_list, "count": len(agent_list)}
 
 
+def _agent_endpoint(manager: Any, agent: Any) -> str:
+    """Where this agent's API actually answers.
+
+    Only agents on the manager's own host are reachable on localhost. Every
+    other agent is reached over the VPC, so reporting localhost for them hands
+    the operator an address that connects to nothing - or worse, to whatever
+    happens to occupy that port locally.
+    """
+    server_id = getattr(agent, "server_id", None)
+    if server_id:
+        try:
+            server = manager.docker_client.get_server_config(server_id)
+            if not server.is_local and server.vpc_ip:
+                return f"http://{server.vpc_ip}:{agent.port}"
+        except Exception:
+            # An unknown server_id should not stop us answering the request;
+            # fall through to localhost and let the caller see the port.
+            pass
+    return f"http://localhost:{agent.port}"
+
+
 @router.get("/agents/{agent_id}")
 async def get_agent(
     agent_id: str,
@@ -284,9 +306,9 @@ async def get_agent(
     return AgentResponse(
         agent_id=agent.agent_id,
         name=agent.name,
-        container=f"ciris-agent-{agent.agent_id}",
+        container=container_name(agent.agent_id, getattr(agent, "occurrence_id", None)),
         port=agent.port,
-        api_endpoint=f"http://localhost:{agent.port}",
+        api_endpoint=_agent_endpoint(manager, agent),
         template=agent.template,
         status="running",
     )

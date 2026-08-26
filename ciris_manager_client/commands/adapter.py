@@ -43,7 +43,7 @@ class AdapterCommands:
             occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
-                print(f"Fetching adapters for agent '{agent_id}'...")
+                print(f"Fetching adapters for agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.list_adapter_manifests(
                 agent_id, server_id=server_id, occurrence_id=occurrence_id
@@ -105,7 +105,7 @@ class AdapterCommands:
             occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
-                print(f"Fetching adapter types for agent '{agent_id}'...")
+                print(f"Fetching adapter types for agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.list_adapter_types(
                 agent_id, server_id=server_id, occurrence_id=occurrence_id
@@ -152,7 +152,7 @@ class AdapterCommands:
             occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
-                print(f"Fetching adapter '{adapter_id}' on agent '{agent_id}'...")
+                print(f"Fetching adapter '{adapter_id}' on agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.get_adapter(
                 agent_id, adapter_id, server_id=server_id, occurrence_id=occurrence_id
@@ -199,7 +199,10 @@ class AdapterCommands:
             occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
-                print(f"Fetching manifest for '{adapter_type}' on agent '{agent_id}'...")
+                print(
+                    f"Fetching manifest for '{adapter_type}' on agent '{agent_id}'...",
+                    file=sys.stderr,
+                )
 
             result = ctx.client.get_adapter_manifest(
                 agent_id, adapter_type, server_id=server_id, occurrence_id=occurrence_id
@@ -262,7 +265,7 @@ class AdapterCommands:
                     return EXIT_ERROR
 
             if not ctx.quiet:
-                print(f"Loading adapter '{adapter_type}' on agent '{agent_id}'...")
+                print(f"Loading adapter '{adapter_type}' on agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.load_adapter(
                 agent_id,
@@ -438,7 +441,7 @@ class AdapterCommands:
             occurrence_id = getattr(args, "occurrence_id", None)
 
             if not ctx.quiet:
-                print(f"Fetching adapter configurations for agent '{agent_id}'...")
+                print(f"Fetching adapter configurations for agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.get_adapter_configs(
                 agent_id, server_id=server_id, occurrence_id=occurrence_id

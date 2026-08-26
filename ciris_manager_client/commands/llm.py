@@ -44,7 +44,7 @@ class LLMCommands:
             agent_id = args.agent_id
 
             if not ctx.quiet:
-                print(f"Fetching LLM configuration for agent '{agent_id}'...")
+                print(f"Fetching LLM configuration for agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.get_llm_config(
                 agent_id,
@@ -197,7 +197,7 @@ class LLMCommands:
             agent_id = args.agent_id
 
             if not ctx.quiet:
-                print(f"Updating LLM configuration for agent '{agent_id}'...")
+                print(f"Updating LLM configuration for agent '{agent_id}'...", file=sys.stderr)
 
             # Call SDK method
             result = ctx.client.patch_llm_config(
