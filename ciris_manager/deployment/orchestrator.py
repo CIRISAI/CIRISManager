@@ -98,6 +98,12 @@ class DeploymentOrchestrator:
         # Track background tasks to prevent garbage collection
         self._background_tasks: set = set()
 
+        # The running task for each deployment, keyed by id, so a cancellation
+        # can stop the work rather than only annotating the record. Without
+        # this a cancelled canary carried on into its later phases and shut
+        # down agents long after the operator had stopped it.
+        self._deployment_tasks: Dict[str, asyncio.Task] = {}
+
         # Deferred recovery - set during __init__, run on first async operation
         # This avoids calling asyncio.create_task() from synchronous __init__
         self._pending_recovery_deployment: Optional[DeploymentStatus] = None
@@ -462,6 +468,7 @@ class DeploymentOrchestrator:
             )
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
+            self._register_deployment_task(deployment_id, task)
 
             return status
 
@@ -533,7 +540,11 @@ class DeploymentOrchestrator:
             status.message = f"Deployment failed: {str(e)}"
             status.completed_at = datetime.now(timezone.utc).isoformat()
         finally:
-            self.current_deployment = None
+            # Only release the lock if it is still ours. Cancellation clears it
+            # up front, so by the time this runs a newer deployment may already
+            # hold it - and clearing that one would let a third start alongside.
+            if self.current_deployment == deployment_id:
+                self.current_deployment = None
             self._save_state()
 
     async def _agent_needs_update(self, agent: AgentInfo, target_image: str) -> bool:
@@ -711,6 +722,7 @@ class DeploymentOrchestrator:
             )
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
+            self._register_deployment_task(deployment_id, task)
 
             return status
 
@@ -888,6 +900,7 @@ class DeploymentOrchestrator:
             )
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
+            self._register_deployment_task(deployment_id, task)
 
             logger.info(f"Launched staged deployment {deployment_id}")
             return True
@@ -924,6 +937,58 @@ class DeploymentOrchestrator:
         logger.info(f"Rejected staged deployment {deployment_id}: {reason}")
         return True
 
+    async def _recreate_uninterruptible(
+        self,
+        agent_id: str,
+        server_id: Optional[str],
+        image: Optional[str],
+        occurrence_id: Optional[str] = None,
+    ) -> bool:
+        """Recreate a container without letting a cancellation abandon it.
+
+        `_recreate_agent_container` stops the old container, removes it, and
+        only then creates the replacement. Cancelling the deployment inside
+        that window would leave the agent with no container at all - so a
+        cancellation issued to protect agents would be what takes one down.
+
+        The recreate is shielded and, if a cancellation does arrive, awaited to
+        completion before the cancellation is allowed to continue.
+        """
+        task = asyncio.ensure_future(
+            self._recreate_agent_container(agent_id, server_id, image, occurrence_id=occurrence_id)
+        )
+        try:
+            return bool(await asyncio.shield(task))
+        except asyncio.CancelledError:
+            logger.warning(
+                f"Cancellation arrived while recreating {agent_id} - finishing the "
+                "recreate before stopping, so the agent is not left without a container"
+            )
+            await task
+            raise
+
+    def _register_deployment_task(self, deployment_id: str, task: "asyncio.Task") -> None:
+        """Remember the task doing the work, so cancelling can stop it."""
+        self._deployment_tasks[deployment_id] = task
+        task.add_done_callback(lambda _t: self._deployment_tasks.pop(deployment_id, None))
+
+    def _deployment_is_active(self, deployment_id: str) -> bool:
+        """Whether this deployment is still entitled to act on agents.
+
+        Checked immediately before anything irreversible. `Task.cancel()` only
+        takes effect at the next await point, and a group update gathers across
+        every agent in the phase, so cancellation alone cannot be relied on to
+        arrive before the next shutdown request goes out.
+        """
+        deployment = self.deployments.get(deployment_id)
+        if deployment is None:
+            # Entries are never removed from self.deployments, so a cancelled
+            # deployment is always still here to be found. An unknown id cannot
+            # be a cancelled one - it is a caller error, and the KeyError that
+            # follows says so far more usefully than silently declining to act.
+            return True
+        return deployment.status not in ("cancelled", "failed", "completed")
+
     async def cancel_stuck_deployment(
         self, deployment_id: str, reason: str = "Cancelled due to stuck state"
     ) -> bool:
@@ -947,8 +1012,23 @@ class DeploymentOrchestrator:
             self.current_deployment = None
             logger.info(f"Cleared current deployment lock for {deployment_id}")
 
+        # Remember what it was before overwriting: the re-staging branch below
+        # keys on "failed", and setting the status first silently disabled it.
+        previous_status = deployment.status
+
+        # Mark it cancelled BEFORE stopping the task. Anything already past a
+        # cancellation point re-reads this status and declines to act, which is
+        # what actually prevents a late shutdown request - the cancel() below
+        # only lands at the next await.
+        deployment.status = "cancelled"
+
+        task = self._deployment_tasks.pop(deployment_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+            logger.info(f"Cancelled the running task for deployment {deployment_id}")
+
         # If this was a failed deployment, re-stage it as pending for retry
-        if deployment.status == "failed" and deployment.notification:
+        if previous_status == "failed" and deployment.notification:
             # Create a new pending deployment with the same notification
             new_deployment_id = str(uuid4())
             new_status = DeploymentStatus(
@@ -2715,6 +2795,13 @@ class DeploymentOrchestrator:
             notification: Update notification
             agents: Agents to update
         """
+        if not self._deployment_is_active(deployment_id):
+            logger.warning(
+                f"Deployment {deployment_id} is no longer active - skipping update of "
+                f"{len(agents)} agent(s) in this group"
+            )
+            return
+
         status = self.deployments[deployment_id]
         tasks = []
 
@@ -2853,7 +2940,7 @@ class DeploymentOrchestrator:
                     logger.info(f"Recreating container {agent.container_name} with new image...")
 
                     # Use the existing proper recreation method, passing server_id and new image for remote agents
-                    recreated = await self._recreate_agent_container(
+                    recreated = await self._recreate_uninterruptible(
                         agent.agent_id,
                         agent.server_id,
                         notification.agent_image,
@@ -2911,6 +2998,18 @@ class DeploymentOrchestrator:
                         agent_id=agent.agent_id,
                         decision="reject",
                         reason=f"Authentication failed: {str(e)}",
+                        ready_at=None,
+                    )
+
+                if not self._deployment_is_active(deployment_id):
+                    logger.warning(
+                        f"Deployment {deployment_id} was stopped before agent "
+                        f"{agent.agent_id} was asked to shut down - not asking"
+                    )
+                    return AgentUpdateResponse(
+                        agent_id=agent.agent_id,
+                        decision="reject",
+                        reason="Deployment cancelled before shutdown was requested",
                         ready_at=None,
                     )
 
@@ -2988,7 +3087,7 @@ class DeploymentOrchestrator:
                         logger.info(
                             f"Container {agent.container_name} stopped, recreating with new image..."
                         )
-                        recreated = await self._recreate_agent_container(
+                        recreated = await self._recreate_uninterruptible(
                             agent.agent_id,
                             agent.server_id,
                             notification.agent_image,
@@ -4565,11 +4664,15 @@ class DeploymentOrchestrator:
 
     async def cancel_deployment(self, deployment_id: str) -> bool:
         """
-        Cancel a deployment (wrapper for pause_deployment).
+        Cancel a deployment.
 
-        This is for v2 API compatibility.
+        This is for v2 API compatibility. It used to delegate to
+        `pause_deployment`, which left the task running under a "paused"
+        status - a status no cancellation check treats as terminal, so
+        DELETE /deployments/{id} went on updating agents exactly as the
+        uncancellable canary in #24 did.
         """
-        return await self.pause_deployment(deployment_id)
+        return await self.cancel_stuck_deployment(deployment_id, reason="Cancelled via API")
 
     async def launch_deployment(self, deployment_id: str) -> bool:
         """
