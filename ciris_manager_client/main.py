@@ -86,7 +86,7 @@ def load_token() -> Optional[str]:
         Token string if found, None otherwise
     """
     import json
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     # Try environment variable first
     token = os.environ.get("CIRIS_MANAGER_TOKEN")
@@ -99,13 +99,41 @@ def load_token() -> Optional[str]:
         try:
             with open(device_token_file) as f:
                 data: Dict[str, Any] = json.load(f)
-            # Check expiry
+
+            # Compare in UTC, tolerating a naive or an offset-aware timestamp.
+            # Mixing the two raises TypeError, which used to be swallowed
+            # below and reported as "no token at all".
             expires_at = datetime.fromisoformat(data["expires_at"])
-            if datetime.utcnow() < expires_at:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+
+            if now < expires_at:
                 token_value = data.get("token")
                 return cast(Optional[str], token_value)
-        except Exception:
-            pass
+
+            # Expired. Say so, with the remedy - an expired session used to
+            # surface as an empty result or an opaque 401 several calls later,
+            # which reads like the server is broken rather than the session.
+            age = (now - expires_at).total_seconds() / 3600
+            print(
+                f"Session expired {age:.1f}h ago"
+                f"{' for ' + data['email'] if data.get('email') else ''}"
+                f" (expired {expires_at.isoformat()}).\n"
+                "Run 'ciris-manager-client auth login' to sign in again.",
+                file=sys.stderr,
+            )
+            return None
+        except (KeyError, ValueError, TypeError) as e:
+            # A malformed or unreadable token file is a real condition and
+            # should not masquerade as "not signed in".
+            print(
+                f"Ignoring unreadable token file {device_token_file}: {e}\n"
+                "Run 'ciris-manager-client auth login' to sign in again.",
+                file=sys.stderr,
+            )
+        except OSError as e:
+            print(f"Cannot read token file {device_token_file}: {e}", file=sys.stderr)
 
     # Try legacy token file
     token_file = Path.home() / ".manager_token"
