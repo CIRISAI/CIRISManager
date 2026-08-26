@@ -999,18 +999,18 @@ async def stop_agent(
                 "container": container_name,
             }
         except docker.errors.NotFound:
-            try:
-                container = client.containers.get(f"ciris-agent-{agent_id}")
-                container.stop(timeout=10)
-                return {
-                    "status": "success",
-                    "agent_id": agent_id,
-                    "message": f"Agent {agent_id} has been stopped",
-                }
-            except docker.errors.NotFound:
-                raise HTTPException(
-                    status_code=404, detail=f"Container for agent '{agent_id}' not found"
-                )
+            # There was a second attempt here against `ciris-agent-{agent_id}`.
+            # No container has ever carried that prefix, so it could only ever
+            # raise NotFound again - a fallback that catches nothing, while
+            # replacing the useful failure ("we looked for X on server Y and it
+            # was not there") with a generic 404.
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Container '{container_name}' for agent '{agent_id}' "
+                    f"not found on server '{discovered_agent.server_id}'"
+                ),
+            )
 
     except HTTPException:
         raise
