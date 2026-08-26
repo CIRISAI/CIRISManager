@@ -160,3 +160,57 @@ class TestCancelStopsTheTask:
         await task
         await asyncio.sleep(0)
         assert did not in orchestrator._deployment_tasks
+
+
+class TestReviewFindings:
+    """Three gaps found in review of the first cut of this fix.
+
+    The first is the important one: the outage came from a *staged* canary
+    launched via `deployment start`, and that path never registered its task -
+    so the fix would not have covered the case that motivated it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_staged_launch_registers_its_task(self, orchestrator, monkeypatch):
+        """`launch_staged_deployment` must register, or cancel finds nothing."""
+        import inspect
+        from ciris_manager.deployment import orchestrator as orch_mod
+
+        src = inspect.getsource(orch_mod.DeploymentOrchestrator.launch_staged_deployment)
+        assert "_register_deployment_task" in src, (
+            "staged deployments launch a task that cancellation cannot find - "
+            "this is the path that shut down two agents after being cancelled"
+        )
+
+    @pytest.mark.asyncio
+    async def test_cancelled_task_does_not_clear_a_newer_lock(self, orchestrator):
+        """Cancellation clears the lock up front; by the time the cancelled
+        task's `finally` runs, a newer deployment may already hold it."""
+        old_id = _deployment(orchestrator)
+        new_id = _deployment(orchestrator)
+
+        orchestrator._update_single_agent = AsyncMock(side_effect=asyncio.CancelledError())
+        orchestrator.current_deployment = new_id
+
+        notification = UpdateNotification(
+            agent_image="img:2.9.26-stable", message="m", strategy="docker"
+        )
+        with pytest.raises(asyncio.CancelledError):
+            await orchestrator._execute_single_agent_deployment(old_id, notification, _agent())
+
+        assert (
+            orchestrator.current_deployment == new_id
+        ), "a cancelled deployment released a lock belonging to a newer one"
+
+    @pytest.mark.asyncio
+    async def test_cancelled_deployment_writes_no_shutdown_audit(self, orchestrator):
+        """A shutdown that never happened must not appear in the audit trail."""
+        import inspect
+        from ciris_manager.deployment import orchestrator as orch_mod
+
+        src = inspect.getsource(orch_mod.DeploymentOrchestrator._update_single_agent)
+        guard = src.index("was stopped before agent")
+        token_audit = src.index("audit_service_token_use(")
+        requested = src.index('action="shutdown_requested"')
+        assert guard < token_audit, "token-use audit written before the cancel check"
+        assert guard < requested, "shutdown_requested audit written before the cancel check"

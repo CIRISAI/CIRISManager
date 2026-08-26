@@ -540,7 +540,11 @@ class DeploymentOrchestrator:
             status.message = f"Deployment failed: {str(e)}"
             status.completed_at = datetime.now(timezone.utc).isoformat()
         finally:
-            self.current_deployment = None
+            # Only release the lock if it is still ours. Cancellation clears it
+            # up front, so by the time this runs a newer deployment may already
+            # hold it - and clearing that one would let a third start alongside.
+            if self.current_deployment == deployment_id:
+                self.current_deployment = None
             self._save_state()
 
     async def _agent_needs_update(self, agent: AgentInfo, target_image: str) -> bool:
@@ -896,6 +900,7 @@ class DeploymentOrchestrator:
             )
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
+            self._register_deployment_task(deployment_id, task)
 
             logger.info(f"Launched staged deployment {deployment_id}")
             return True
@@ -2966,6 +2971,18 @@ class DeploymentOrchestrator:
                         ready_at=None,
                     )
 
+                if not self._deployment_is_active(deployment_id):
+                    logger.warning(
+                        f"Deployment {deployment_id} was stopped before agent "
+                        f"{agent.agent_id} was asked to shut down - not asking"
+                    )
+                    return AgentUpdateResponse(
+                        agent_id=agent.agent_id,
+                        decision="reject",
+                        reason="Deployment cancelled before shutdown was requested",
+                        ready_at=None,
+                    )
+
                 # Audit token use if using service token
                 if "service:" in headers.get("Authorization", ""):
                     audit_service_token_use(
@@ -2990,18 +3007,6 @@ class DeploymentOrchestrator:
                     action="shutdown_requested",
                     details={"agent_id": agent.agent_id, "reason": shutdown_payload["reason"]},
                 )
-
-                if not self._deployment_is_active(deployment_id):
-                    logger.warning(
-                        f"Deployment {deployment_id} was stopped before agent "
-                        f"{agent.agent_id} was asked to shut down - not asking"
-                    )
-                    return AgentUpdateResponse(
-                        agent_id=agent.agent_id,
-                        decision="reject",
-                        reason="Deployment cancelled before shutdown was requested",
-                        ready_at=None,
-                    )
 
                 response = await client.post(
                     f"{agent_url}/v1/system/shutdown",
