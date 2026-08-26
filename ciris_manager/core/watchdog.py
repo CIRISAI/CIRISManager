@@ -26,6 +26,8 @@ monitoring an empty set.
 
 import asyncio
 import logging
+
+from ciris_manager.utils.naming import container_name
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
@@ -111,14 +113,10 @@ class CrashLoopWatchdog:
     def _container_name(agent: Any) -> str:
         """Derive a container name from a registered agent.
 
-        Mirrors the compose generator: `ciris-{agent_id}`, with the occurrence
-        id appended for non-default occurrences (e.g. the second scout).
+        Delegates to the shared definition so the watchdog cannot drift from
+        what the compose generator writes and the API reports.
         """
-        agent_id = getattr(agent, "agent_id", "")
-        occurrence = getattr(agent, "occurrence_id", None)
-        if occurrence and occurrence != "default":
-            return f"ciris-{agent_id}-{occurrence}"
-        return f"ciris-{agent_id}"
+        return container_name(getattr(agent, "agent_id", ""), getattr(agent, "occurrence_id", None))
 
     async def start(self) -> None:
         """Start the watchdog monitoring loop."""

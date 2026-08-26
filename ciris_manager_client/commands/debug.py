@@ -102,7 +102,7 @@ class DebugCommands:
         occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
-            print(f"Getting task {task_id} for agent: {agent_id}")
+            print(f"Getting task {task_id} for agent: {agent_id}", file=sys.stderr)
 
         try:
             params = {}
@@ -253,7 +253,7 @@ class DebugCommands:
         occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
-            print(f"Getting thought {thought_id} for agent: {agent_id}")
+            print(f"Getting thought {thought_id} for agent: {agent_id}", file=sys.stderr)
 
         try:
             params = {}
@@ -412,7 +412,7 @@ class DebugCommands:
         occurrence_id = getattr(args, "occurrence_id", None)
 
         if not ctx.quiet:
-            print(f"Getting schema for agent: {agent_id}")
+            print(f"Getting schema for agent: {agent_id}", file=sys.stderr)
 
         try:
             params = {}

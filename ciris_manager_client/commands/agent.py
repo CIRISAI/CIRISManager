@@ -40,7 +40,7 @@ class AgentCommands:
         """
         try:
             if not ctx.quiet:
-                print("Fetching agents...")
+                print("Fetching agents...", file=sys.stderr)
 
             # Get all agents
             agents = ctx.client.list_agents()
@@ -109,7 +109,7 @@ class AgentCommands:
             server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
-                print(f"Fetching agent '{agent_id}'...")
+                print(f"Fetching agent '{agent_id}'...", file=sys.stderr)
 
             agent = ctx.client.get_agent(agent_id, occurrence_id=occurrence_id, server_id=server_id)
 
@@ -325,7 +325,7 @@ class AgentCommands:
             server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
-                print(f"Starting agent '{agent_id}'...")
+                print(f"Starting agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.start_agent(
                 agent_id, occurrence_id=occurrence_id, server_id=server_id
@@ -375,7 +375,7 @@ class AgentCommands:
             server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
-                print(f"Stopping agent '{agent_id}'...")
+                print(f"Stopping agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.stop_agent(
                 agent_id, occurrence_id=occurrence_id, server_id=server_id
@@ -425,7 +425,7 @@ class AgentCommands:
             server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
-                print(f"Restarting agent '{agent_id}'...")
+                print(f"Restarting agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.restart_agent(
                 agent_id, occurrence_id=occurrence_id, server_id=server_id
@@ -572,7 +572,7 @@ class AgentCommands:
                 )
 
             if not ctx.quiet:
-                print(f"Fetching logs for agent '{agent_id}'...")
+                print(f"Fetching logs for agent '{agent_id}'...", file=sys.stderr)
 
             logs = ctx.client.get_agent_logs(
                 agent_id,
@@ -631,7 +631,7 @@ class AgentCommands:
                 agent_image = f"ghcr.io/cirisai/ciris-agent:{clean_version}"
 
             if not ctx.quiet:
-                print(f"Deploying {agent_image} to agent '{agent_id}'...")
+                print(f"Deploying {agent_image} to agent '{agent_id}'...", file=sys.stderr)
                 print(f"Strategy: {strategy}")
                 print(f"Message: {message}")
 
@@ -694,7 +694,7 @@ class AgentCommands:
             if agent_id:
                 # Show version for specific agent
                 if not ctx.quiet:
-                    print(f"Fetching version info for agent '{agent_id}'...")
+                    print(f"Fetching version info for agent '{agent_id}'...", file=sys.stderr)
 
                 agent = ctx.client.get_agent(agent_id)
 
@@ -715,7 +715,7 @@ class AgentCommands:
             else:
                 # Show version for all agents
                 if not ctx.quiet:
-                    print("Fetching version info for all agents...")
+                    print("Fetching version info for all agents...", file=sys.stderr)
 
                 agents = ctx.client.list_agents()
 
@@ -796,7 +796,7 @@ class AgentCommands:
             # If neither --enable nor --disable, just show current status
             if not enable and not disable:
                 if not ctx.quiet:
-                    print(f"Fetching maintenance status for agent '{agent_id}'...")
+                    print(f"Fetching maintenance status for agent '{agent_id}'...", file=sys.stderr)
 
                 result = ctx.client.get_maintenance_status(
                     agent_id, occurrence_id=occurrence_id, server_id=server_id
@@ -1008,7 +1008,7 @@ class AgentCommands:
             server_id = getattr(args, "server_id", None)
 
             if not ctx.quiet:
-                print(f"Fetching access details for agent '{agent_id}'...")
+                print(f"Fetching access details for agent '{agent_id}'...", file=sys.stderr)
 
             result = ctx.client.get_agent_access(
                 agent_id, occurrence_id=occurrence_id, server_id=server_id

@@ -44,7 +44,7 @@ class DeploymentCommands:
             if deployment_id:
                 # Specific deployment requested
                 if not ctx.quiet:
-                    print(f"Fetching status for deployment {deployment_id}...")
+                    print(f"Fetching status for deployment {deployment_id}...", file=sys.stderr)
                 status = ctx.client.get_deployment_status(deployment_id)
                 if not status:
                     print(f"Deployment {deployment_id} not found", file=sys.stderr)
@@ -53,7 +53,7 @@ class DeploymentCommands:
             else:
                 # Show all pending deployments
                 if not ctx.quiet:
-                    print("Fetching deployment status...")
+                    print("Fetching deployment status...", file=sys.stderr)
 
                 pending = ctx.client.get_pending_deployments()
 
@@ -167,7 +167,7 @@ class DeploymentCommands:
             reason = getattr(args, "reason", "Cancelled via CLI")
 
             if not ctx.quiet:
-                print(f"Cancelling deployment {deployment_id}...")
+                print(f"Cancelling deployment {deployment_id}...", file=sys.stderr)
 
             # Try reject first (for pending deployments)
             try:
@@ -222,7 +222,7 @@ class DeploymentCommands:
             deployment_id = args.deployment_id
 
             if not ctx.quiet:
-                print(f"Starting deployment {deployment_id}...")
+                print(f"Starting deployment {deployment_id}...", file=sys.stderr)
 
             result = ctx.client.start_deployment(deployment_id)
 

@@ -479,6 +479,18 @@ class DeploymentOrchestrator:
             if update_response.decision == "accept":
                 status.agents_updated = 1
 
+                # The swap is done and the container is up. Everything below is
+                # verification, which mutates no shared state - so release the
+                # global deployment mutex here instead of in the finally.
+                #
+                # Holding it through the wait serialises every other agent for up
+                # to DEFAULT_WAIT_FOR_WORK_MINUTES. When agents were stuck short of
+                # WORK, that ran to the full 15 minutes on every deployment, and a
+                # five-agent rollout could only proceed by cancelling deployments
+                # that had already succeeded, purely to reclaim the mutex.
+                self.current_deployment = None
+                self._save_state()
+
                 # Wait for agent to reach WORK state
                 logger.info(f"Waiting for agent {agent.agent_id} to reach WORK state")
                 success, results = await self._check_canary_group_health(
