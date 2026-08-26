@@ -937,6 +937,36 @@ class DeploymentOrchestrator:
         logger.info(f"Rejected staged deployment {deployment_id}: {reason}")
         return True
 
+    async def _recreate_uninterruptible(
+        self,
+        agent_id: str,
+        server_id: Optional[str],
+        image: Optional[str],
+        occurrence_id: Optional[str] = None,
+    ) -> bool:
+        """Recreate a container without letting a cancellation abandon it.
+
+        `_recreate_agent_container` stops the old container, removes it, and
+        only then creates the replacement. Cancelling the deployment inside
+        that window would leave the agent with no container at all - so a
+        cancellation issued to protect agents would be what takes one down.
+
+        The recreate is shielded and, if a cancellation does arrive, awaited to
+        completion before the cancellation is allowed to continue.
+        """
+        task = asyncio.ensure_future(
+            self._recreate_agent_container(agent_id, server_id, image, occurrence_id=occurrence_id)
+        )
+        try:
+            return bool(await asyncio.shield(task))
+        except asyncio.CancelledError:
+            logger.warning(
+                f"Cancellation arrived while recreating {agent_id} - finishing the "
+                "recreate before stopping, so the agent is not left without a container"
+            )
+            await task
+            raise
+
     def _register_deployment_task(self, deployment_id: str, task: "asyncio.Task") -> None:
         """Remember the task doing the work, so cancelling can stop it."""
         self._deployment_tasks[deployment_id] = task
@@ -2910,7 +2940,7 @@ class DeploymentOrchestrator:
                     logger.info(f"Recreating container {agent.container_name} with new image...")
 
                     # Use the existing proper recreation method, passing server_id and new image for remote agents
-                    recreated = await self._recreate_agent_container(
+                    recreated = await self._recreate_uninterruptible(
                         agent.agent_id,
                         agent.server_id,
                         notification.agent_image,
@@ -3057,7 +3087,7 @@ class DeploymentOrchestrator:
                         logger.info(
                             f"Container {agent.container_name} stopped, recreating with new image..."
                         )
-                        recreated = await self._recreate_agent_container(
+                        recreated = await self._recreate_uninterruptible(
                             agent.agent_id,
                             agent.server_id,
                             notification.agent_image,
@@ -4634,11 +4664,15 @@ class DeploymentOrchestrator:
 
     async def cancel_deployment(self, deployment_id: str) -> bool:
         """
-        Cancel a deployment (wrapper for pause_deployment).
+        Cancel a deployment.
 
-        This is for v2 API compatibility.
+        This is for v2 API compatibility. It used to delegate to
+        `pause_deployment`, which left the task running under a "paused"
+        status - a status no cancellation check treats as terminal, so
+        DELETE /deployments/{id} went on updating agents exactly as the
+        uncancellable canary in #24 did.
         """
-        return await self.pause_deployment(deployment_id)
+        return await self.cancel_stuck_deployment(deployment_id, reason="Cancelled via API")
 
     async def launch_deployment(self, deployment_id: str) -> bool:
         """

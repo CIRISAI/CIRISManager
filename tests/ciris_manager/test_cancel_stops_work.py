@@ -214,3 +214,65 @@ class TestReviewFindings:
         requested = src.index('action="shutdown_requested"')
         assert guard < token_audit, "token-use audit written before the cancel check"
         assert guard < requested, "shutdown_requested audit written before the cancel check"
+
+
+class TestCancellationDoesNotStrandAnAgent:
+    """A cancellation issued to protect agents must not take one down.
+
+    `_recreate_agent_container` stops the old container, removes it, then
+    creates the replacement. Cancelling inside that window would leave the
+    agent with no container at all.
+    """
+
+    @pytest.mark.asyncio
+    async def test_recreate_completes_even_if_cancelled_midway(self, orchestrator):
+        started = asyncio.Event()
+        finished = {"value": False}
+
+        async def slow_recreate(*args, **kwargs):
+            started.set()
+            await asyncio.sleep(0.05)
+            finished["value"] = True
+            return True
+
+        orchestrator._recreate_agent_container = slow_recreate
+
+        task = asyncio.create_task(
+            orchestrator._recreate_uninterruptible("datum", "main", "img:2.9.38-stable")
+        )
+        await started.wait()
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert (
+            finished["value"] is True
+        ), "the recreate was abandoned midway; the agent would be left with no container"
+
+    @pytest.mark.asyncio
+    async def test_uncancelled_recreate_returns_its_result(self, orchestrator):
+        orchestrator._recreate_agent_container = AsyncMock(return_value=True)
+        assert (
+            await orchestrator._recreate_uninterruptible("datum", "main", "img:2.9.38-stable")
+            is True
+        )
+
+    @pytest.mark.asyncio
+    async def test_failed_recreate_is_reported_as_false(self, orchestrator):
+        orchestrator._recreate_agent_container = AsyncMock(return_value=False)
+        assert (
+            await orchestrator._recreate_uninterruptible("datum", "main", "img:2.9.38-stable")
+            is False
+        )
+
+
+class TestV2CancelActuallyCancels:
+    @pytest.mark.asyncio
+    async def test_cancel_deployment_does_not_merely_pause(self, orchestrator):
+        """DELETE /deployments/{id} used to pause: the task kept running under
+        a 'paused' status, which no cancellation check treats as terminal."""
+        did = _deployment(orchestrator)
+        await orchestrator.cancel_deployment(did)
+        assert orchestrator.deployments[did].status == "cancelled"
+        assert orchestrator._deployment_is_active(did) is False
