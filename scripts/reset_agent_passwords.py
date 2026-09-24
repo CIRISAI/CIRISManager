@@ -1,223 +1,154 @@
 #!/usr/bin/env python3
 """
-Reset agent admin passwords to default to allow token regeneration.
+Reset a stopped agent's ROOT `admin` password.
 
-This script connects to agents that have changed passwords,
-resets them to default, gets new tokens, and optionally changes passwords back.
+Run on the manager host, from the manager's install:
+
+    cd /opt/ciris-manager
+    ciris-manager-client agent stop datum                      # must be stopped
+    ./venv/bin/python scripts/reset_agent_passwords.py datum   # dry run: shows the row
+    ./venv/bin/python scripts/reset_agent_passwords.py datum --apply
+    ciris-manager-client agent start datum
+
+Dry run is the default. It reports which ROOT row would change and writes
+nothing. `--apply` writes a new hash, verifies it here against ciris-server's
+own algorithm, saves the previous hash to a 0600 backup file, and prints the
+new password once.
+
+See ciris_manager/admin_password_reset.py for why each step is the way it is.
+The previous version of this script assumed a restart restores a default
+password, used the local Docker socket, and targeted agents that no longer
+exist; it could not work.
 """
 
-import asyncio
+import argparse
+import getpass
 import json
-import logging
+import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
-import httpx
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Add the project root to Python path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from ciris_manager.admin_password_reset import (  # noqa: E402
+    ResetFailed,
+    ResetRefused,
+    generate_password,
+    reset_admin_password,
+)
+from ciris_manager.agent_registry import AgentRegistry  # noqa: E402
+from ciris_manager.config.settings import CIRISManagerConfig  # noqa: E402
+from ciris_manager.multi_server_docker import MultiServerDockerClient  # noqa: E402
+from ciris_manager.utils.naming import container_name  # noqa: E402
 
-from ciris_manager.crypto import get_token_encryption
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
-
-class AgentPasswordManager:
-    """Manages agent password resets and token regeneration."""
-
-    def __init__(
-        self, metadata_path: Path = Path("/opt/ciris/agents/metadata.json"), dry_run: bool = False
-    ):
-        self.metadata_path = metadata_path
-        self.dry_run = dry_run
-        self.agents_to_fix = [
-            "datum",
-            "echo-core-jm2jy2",
-            "echo-speculative-4fc6ru",
-            "sage-2wnuc8",
-            "scout-u7e9s3",
-        ]
-
-    async def reset_agent_password(self, agent_id: str, port: int) -> bool:
-        """Reset agent admin password to default via API."""
-        try:
-            # This approach won't work since we don't know current passwords
-            logger.error(f"Cannot reset password for {agent_id} - need admin access")
-            return False
-
-        except Exception as e:
-            logger.error(f"Failed to reset password for {agent_id}: {e}")
-            return False
-
-    async def restart_agent_container(self, agent_id: str) -> bool:
-        """Restart agent container to reset password to default."""
-        try:
-            import docker
-
-            client = docker.from_env()
-
-            # Find container name pattern
-            container_name = f"ciris-{agent_id}"
-            if agent_id == "echo-core-jm2jy2":
-                container_name = "ciris-echo-core-jm2jy2"
-            elif agent_id == "echo-speculative-4fc6ru":
-                container_name = "ciris-echo-speculative-4fc6ru"
-            elif agent_id == "sage-2wnuc8":
-                container_name = "ciris-sage-2wnuc8"
-            elif agent_id == "scout-u7e9s3":
-                container_name = "ciris-scout-u7e9s3"
-
-            if self.dry_run:
-                logger.info(f"DRY RUN: Would restart container {container_name}")
-                return True
-
-            container = client.containers.get(container_name)
-            container.restart()
-            logger.info(f"Restarted container {container_name}")
-
-            # Wait for container to be ready
-            await asyncio.sleep(10)
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to restart container for {agent_id}: {e}")
-            return False
-
-    async def get_fresh_token(self, agent_id: str, port: int) -> Optional[str]:
-        """Get fresh service token after password reset."""
-        try:
-            login_url = f"http://localhost:{port}/v1/auth/login"
-            login_data = {
-                "username": "admin",
-                "password": "ciris_admin_password",  # Default password after restart
-            }
-
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                logger.info(f"Logging into {agent_id} on port {port}")
-                response = await client.post(login_url, json=login_data)
-
-                if response.status_code != 200:
-                    logger.error(
-                        f"Login failed for {agent_id}: {response.status_code} {response.text}"
-                    )
-                    return None
-
-                login_result = response.json()
-                access_token = login_result.get("access_token")
-                if not access_token:
-                    logger.error(f"No access token in login response for {agent_id}")
-                    return None
-
-                # Use access token as service token (same as our working script)
-                logger.info(f"Got fresh token for {agent_id}")
-                return access_token
-
-        except Exception as e:
-            logger.error(f"Failed to get fresh token for {agent_id}: {e}")
-            return None
-
-    async def fix_all_agents(self):
-        """Fix all broken agents by restarting containers and getting fresh tokens."""
-
-        with open(self.metadata_path) as f:
-            metadata = json.load(f)
-
-        token_encryption = get_token_encryption()
-        success_count = 0
-
-        for agent_id in self.agents_to_fix:
-            if agent_id not in metadata["agents"]:
-                logger.warning(f"Agent {agent_id} not found in metadata")
-                continue
-
-            agent_data = metadata["agents"][agent_id]
-            port = agent_data.get("port")
-            if not port:
-                logger.warning(f"No port found for {agent_id}")
-                continue
-
-            logger.info(f"Processing {agent_id}...")
-
-            # Step 1: Restart container to reset password
-            if not await self.restart_agent_container(agent_id):
-                continue
-
-            # Step 2: Get fresh token with default password
-            fresh_token = await self.get_fresh_token(agent_id, port)
-            if not fresh_token:
-                continue
-
-            # Step 3: Encrypt and store token
-            try:
-                encrypted_token = token_encryption.encrypt_token(fresh_token)
-
-                if not self.dry_run:
-                    agent_data["service_token"] = encrypted_token
-
-                logger.info(f"Successfully updated token for {agent_id}")
-                success_count += 1
-
-            except Exception as e:
-                logger.error(f"Failed to encrypt token for {agent_id}: {e}")
-                continue
-
-        if success_count > 0 and not self.dry_run:
-            # Create backup and save
-            backup_path = self.metadata_path.with_suffix(".json.backup-password-reset")
-            import shutil
-
-            shutil.copy2(self.metadata_path, backup_path)
-            logger.info(f"Created backup at {backup_path}")
-
-            with open(self.metadata_path, "w") as f:
-                json.dump(metadata, f, indent=2)
-            logger.info("Updated metadata saved")
-
-        logger.info(
-            f"Password reset complete: {success_count}/{len(self.agents_to_fix)} agents fixed"
+def write_backup(backup_dir: Path, agent_key: str, result: dict) -> Path:
+    """Save the previous hash so the change can be reverted."""
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(backup_dir, 0o700)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = backup_dir / f"{agent_key}-{stamp}.json"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(
+            {
+                "agent": agent_key,
+                "wa_id": result.get("wa_id"),
+                "previous_hash": result.get("previous_hash"),
+                "saved_at": stamp,
+            },
+            f,
+            indent=2,
         )
-        return success_count, len(self.agents_to_fix)
+    return path
 
 
-async def main():
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Reset agent passwords and regenerate tokens")
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Reset a stopped agent's ROOT admin password")
+    parser.add_argument("agent_id")
+    parser.add_argument("--server-id", help="Required when the agent id exists on several servers")
+    parser.add_argument("--occurrence-id", help="Occurrence id for multi-occurrence agents")
     parser.add_argument(
-        "--dry-run", action="store_true", help="Show what would be done without making changes"
+        "--apply", action="store_true", help="Write the new hash (default: dry run)"
     )
     parser.add_argument(
-        "--metadata-path",
-        default="/opt/ciris/agents/metadata.json",
-        help="Path to metadata.json file",
+        "--password-stdin",
+        action="store_true",
+        help="Read the new password from stdin instead of generating one",
     )
-
+    parser.add_argument("--config", default="/etc/ciris-manager/config.yml")
+    parser.add_argument("--metadata", default="/opt/ciris/agents/metadata.json")
+    parser.add_argument("--db-path", default="/app/data/ciris_engine.db")
+    parser.add_argument("--backup-dir", default="/opt/ciris/agents/password-reset-backups")
     args = parser.parse_args()
 
-    if args.dry_run:
-        logger.info("DRY RUN MODE - No changes will be made")
+    registry = AgentRegistry(Path(args.metadata))
+    agent = registry.get_agent(
+        args.agent_id, occurrence_id=args.occurrence_id, server_id=args.server_id
+    )
+    if agent is None:
+        print(f"Agent {args.agent_id} not found in {args.metadata}", file=sys.stderr)
+        return 2
+    matches = registry.get_agents_by_agent_id(args.agent_id)
+    if len(matches) > 1 and not args.server_id:
+        print(
+            f"{args.agent_id} exists on {len(matches)} servers; pass --server-id",
+            file=sys.stderr,
+        )
+        return 2
 
-    manager = AgentPasswordManager(metadata_path=Path(args.metadata_path), dry_run=args.dry_run)
+    name = container_name(agent.agent_id, getattr(agent, "occurrence_id", None))
+    config = CIRISManagerConfig.from_file(args.config)
+    docker_client = MultiServerDockerClient(config.servers).get_client(agent.server_id)
+    agent_key = (
+        f"{agent.agent_id}-{getattr(agent, 'occurrence_id', None) or 'default'}-{agent.server_id}"
+    )
 
-    try:
-        success_count, total_count = await manager.fix_all_agents()
-
-        if success_count < total_count:
-            logger.warning("Some agents failed - check logs above")
-            sys.exit(1)
+    password = None
+    if args.apply:
+        if args.password_stdin:
+            password = (
+                sys.stdin.readline().rstrip("\n")
+                if not sys.stdin.isatty()
+                else getpass.getpass("New admin password: ")
+            )
+            if len(password) < 12:
+                print("Password must be at least 12 characters", file=sys.stderr)
+                return 2
         else:
-            logger.info("All agents processed successfully!")
-            if not args.dry_run:
-                logger.info(
-                    "Restart CIRISManager to pick up new tokens: systemctl restart ciris-manager"
-                )
+            password = generate_password()
 
-    except Exception as e:
-        logger.error(f"Password reset failed: {e}")
-        sys.exit(1)
+    print(
+        f"{'APPLY' if args.apply else 'DRY RUN'}: {name} on server {agent.server_id}",
+        file=sys.stderr,
+    )
+    try:
+        result = reset_admin_password(docker_client, name, password, args.apply, args.db_path)
+    except ResetRefused as e:
+        print(f"Refused: {e}", file=sys.stderr)
+        return 3
+    except ResetFailed as e:
+        print(f"FAILED: {e}", file=sys.stderr)
+        return 1
+
+    print(
+        f"  ROOT admin: {result['wa_id']}  ({result['total_rows']} certs in table)", file=sys.stderr
+    )
+    if not args.apply:
+        print("  Nothing written. Re-run with --apply to reset.", file=sys.stderr)
+        return 0
+
+    backup = write_backup(Path(args.backup_dir), agent_key, result)
+    print(f"  Previous hash saved to {backup}", file=sys.stderr)
+    print("  New hash written and verified against ciris-server's algorithm.", file=sys.stderr)
+    if not args.password_stdin:
+        # Shown once, on stdout, so it can be captured without the log noise.
+        print(password)
+        print("  ^ SAVE THIS PASSWORD - it is not stored anywhere.", file=sys.stderr)
+    print(f"  Next: ciris-manager-client agent start {agent.agent_id}", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(main())
