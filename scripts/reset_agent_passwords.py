@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
-Reset a stopped agent's ROOT `admin` password.
+Reset a stopped agent's ROOT `admin` password. BREAK-GLASS, CONSOLE ONLY.
+
+This is deliberately not exposed through ciris-manager-client or the manager
+API. Resetting a ROOT credential should require console access to the manager
+host; offered over the API, it would let any holder of a manager token take
+ROOT on every agent. Day-to-day admin access is an operator's OAuth login, not
+this password - so the password is also deliberately NOT stored in the
+registry. Keep it in a secret store if you need to keep it at all.
 
 Run on the manager host, from the manager's install:
 
