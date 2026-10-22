@@ -157,6 +157,10 @@ int main(int argc, char *argv[]) {
     snprintf(path, sizeof(path), "%s/.secrets", agent_dir);
     if (fix_directory_permissions(path, 0700) != 0) failed = 1;
 
+    // identity directory - 700 (node keys; absent on agents created before it was mounted)
+    snprintf(path, sizeof(path), "%s/identity", agent_dir);
+    if (access(path, F_OK) == 0 && fix_directory_permissions(path, 0700) != 0) failed = 1;
+
     if (failed) {
         fprintf(stderr, "Some permissions could not be fixed\n");
         return 1;
