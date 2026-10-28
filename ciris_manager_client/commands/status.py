@@ -60,10 +60,9 @@ _MANAGER_HOST = "45.76.226.222"
 # more general "llm_service" filter.
 #
 # These MUST be derived from real production logs, not from the failure modes we
-# expect. The 2026-07-30 soak review found every pattern below the divider
-# scoring zero against logs containing thousands of ERROR lines, so `status all`
-# reported "clean" while an agent had been down for three weeks. Any edit here
-# should be checked against tests/ciris_manager_client/fixtures/incidents_sample.log,
+# expect. Patterns written from expectation score zero against logs holding
+# thousands of ERROR lines, and `status all` then reports "clean" while an agent
+# is down. Any edit here should be checked against tests/ciris_manager_client/fixtures/incidents_sample.log,
 # which is a verbatim capture from production.
 _INCIDENT_PATTERNS: List[Tuple[str, str]] = [
     ("All LLM services failed", "llm_total_fail"),
@@ -76,8 +75,8 @@ _INCIDENT_PATTERNS: List[Tuple[str, str]] = [
     ("RATE LIMIT", "rate_limit"),
     ("ciris_secondary error", "secondary_err"),
     ("ciris_primary error", "primary_err"),
-    # --- observed in production 2026-07-30; all of these previously fell into
-    # `other` or matched nothing at all ---
+    # --- observed in production logs; without these they fall into `other`
+    # or match nothing at all ---
     # Persistence: a scheduled task outliving its parent row retries forever.
     ("FOREIGN KEY constraint failed", "persistence_fk_fail"),
     ("Failed to trigger task", "scheduler_task_fail"),
@@ -479,10 +478,9 @@ def _gather_security(ctx: Any) -> Dict[str, Any]:
     return sections
 
 
-# Public endpoints probed end-to-end. Every internal signal read green through
-# the 46-day agents.ciris.ai outage in 2026-06/07 because nothing ever tested
-# the path a real client uses: expired origin cert -> Cloudflare 526. Health
-# has to be measured where the user sits, not inside the container.
+# Public endpoints probed end-to-end. An expired origin cert makes Cloudflare
+# return 526 to every real client while every internal signal reads green, so
+# health has to be measured where the user sits, not inside the container.
 _PUBLIC_ENDPOINTS: List[Tuple[str, str, int]] = [
     ("manager_api", "https://agents.ciris.ai/manager/v1/health", 200),
     ("manager_gui", "https://agents.ciris.ai/", 200),
@@ -493,8 +491,8 @@ _PUBLIC_ENDPOINTS: List[Tuple[str, str, int]] = [
 #
 # These MUST be checked against the origin IP, not the public hostname: the
 # public name resolves to Cloudflare, whose edge cert auto-renews and is never
-# the thing that breaks. The 46-day outage was an expired *origin* cert behind
-# a perfectly healthy edge cert. Both scout origins are listed separately
+# the thing that breaks. The failure to catch is an expired *origin* cert
+# behind a perfectly healthy edge cert. Both scout origins are listed separately
 # because they serve the same hostname from different filesystems - scout2's
 # cert is currently hand-copied, so it can go stale independently of scout1.
 _ORIGIN_CERTS: List[Tuple[str, str, str]] = [
@@ -715,10 +713,9 @@ class StatusCommands:
         }
         _emit(ctx, composite)
         # Exit non-zero if anything notable — useful for cron.
-        # `endpoints` and `reconcile` are included because they are the two
-        # checks that would have caught the 2026-07-30 P0s (46-day expired cert,
-        # agent container missing for 3 weeks) which every other section
-        # reported as green.
+        # `endpoints` and `reconcile` are included because they are the only
+        # checks that see an expired origin cert or a registered agent with no
+        # container; every other section reports those as green.
         notable = composite["incidents"]["summary"]["notable_incident_total"]
         mgr_err = composite["security"].get("manager_errors_last_hour", 0)
         endpoint_problems = composite["endpoints"]["summary"]["problems"]

@@ -170,8 +170,8 @@ class CIRISManager:
 
         # The registry + multi-server Docker client are what make absence
         # detection possible: without them the watchdog can only see containers
-        # that exist, never ones that should exist. It previously ran a local
-        # `docker ps` on the manager host, which holds no agent containers.
+        # that exist, never ones that should exist. A local `docker ps` on the
+        # manager host sees nothing: that host holds no agent containers.
         self.watchdog = CrashLoopWatchdog(
             check_interval=self.config.watchdog.check_interval,
             crash_threshold=self.config.watchdog.crash_threshold,
@@ -769,13 +769,12 @@ class CIRISManager:
         # authoritative artifact: the orchestrator reads it to build the
         # environment for a recreated container.
         #
-        # Previously, for a remote server this branch was skipped entirely and
-        # the only write went to the agent host via `docker exec` into
-        # ciris-nginx - a container with no /opt/ciris bind mount. That write
-        # landed in the container's ephemeral layer, reported success, and
-        # vanished on the next nginx recreate, while the manager's local copy
-        # stayed stale. Net effect: no LLM or adapter config change ever
-        # reached an agent on a remote server, and nothing surfaced an error.
+        # For a remote server, writing only to the agent host via `docker exec`
+        # into ciris-nginx is not enough: that container has no /opt/ciris bind
+        # mount, so the write lands in its ephemeral layer, reports success and
+        # vanishes on the next nginx recreate, while the manager's local copy
+        # stays stale. No LLM or adapter config change would ever reach a
+        # remote agent, and nothing would surface an error.
         compose_path.parent.mkdir(parents=True, exist_ok=True)
         self.compose_generator.write_compose_file(new_compose, compose_path)
 

@@ -1,9 +1,4 @@
-# Functional Specification Document: Adapter Configuration System
-
-**Version:** 1.0
-**Date:** 2026-01-17
-**Status:** Draft
-**Author:** CIRIS Engineering
+# Adapter Configuration System
 
 ---
 
@@ -730,48 +725,16 @@ interface WizardState {
 
 ---
 
-## 10. Implementation Plan
+## 10. Test Cases
 
-### Phase 1: API Foundation (Week 1)
-- [ ] Add `adapter_configs` to RegisteredAgent model
-- [ ] Implement manifest proxy endpoint
-- [ ] Implement wizard session management
-- [ ] Add input step validation
-
-### Phase 2: Core Wizard Steps (Week 2)
-- [ ] Implement `input` step handler
-- [ ] Implement `select` step handler
-- [ ] Implement `confirm` step handler
-- [ ] Add config persistence to registry
-
-### Phase 3: Advanced Steps (Week 3)
-- [ ] Implement `discovery` step (mDNS)
-- [ ] Implement `oauth` step with callbacks
-- [ ] Add token refresh handling
-
-### Phase 4: UI Implementation (Week 4)
-- [ ] Adapters button on AgentCard
-- [ ] AdapterPanel component
-- [ ] WizardModal with step navigation
-- [ ] Step-specific form renderers
-
-### Phase 5: Integration & Testing (Week 5)
-- [ ] Compose generator integration
-- [ ] End-to-end tests for each adapter
-- [ ] Documentation updates
-
----
-
-## 11. Test Cases
-
-### 11.1 Unit Tests
+### 10.1 Unit Tests
 
 - Wizard session creation/expiration
 - Step validation for each field type
 - Config persistence and retrieval
 - Env var mapping from config
 
-### 11.2 Integration Tests
+### 10.2 Integration Tests
 
 - Full wizard flow: Home Assistant with OAuth
 - Full wizard flow: Reddit with credentials
@@ -779,7 +742,7 @@ interface WizardState {
 - Config application to compose file
 - Adapter loading after config
 
-### 11.3 E2E Tests
+### 10.3 E2E Tests
 
 - UI: Complete wizard, verify adapter runs
 - UI: Modify existing config
@@ -787,7 +750,7 @@ interface WizardState {
 
 ---
 
-## 12. Appendix
+## 11. Appendix
 
 ### A. Manifest `interactive_config` Schema
 

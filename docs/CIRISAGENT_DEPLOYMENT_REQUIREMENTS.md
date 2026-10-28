@@ -1,6 +1,6 @@
 # CIRISAgent Deployment Requirements
 
-This document specifies **exactly** what CIRISAgent needs to implement to support secure deployments orchestrated by CIRISManager.
+The contract between CIRISAgent and CIRISManager for secure, manager-orchestrated deployments: what each agent must expose and how it must respond.
 
 ## 1. Service Token Authentication
 

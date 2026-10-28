@@ -444,7 +444,3 @@ Key tables:
   "deployment_active": false
 }
 ```
-
----
-*Last Updated: 2025-08-13*
-*Version: 1.0.0*

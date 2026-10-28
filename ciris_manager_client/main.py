@@ -101,8 +101,8 @@ def load_token() -> Optional[str]:
                 data: Dict[str, Any] = json.load(f)
 
             # Compare in UTC, tolerating a naive or an offset-aware timestamp.
-            # Mixing the two raises TypeError, which used to be swallowed
-            # below and reported as "no token at all".
+            # Mixing the two raises TypeError, which the handler below would
+            # otherwise report as "no token at all".
             expires_at = datetime.fromisoformat(data["expires_at"])
             if expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
@@ -1174,8 +1174,8 @@ def main() -> int:
     # calls the manager API. It must stay runnable WITHOUT a token, because the
     # situation it exists to diagnose (expired origin cert -> Cloudflare 526)
     # also breaks the OAuth device-code flow you would need to get a token.
-    # During the 2026-06/07 outage `auth login` failed with the same 526, so an
-    # auth-gated probe would have been unusable exactly when it was needed.
+    # An expired origin cert makes `auth login` fail with the same 526, so an
+    # auth-gated probe would be unusable exactly when it is needed.
     if args.command == "status" and getattr(args, "status_command", None) == "endpoints":
         from ciris_manager_client.commands.status import StatusCommands
 

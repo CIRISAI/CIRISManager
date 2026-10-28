@@ -49,9 +49,9 @@ logger = logging.getLogger(__name__)
 # How long to wait for an agent to finish its own shutdown before giving up and
 # handing off to the delayed-restart monitor. The agent's shutdown is an
 # LLM-driven ritual (DMA evaluations, model round-trips), so this is minutes-
-# scale work, not seconds. Previously the wait was a no-op - it inspected the
-# local Docker socket on a host with no agent containers and read the resulting
-# error as "stopped" - so the agent was killed ~10s after being asked to stop.
+# scale work, not seconds. The wait must read the agent's own host: the local
+# Docker socket on the manager host has no agent containers, and reading its
+# error as "stopped" kills the agent seconds after it is asked to stop.
 SHUTDOWN_WAIT_SECONDS = 180
 
 # SIGTERM -> SIGKILL grace on the fallback hard stop during recreate. Only

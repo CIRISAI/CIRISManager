@@ -32,7 +32,7 @@ Production-grade lifecycle management for CIRIS agents with automatic nginx rout
 - **RESTful API** - Complete management interface for agents and system operations
 - **File-based Logging** - Comprehensive logging with rotation to `/var/log/ciris-manager/`
 
-### Enhanced Agent Management (New!)
+### Agent Management
 - **Full Environment Variable Control** - Manage all agent environment variables through the GUI
 - **Discord Integration Management** - Easy toggle and configuration of Discord adapter
 - **Wise Authority (WA) Review** - Required approval process for Tier 4/5 agents
@@ -1381,9 +1381,3 @@ CIRISManager is built with:
 - Google OAuth for authentication
 - Pydantic for data validation
 - pytest for testing
-
----
-
-**Version**: 2.0.0
-**Last Updated**: August 2025
-**Maintainers**: CIRIS AI Team
