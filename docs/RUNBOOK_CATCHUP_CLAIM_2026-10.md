@@ -51,6 +51,8 @@ or to any other host. Tell the bridge session before and after any staging.
 | 10-28 14:31 | 6 | echo-speculative | ROOT `wa-2025-11-25-A382B3` reset; backup `…-default-main-20261028T143132Z.json` |
 | 10-28 14:33 | 7 | echo-speculative | staged binding signed, roster proof present |
 | 10-28 14:34 | 8 | echo-speculative | upgrade-owner **200 staged:true**, binding `fd9c922e`; owned-nodes.owner = fedID; agent left the hold → WAKEUP, health 200 |
+| 10-28 15:05 | – | canary | reached **WORK** on 2.16.5; primary (OpenRouter) healthy, Groq secondary failing (see hold below) |
+| 10-28 15:10 | hold | datum, echo-core, scout1, scout2 | **HELD on 2.9.38 by Eric's ruling**: the Groq qwen3.6 `reasoning_effort` fix (CIRISAgent PR #1327) rides **2.17.0**, no 2.16.x hotfix. Resume steps 5–8 with `--version 2.17.0-stable` once it ships. echo-speculative stays on 2.16.5. |
 
 ### Gotchas met (fold into the next run)
 - `ciris-manager-client agent get/list` reported the stopped canary as `running` for >37 s (CIRISManager#33). Gate step 6 on the container state read from the agent's host, not on `agent get`.
@@ -135,6 +137,13 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 
 ## Step 5 – Per agent: upgrade to 2.16.5 (canary first)
 
+> **Hold (2026-10-28, Eric):** 2.16.5 sends `reasoning_effort: "low"` to the Groq
+> qwen3.6-27b secondary, which Groq rejects (enum `none|default`), so every
+> secondary call fails. All five agents use that secondary. The fix (CIRISAgent
+> PR #1327) ships in **2.17.0**; there is no 2.16.x hotfix. The remaining four
+> agents stay on 2.9.38 until 2.17.0 is released, then run this step with
+> `--version 2.17.0-stable`. The canary keeps running on 2.16.5 on its primary.
+
 `ciris-manager-client agent deploy <id> --version 2.16.5-stable --strategy docker
 [--server-id scout1|scout2] [--occurrence-id 002]`. Cancel the other staged
 canary deployments afterwards so none fires on its own.
@@ -200,7 +209,8 @@ nothing was written).
 Checks: `GET /v1/setup/owned-nodes` → owner = fed-ID; agent leaves the
 "unowned" hold and reaches WORK (`ciris-manager-client agent list`); no
 "OWNED BUT UNBOUND" on the next boot. **Canary soak**: leave
-echo-speculative-4fc6ru 24 h before the other four.
+echo-speculative-4fc6ru 24 h before the other four (moot while the 2.17.0
+hold above is in force; the soak is already running).
 
 Rollback: the binding is a signed, replicated owner fact. Its reversal is the
 owner releasing the node (`POST /v1/self/nodes/<node key>/release`, from the
