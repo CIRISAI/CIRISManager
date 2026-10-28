@@ -350,7 +350,7 @@ NEXT STEPS
 ==========
 1. Review test-results.log for detailed unit test results
 2. Check api.log and manager.log for any warnings
-3. Proceed with production deployment using PRODUCTION_HANDOFF.md
+3. Proceed with production deployment using docs/PRODUCTION_DEPLOYMENT.md
 4. Configure OAuth credentials for production
 5. Set up monitoring and alerting
 

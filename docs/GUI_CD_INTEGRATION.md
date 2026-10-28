@@ -1,6 +1,6 @@
 # CIRISGUI CD Integration with CIRISManager
 
-Since CIRISGUI is now in a separate repository, its CI/CD pipeline needs to notify CIRISManager when a new GUI image is deployed. This document provides the necessary GitHub Actions workflow snippet for CIRISGUI.
+CIRISGUI is built in its own repository, so its CI/CD pipeline notifies CIRISManager when a new GUI image is deployed. This document provides the necessary GitHub Actions workflow snippet for CIRISGUI.
 
 ## GitHub Actions Workflow Addition for CIRISGUI
 

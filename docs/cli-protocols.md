@@ -722,29 +722,4 @@ commands/
 └── inspect.py     (depends on: sdk, models.agent, paramiko, output)
 ```
 
-## Implementation Order
-
-**Phase 1: Core Infrastructure**
-1. `protocols.py` - Protocol definitions
-2. `output.py` - Output formatting
-3. `utils.py` - Common utilities
-4. `main.py` - Entry point and routing
-
-**Phase 2: Essential Commands** (for immediate use)
-1. `commands/agent.py` - list, get, create, delete
-2. `commands/config.py` - get, export, import, backup, restore
-3. `commands/inspect.py` - agent inspection
-
-**Phase 3: Additional Commands**
-4. `commands/maintenance.py`
-5. `commands/oauth.py`
-6. `commands/server.py`
-7. `commands/template.py`
-8. `commands/system.py`
-9. `commands/auth.py`
-
-**Phase 4: Advanced Commands**
-10. `commands/deploy.py`
-11. `commands/canary.py`
-
 This protocol ensures consistent, maintainable, and user-friendly CLI commands across all modules.

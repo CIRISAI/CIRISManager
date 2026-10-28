@@ -912,9 +912,7 @@ http {
 
         server += "    }\n"
 
-        # NOTE: Legacy eee.ciris.ai server block removed
-        # The new infrastructure uses Cloudflare for SSL termination
-        # and doesn't require the eee.ciris.ai domain configuration
+        # No eee.ciris.ai server block: SSL is terminated at Cloudflare.
 
         server += "}\n"
         return server

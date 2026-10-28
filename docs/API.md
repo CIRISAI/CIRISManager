@@ -2,7 +2,7 @@
 
 ## Overview
 
-CIRISManager provides a RESTful API for managing CIRIS agents. All endpoints are prefixed with `/manager/v1`.
+CIRISManager provides a RESTful API for managing CIRIS agents. All endpoints are prefixed with `/manager/v1`. For a production quick reference with curl and `jq` examples, see [API_ENDPOINTS.md](API_ENDPOINTS.md).
 
 ## Authentication
 

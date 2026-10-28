@@ -37,7 +37,7 @@ This document explains how permissions are managed between CIRISManager and CIRI
 1. **Agent Creation:**
    - Manager creates directories owned by `ciris-manager`
    - Manager runs `chown -R ciris:ciris /opt/ciris/agents/{agent_id}`
-   - Directories now owned by `ciris` user
+   - Directories are owned by the `ciris` user
 
 2. **Container Startup:**
    - Docker compose mounts host directories into container

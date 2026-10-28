@@ -890,12 +890,11 @@ async def start_agent(
                     else:
                         # The compose file lives on the AGENT's host, not the
                         # manager's, so for every remote agent this path does not
-                        # exist locally. Previously there was no `else` here and
-                        # control fell through to the success return below, so
-                        # `POST /agents/{id}/start` answered 200 "is starting"
-                        # without touching the container - which is how the
-                        # scout2 agent stayed down for four weeks while the API
-                        # reported every recovery attempt as successful.
+                        # exist locally. Without this branch, control falls
+                        # through to the success return below and
+                        # `POST /agents/{id}/start` answers 200 "is starting"
+                        # without touching the container, so a remote agent can
+                        # stay down while every recovery attempt reports success.
                         # The container already exists with the right image, so
                         # starting it over the remote Docker API is correct.
                         logger.info(
