@@ -33,17 +33,46 @@ or to any other host. Tell the bridge session before and after any staging.
 ## Preconditions (all met 2026-10-28 unless noted)
 
 - [x] CIRISManager #29 (persist `/app/identity`) merged and deployed (run 40702047590 ✅).
-- [ ] CIRISManager #30 (admin password reset) deployed (run 40702072199, queued).
+- [x] CIRISManager #30 (admin password reset) deployed (run 40702072199 ✅, manager at 1aa01a8 since 14:16Z).
 - [x] CIRISAgent 2.16.5-stable published, pins ciris-server 0.5.235. Deployment `c5ca18f0` staged, pending.
 - [x] ciris-server 0.5.235 on PyPI; client node venv to be moved to it (step 1).
 - [x] scout2 TLS cert fixed 2026-10-27 (was expired; copied from scout1, valid to 2026-12-28).
 - [x] `ciris-manager-client auth login` done by Eric.
 - [x] Nothing has rolled: all five agents still on 2.9.38, all deployments pending.
 
+## Progress log
+
+| When (UTC) | Step | Agent | Result |
+|---|---|---|---|
+| 10-28 14:16 | 1 | client | fresh home, 0.5.235, TPM tier (5 plugin selections, 0 software), node key `ciris-server-qxwxvyeclu` |
+| 10-28 14:17 | 2 | client | associate **200 held:false**, roster key `…-6e2b4kpvxk-c364z6olxz`, custody tpm; staging shredded |
+| 10-28 14:18 | 3 | client | self-claim 200; binding `9af61113` = `…-c364z6olxz → ciris-server-qxwxvyeclu`; owner = fedID |
+| 10-28 14:20 | 5 | echo-speculative | deployment `f347bf47` → 2.16.5; `/app/identity` migrated (Aug-26 actor keys + new `ciris-node-bootstrap-2qyumdzwnl`); held unowned |
+| 10-28 14:31 | 6 | echo-speculative | ROOT `wa-2025-11-25-A382B3` reset; backup `…-default-main-20261028T143132Z.json` |
+| 10-28 14:33 | 7 | echo-speculative | staged binding signed, roster proof present |
+| 10-28 14:34 | 8 | echo-speculative | upgrade-owner **200 staged:true**, binding `fd9c922e`; owned-nodes.owner = fedID; agent left the hold → WAKEUP, health 200 |
+
+### Gotchas met (fold into the next run)
+- `ciris-manager-client agent get/list` reported the stopped canary as `running` for >37 s (CIRISManager#33). Gate step 6 on the container state read from the agent's host, not on `agent get`.
+- The reset script prints the password **bare on its own line** after the `^ SAVE THIS PASSWORD` marker; capture the whole output to a 0600 file.
+- Remote Docker from the manager host is `--host tcp://<vpc_ip>:2376` (not `https://`), certs in `/etc/ciris-manager/docker-certs/agents|scout1|scout2`.
+- The SSE `deployment watch` drops through Cloudflare; poll `deployment status` / `agent list`.
+- The watchdog raised a false "crash loop" on the operator stop (CIRISManager#32). Ignore that CRITICAL during step 6; it does not restart anything.
+- The agent re-reads ownership on a tick; no restart is needed after step 8.
+
+### Bugs found and filed
+- CIRISPersist#1139 — `nodes_stewarded_by` misses roster-key-signed bindings, lists the roster key as a node (owned-nodes wrong on client and agent).
+- CIRISServer#829 — claim-remote / upgrade-owner echo the signer as `owner`.
+- CIRISManager#32 (watchdog false crash loop + wrong Docker client on stop), #33 (stale agent status after stop).
+- Agent: Groq secondary rejects `reasoning_effort` on 2.16.5 (sent to the agent session); `delete_task` FOREIGN KEY errors cleaning stale WAKEUP tasks.
+- Design question to the server session: the agent holds an unsigned `(fedID → node key)` content-occurrence row; a node must not read as a member of the owner's self.
+
 ## Step 0 – Baseline (read-only)
 
-Record, per agent: `ciris-manager-client agent get <id>` (version, server,
-occurrence), and `GET /v1/identity` through nginx for `node_key_id`. Keep the
+Record, per agent: `ciris-manager-client --format json agent get <id>` (global
+`--format` goes before the subcommand). On 2.9.38 the node's `/v1/identity` is
+not proxied through 8080, so the pre-upgrade node key is not readable; the key
+changes on the 2.16 boot anyway - record it in step 5. Keep the
 output in the manager host's `/root/catchup-claim-2026-10/baseline/`.
 
 Rollback: none needed.
