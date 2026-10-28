@@ -151,6 +151,8 @@ class TestMultiServerAgentCreation:
         mock_remote_docker.containers.run = Mock(return_value=mock_container)
         # Mock containers.get to fail so we use Alpine fallback for directory creation
         mock_remote_docker.containers.get = Mock(side_effect=Exception("No nginx container"))
+        # The identity helper container exits cleanly
+        mock_remote_docker.containers.create.return_value.wait.return_value = {"StatusCode": 0}
         multi_server_manager.docker_client.get_client = Mock(return_value=mock_remote_docker)
 
         # Mock httpx to prevent timeout when trying to set agent password
@@ -177,10 +179,19 @@ class TestMultiServerAgentCreation:
 
             # Verify Docker API was called multiple times:
             # - 1 time for base directory creation
-            # - 6 times for subdirectories (data, data_archive, logs, config, audit_keys, .secrets)
+            # - 7 times for subdirectories (data, data_archive, logs, config, audit_keys,
+            #   .secrets, identity)
             # - 1 time for the actual agent container
             # Note: Permission fix was consolidated or optimized out
-            assert mock_remote_docker.containers.run.call_count == 8
+            assert mock_remote_docker.containers.run.call_count == 9
+
+            # The identity directory is prepared on the agent's host as 1000:1000
+            # before the agent starts, by a helper container from the agent image.
+            helper = mock_remote_docker.containers.create.call_args
+            assert helper.kwargs["image"] == "ghcr.io/test/agent"
+            assert list(helper.kwargs["volumes"]) == [
+                f"/opt/ciris/agents/{result['agent_id']}/identity"
+            ]
 
             # Verify the last call (the agent container) has the expected image
             last_call = mock_remote_docker.containers.run.call_args_list[-1]

@@ -395,6 +395,7 @@ class CIRISManager:
             "config": 0o755,  # Configuration files - config is public
             "audit_keys": 0o700,  # Audit signing keys - prevent key compromise
             ".secrets": 0o700,  # Secrets storage - protect sensitive data
+            "identity": 0o700,  # Node identity keys - the node IS this key
         }
 
         for dir_name, permissions in directories.items():
@@ -518,6 +519,7 @@ class CIRISManager:
                 agent_dir / "config",
                 agent_dir / "audit_keys",
                 agent_dir / ".secrets",
+                agent_dir / "identity",
             ]
 
             # Also include init_permissions.sh if it exists
@@ -1144,6 +1146,7 @@ class CIRISManager:
             "config": "755",
             "audit_keys": "700",
             ".secrets": "700",
+            "identity": "700",
         }
 
         try:
@@ -1323,6 +1326,15 @@ class CIRISManager:
                         volumes[host_path] = {"bind": container_path, "mode": mode}
 
             logger.info(f"Configured {len(volumes)} volume mounts for remote server {server_id}")
+
+            # Docker would create a missing bind source as root, and the agent
+            # (uid 1000) could then not write its node identity. Prepare it on
+            # the agent's host; an existing identity is kept as it is.
+            from ciris_manager.identity_volume import IDENTITY_PATH, prepare_identity_dir
+
+            for host_path, spec in volumes.items():
+                if spec["bind"] == IDENTITY_PATH:
+                    prepare_identity_dir(docker_client, image, host_path)
 
             try:
                 # Create and start container with volume mounts
@@ -2275,7 +2287,7 @@ chown -R 1000:1000 "{agent_dir}"
 
 # Set directory permissions
 find "{agent_dir}" -type d -exec chmod 755 {{}} \\;
-chmod 700 "{agent_dir}/audit_keys" "{agent_dir}/.secrets" 2>/dev/null || true
+chmod 700 "{agent_dir}/audit_keys" "{agent_dir}/.secrets" "{agent_dir}/identity" 2>/dev/null || true
 
 # Set file permissions
 find "{agent_dir}" -type f -exec chmod 644 {{}} \\;

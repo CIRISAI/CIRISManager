@@ -3697,6 +3697,10 @@ class DeploymentOrchestrator:
                     # Stop and remove the old container
                     old_container.stop(timeout=CONTAINER_STOP_GRACE_SECONDS)
                     logger.info(f"Stopped container {container_name}")
+                    if not self._persist_identity_volume(
+                        docker_client, old_container, old_config, container_name
+                    ):
+                        return False
                     old_container.remove()
                     logger.info(f"Removed container {container_name}")
                 except docker.errors.NotFound:
@@ -3758,6 +3762,14 @@ class DeploymentOrchestrator:
                     except Exception as e:
                         logger.error(f"Failed to update docker-compose.yml with new image: {e}")
                         return False
+
+                # The regenerated compose mounts /app/identity. If the running
+                # container predates that, move its identity out before compose
+                # replaces it, or the new container comes up as a new node.
+                if not await self._persist_local_identity_volume(
+                    server_id or "main", container_name
+                ):
+                    return False
 
                 # Run docker-compose up -d with --pull always to use the newly pulled image
                 logger.info(f"Starting new container for agent {agent_id}...")
@@ -3938,6 +3950,85 @@ class DeploymentOrchestrator:
         except Exception as e:
             logger.error(f"Error recreating container for agent {agent_id}: {e}")
             return False
+
+    async def _persist_local_identity_volume(self, server_id: str, container_name: str) -> bool:
+        """Local (compose) counterpart of _persist_identity_volume.
+
+        Compose recreates the container itself, so stop it here, move its
+        identity, and let `compose up` create the replacement with the bind.
+        """
+        import docker
+
+        if not (self.manager and getattr(self.manager, "docker_client", None)):
+            return True
+        try:
+            docker_client = self.manager.docker_client.get_client(server_id)
+            container = docker_client.containers.get(container_name)
+        except docker.errors.NotFound:
+            return True
+        except Exception as e:
+            logger.warning(f"Could not inspect {container_name} for its identity mount: {e}")
+            return True
+
+        config = {"volumes": container.attrs.get("HostConfig", {}).get("Binds", [])}
+        from ciris_manager.identity_volume import has_identity_bind
+
+        if has_identity_bind(config["volumes"]):
+            return True
+        container.stop(timeout=CONTAINER_STOP_GRACE_SECONDS)
+        return self._persist_identity_volume(docker_client, container, config, container_name)
+
+    def _persist_identity_volume(
+        self, docker_client, old_container, old_config: dict, container_name: str
+    ) -> bool:
+        """Move a stopped container's /app/identity onto a host bind before recreate.
+
+        The node identity lived in the container layer, so every recreate minted
+        a new node and dropped its claim. If the container already mounts
+        /app/identity there is nothing to do. Otherwise copy the old identity to
+        <agent_dir>/identity on the agent's host and add the bind to
+        old_config["volumes"], which the new container is created from.
+
+        On failure, start the old container again (it still holds the identity)
+        and return False so the recreate is abandoned rather than minting a new
+        node.
+        """
+        from ciris_manager.identity_volume import (
+            has_identity_bind,
+            identity_host_dir,
+            prepare_identity_dir,
+            read_identity_archive,
+            with_identity_bind,
+        )
+
+        binds = old_config.get("volumes") or []
+        if has_identity_bind(binds):
+            return True
+        host_dir = identity_host_dir(binds)
+        if host_dir is None:
+            logger.warning(
+                f"{container_name} has no /app/data bind to place /app/identity beside; "
+                "recreating without a persistent identity"
+            )
+            return True
+
+        try:
+            archive = read_identity_archive(old_container)
+            prepare_identity_dir(docker_client, old_container.image.id, host_dir, archive)
+        except Exception as e:
+            logger.error(
+                f"Not recreating {container_name}: its node identity could not be moved "
+                f"to {host_dir}: {e}. Restarting the old container."
+            )
+            try:
+                old_container.start()
+            except Exception as start_error:
+                logger.error(f"Could not restart {container_name}: {start_error}")
+            return False
+
+        old_config["volumes"] = with_identity_bind(binds, host_dir)
+        logger.info(f"Node identity of {container_name} now persists at {host_dir}")
+        return True
 
     async def _sync_compose_to_remote_server(
         self,

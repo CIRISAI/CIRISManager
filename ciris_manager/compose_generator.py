@@ -282,6 +282,9 @@ class ComposeGenerator:
             f"{agent_dir}/config:/app/config",
             f"{agent_dir}/audit_keys:/app/audit_keys",
             f"{agent_dir}/.secrets:/app/.secrets",
+            # Node identity (node key, substrate key, owner seed). Without this
+            # every recreate minted a new node and the owner's claim was lost.
+            f"{agent_dir}/identity:/app/identity",
             f"{agent_dir}/init_permissions.sh:/init_permissions.sh:ro",
             f"{oauth_volume}:/home/ciris/shared/oauth:ro",
         ]

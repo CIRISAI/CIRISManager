@@ -482,6 +482,11 @@ class TestCompositeKeyDeployments:
             server_id="main",
         )
 
+        # The running container already mounts its identity, so the recreate
+        # has nothing to migrate (see test_identity_volume.py for the migration).
+        orchestrator.manager.docker_client.get_client.return_value.containers.get.return_value.attrs = {
+            "HostConfig": {"Binds": ["/opt/ciris/agents/test-123/identity:/app/identity"]}
+        }
         # Mock compose file exists and subprocess execution
         with patch("pathlib.Path.exists", return_value=True):
             with patch("asyncio.create_subprocess_exec") as mock_subprocess:

@@ -43,6 +43,7 @@ ensure_dir "/app/logs" "755" "Logs"
 ensure_dir "/app/config" "755" "Config"
 ensure_dir "/app/audit_keys" "700" "Audit Keys"
 ensure_dir "/app/.secrets" "700" "Secrets"
+ensure_dir "/app/identity" "700" "Node Identity"
 
 echo "Permission initialization complete. Starting CIRIS agent..."
 
