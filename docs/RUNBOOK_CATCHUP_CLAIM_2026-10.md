@@ -263,8 +263,9 @@ hold. A rollback of the *version* (step 5's rollback) does not undo the binding.
 
 ## Step 8b – Per agent: owner requests (traces ship)
 
-Needs the CIRISServer release carrying #837 on both the client node and the
-agent. A remotely claimed node cannot sign owner acts itself; it lists them
+Needs ciris-server 0.5.242 (carries #837; tag held for the next edge
+release) on both the client node and the agent, i.e. the 2.17.x agent
+release built on it. A remotely claimed node cannot sign owner acts itself; it lists them
 as owner requests, the client signs them, and the node applies them. Kinds:
 `announce` (binding to the federation), `root_acceptance`, `community_trust`.
 
