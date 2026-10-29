@@ -145,6 +145,11 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 > agents stay on 2.9.38 until 2.17.0 is released, then run this step with
 > `--version 2.17.0-stable`. The canary keeps running on 2.16.5 on its primary.
 >
+> **Hold (2026-10-29, Eric): trace shipping must work before the remaining
+> four upgrade.** The fix rides the next CIRISServer release with the chat
+> fixes. Verify on echo-speculative that batches land at the canonical, then
+> upgrade the other four to the agent release that carries it.
+>
 > **2.17.0 is out (2026-10-29)** and carries the Groq fix. Use
 > `--version 2.17.0-stable` for all five agents, the canary included. Do not
 > start the CD-staged 2.17.0 canary deployment (it targets `:latest` across
