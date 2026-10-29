@@ -158,10 +158,16 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 > key. On 2.17.0 (server 0.5.241) the agent asks for the owner's pen, finds
 > none on the host, and logs "community-trust grant DEFERRED". That is
 > expected after this upgrade and is not an abort criterion. Fixing it is a
-> separate owner act per agent, still to be chosen by Eric: (a) a roster key
-> of the fed-ID on each agent host, or (b) the client signs the grant and the
-> manager applies it, as in steps 7 and 8. (b) keeps keys off the cloud hosts;
-> the server has no route for it yet.
+> separate owner act per agent: `ciris-manager-client`, which holds the
+> owner's user key, signs the consent grants for the owner and the manager
+> applies them inside each agent, the same shape as steps 7 and 8. No owner
+> key goes onto an agent host. The signing and apply doors do not exist yet.
+>
+> Before consent matters the agent needs a canonical to deliver to: on
+> echo-speculative the node lists no canonical peer and its delivery probe
+> never runs. Its boot log shows persist's genesis step refusing the baked
+> canonical seed (`ciris-canonical-1-d7bdeu223k`, `re_scrub`, "over the
+> existing anchor-scrubbed row"). Raised with the server side.
 
 `ciris-manager-client agent deploy <id> --version 2.16.5-stable --strategy docker
 [--server-id scout1|scout2] [--occurrence-id 002]`. Cancel the other staged
