@@ -172,7 +172,12 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 > echo-speculative the node lists no canonical peer and its delivery probe
 > never runs. Its boot log shows persist's genesis step refusing the baked
 > canonical seed (`ciris-canonical-1-d7bdeu223k`, `re_scrub`, "over the
-> existing anchor-scrubbed row"). Raised with the server side.
+> existing anchor-scrubbed row"). Cause: the canonical was re-anchored from A1
+> to A1+B1+C1 at its final genesis (2026-10-07). Nodes whose genesis predates
+> that keep the old A1-only, anchor-scrubbed row, and persist refuses to
+> replace it with the baked seed. All five managed agents are such nodes. The
+> fix is a persist-side heal (CIRISPersist), the same one the canonical itself
+> needed; expect the refusal after 2.17.0 unless it carries that heal.
 
 `ciris-manager-client agent deploy <id> --version 2.16.5-stable --strategy docker
 [--server-id scout1|scout2] [--occurrence-id 002]`. Cancel the other staged
