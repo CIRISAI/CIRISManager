@@ -53,6 +53,7 @@ or to any other host. Tell the bridge session before and after any staging.
 | 10-28 14:34 | 8 | echo-speculative | upgrade-owner **200 staged:true**, binding `fd9c922e`; owned-nodes.owner = fedID; agent left the hold → WAKEUP, health 200 |
 | 10-28 15:05 | – | canary | reached **WORK** on 2.16.5; primary (OpenRouter) healthy, Groq secondary failing (see hold below) |
 | 10-28 15:10 | hold | datum, echo-core, scout1, scout2 | **HELD on 2.9.38 by Eric's ruling**: the Groq qwen3.6 `reasoning_effort` fix (CIRISAgent PR #1327) rides **2.17.0**, no 2.16.x hotfix. Resume steps 5–8 with `--version 2.17.0-stable` once it ships. echo-speculative stays on 2.16.5. |
+| 10-29 18:30 | check | all five | 2.17.0-stable published, staged by CD for review (not started). All five running; scouts have 9-10 GB free for a 2 GB image. Manager client token expired: sign in before step 5. Traces: none reach the canonical since 2026-09-24 (owner consent missing, see step 5) |
 
 ### Gotchas met (fold into the next run)
 - `ciris-manager-client agent get/list` reported the stopped canary as `running` for >37 s (CIRISManager#33). Gate step 6 on the container state read from the agent's host, not on `agent get`.
@@ -143,6 +144,24 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 > PR #1327) ships in **2.17.0**; there is no 2.16.x hotfix. The remaining four
 > agents stay on 2.9.38 until 2.17.0 is released, then run this step with
 > `--version 2.17.0-stable`. The canary keeps running on 2.16.5 on its primary.
+>
+> **2.17.0 is out (2026-10-29)** and carries the Groq fix. Use
+> `--version 2.17.0-stable` for all five agents, the canary included. Do not
+> start the CD-staged 2.17.0 canary deployment (it targets `:latest` across
+> all five); cancel it with the rest in step 9.
+>
+> **Traces do not reach the canonical, and 2.17.0 alone does not change that.**
+> The canonical holds no echo-speculative or echo-core trace since 2026-09-24,
+> the day those agents were recreated on 2.9.38, and refused none: the
+> batches seal locally and never ship. Shipping needs an owner-authored
+> `consent:community_trust` grant naming the node, the owner and the agent
+> key. On 2.17.0 (server 0.5.241) the agent asks for the owner's pen, finds
+> none on the host, and logs "community-trust grant DEFERRED". That is
+> expected after this upgrade and is not an abort criterion. Fixing it is a
+> separate owner act per agent, still to be chosen by Eric: (a) a roster key
+> of the fed-ID on each agent host, or (b) the client signs the grant and the
+> manager applies it, as in steps 7 and 8. (b) keeps keys off the cloud hosts;
+> the server has no route for it yet.
 
 `ciris-manager-client agent deploy <id> --version 2.16.5-stable --strategy docker
 [--server-id scout1|scout2] [--occurrence-id 002]`. Cancel the other staged
