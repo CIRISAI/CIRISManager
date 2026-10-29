@@ -169,15 +169,13 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 > then stores it. CIRISAgent treats an applied owner grant as the crossing.
 >
 > Before consent matters, delivery has to start. On echo-speculative it does
-> not: the agent logs no delivery-probe or trace-ship line at all, although
-> its node still holds the canonical (`ciris-canonical-1-d7bdeu223k`, the
-> 2026-07-31 row scrubbed by A1 and B1). Persist refuses to replace that row
-> with the final-genesis seed (`re_scrub`), because the canonical was
-> re-anchored to A1+B1+C1 on 2026-10-07 and all five agents took their
-> genesis before that. The canonical also withholds trace attestations from
-> the node (no accord-conferred `infra:serve`). Which of these stops delivery
-> is with the server, persist and agent sessions; 2.17.0 does not change the
-> persist genesis path.
+> not: the agent logs no delivery-probe or trace-ship line at all. Its node
+> holds a valid canonical row (`ciris-canonical-1-d7bdeu223k`, A1+B1 quorum).
+> The boot warning "baked record REFUSED … re_scrub" for that key is
+> harmless: persist keeps an older valid anchoring and verification is
+> unaffected. Open leads: why the agent's delivery probe never runs, and the
+> canonical withholding trace attestations from the node (no accord-conferred
+> `infra:serve`).
 
 `ciris-manager-client agent deploy <id> --version 2.16.5-stable --strategy docker
 [--server-id scout1|scout2] [--occurrence-id 002]`. Cancel the other staged
