@@ -261,6 +261,34 @@ owner releasing the node (`POST /v1/self/nodes/<node key>/release`, from the
 client with the owner session), after which the agent returns to the legacy-ROOT
 hold. A rollback of the *version* (step 5's rollback) does not undo the binding.
 
+## Step 8b – Per agent: owner requests (traces ship)
+
+Needs the CIRISServer release carrying #837 on both the client node and the
+agent. A remotely claimed node cannot sign owner acts itself; it lists them
+as owner requests, the client signs them, and the node applies them. Kinds:
+`announce` (binding to the federation), `root_acceptance`, `community_trust`.
+
+1. Agent node, admin session (as in step 8):
+   `GET 127.0.0.1:4243/v1/self/owner-requests` →
+   `{node_key_id, requests:[{id, kind, node_key_id, owner_key_id, …, why}]}`.
+2. Client node, owner session (as in step 7):
+   `POST 127.0.0.1:4243/v1/self/owner-requests/sign {node_key_id, requests}` →
+   a bundle `{node_key_id, signer_key_id, rows:[…], refused:[…], …}`. It signs
+   only for the named node and Eric's fed-ID; anything else is in `refused`.
+3. Agent node, admin session:
+   `POST 127.0.0.1:4243/v1/self/owner-requests/apply` with the bundle →
+   `{outcomes:[{request_id, outcome: applied|refused, detail}]}`.
+
+Checks: step 1 again returns an empty list; the canonical holds the node's
+owner-binding and Eric's root acceptance; the canonical's "WITHHELD (leg A)"
+warnings for the node stop; trace batches from the agent land at the
+canonical. Do this on echo-speculative first; the other four upgrade only
+after its traces land.
+
+Not yet covered: re-signing the node's own provisional replication grant
+(a fourth kind, later), and requests reaching Eric's phone over the mesh
+(persist v61).
+
 ## Step 9 – Close out
 
 - Cancel every remaining staged 2.16.x deployment (`deployment cancel … --reason "Superseded"`).
