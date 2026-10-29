@@ -168,16 +168,16 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 > the agent's node verifies each row is signed by its owner and about itself,
 > then stores it. CIRISAgent treats an applied owner grant as the crossing.
 >
-> Before consent matters the agent needs a canonical to deliver to: on
-> echo-speculative the node lists no canonical peer and its delivery probe
-> never runs. Its boot log shows persist's genesis step refusing the baked
-> canonical seed (`ciris-canonical-1-d7bdeu223k`, `re_scrub`, "over the
-> existing anchor-scrubbed row"). Cause: the canonical was re-anchored from A1
-> to A1+B1+C1 at its final genesis (2026-10-07). Nodes whose genesis predates
-> that keep the old A1-only, anchor-scrubbed row, and persist refuses to
-> replace it with the baked seed. All five managed agents are such nodes. The
-> fix is a persist-side heal (CIRISPersist), the same one the canonical itself
-> needed; expect the refusal after 2.17.0 unless it carries that heal.
+> Before consent matters, delivery has to start. On echo-speculative it does
+> not: the agent logs no delivery-probe or trace-ship line at all, although
+> its node still holds the canonical (`ciris-canonical-1-d7bdeu223k`, the
+> 2026-07-31 row scrubbed by A1 and B1). Persist refuses to replace that row
+> with the final-genesis seed (`re_scrub`), because the canonical was
+> re-anchored to A1+B1+C1 on 2026-10-07 and all five agents took their
+> genesis before that. The canonical also withholds trace attestations from
+> the node (no accord-conferred `infra:serve`). Which of these stops delivery
+> is with the server, persist and agent sessions; 2.17.0 does not change the
+> persist genesis path.
 
 `ciris-manager-client agent deploy <id> --version 2.16.5-stable --strategy docker
 [--server-id scout1|scout2] [--occurrence-id 002]`. Cancel the other staged
