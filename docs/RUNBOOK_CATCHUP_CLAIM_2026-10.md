@@ -161,7 +161,12 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 > separate owner act per agent: `ciris-manager-client`, which holds the
 > owner's user key, signs the consent grants for the owner and the manager
 > applies them inside each agent, the same shape as steps 7 and 8. No owner
-> key goes onto an agent host. The signing and apply doors do not exist yet.
+> key goes onto an agent host. Both doors belong to CIRISServer and do not
+> exist yet (0.5.241). They follow `sign-owner-binding` and `upgrade-owner`:
+> the client node signs `consent:community_trust:v1` (about the target node,
+> subjects node, owner and agent, federation scope) plus `consent:replication:v1`;
+> the agent's node verifies each row is signed by its owner and about itself,
+> then stores it. CIRISAgent treats an applied owner grant as the crossing.
 >
 > Before consent matters the agent needs a canonical to deliver to: on
 > echo-speculative the node lists no canonical peer and its delivery probe
