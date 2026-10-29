@@ -178,9 +178,15 @@ Rollback: `git revert` on main (auto-deploys), or on the host
 > holds a valid canonical row (`ciris-canonical-1-d7bdeu223k`, A1+B1 quorum).
 > The boot warning "baked record REFUSED … re_scrub" for that key is
 > harmless: persist keeps an older valid anchoring and verification is
-> unaffected. Open leads: why the agent's delivery probe never runs, and the
-> canonical withholding trace attestations from the node (no accord-conferred
-> `infra:serve`).
+> unaffected. The server's delivery side is up on the canary: one canonical
+> target, rooting confirmed, and a replication consent that covers `trace:`.
+> The gap is owner authority on a remotely claimed node: the server logs "no
+> owner pen on this node … until then this node is not Rooted by any peer",
+> so the owner's root acceptance is never written. The canonical also holds
+> no copy of the owner binding, because the binding never leaves the node
+> before an announce (persist v61). All of this goes in the next CIRISServer
+> release: the client signs and the node applies, with no owner key on the
+> host.
 
 `ciris-manager-client agent deploy <id> --version 2.16.5-stable --strategy docker
 [--server-id scout1|scout2] [--occurrence-id 002]`. Cancel the other staged
