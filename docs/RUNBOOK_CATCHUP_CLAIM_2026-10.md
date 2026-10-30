@@ -63,6 +63,11 @@ or to any other host. Tell the bridge session before and after any staging.
 | 10-30 22:34 | claim | scout1 | first-run claim-remote via SSH tunnel: owner-binding persisted (ROOT written to the SHARED scout Postgres) |
 | 10-30 22:34 | claim | scout2 | claim-remote hung at `/v1/setup/root`; PIN unconsumed |
 | 10-30 22:41 | RCA | scouts | both wedged: persist Postgres pool = deadpool default 2×CPU = 2 on 1-vCPU hosts, no wait timeout; both connections checked out idle. Sent to cirispersist-47 |
+| 10-30 22:50 | resize | scout1 | vc2-2c-4gb (pool 2 → 4); unwedged, owned, WORK 22:54 |
+| 10-30 23:04 | resize | scout2 | vc2-2c-4gb after an 11-min Vultr migration; held OWNED BUT UNBOUND (shared DB already had the ROOT) |
+| 10-30 23:20 | 6 | scouts | ROOT row in the shared scout Postgres (`cirislens.wa_cert`) had no password; set one, guarded to that passwordless row |
+| 10-30 23:21 | 7,8,8b | scout2, scout1 | scout2 bound + owner requests applied; scout1 owner requests applied; scout2 WORK 23:22 |
+| 10-30 23:35 | – | scoutapilb | OAuth return fix: CIRISManager#37 `web_client_origin` + ScoutGUI#1 relative paths; scout.ciris.ai sign-in path verified up to Google |
 
 ### Gotchas met (fold into the next run)
 - `ciris-manager-client agent get/list` reported the stopped canary as `running` for >37 s (CIRISManager#33). Gate step 6 on the container state read from the agent's host, not on `agent get`.
