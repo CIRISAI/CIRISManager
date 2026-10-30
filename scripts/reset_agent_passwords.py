@@ -87,7 +87,9 @@ def main() -> int:
     parser.add_argument("--config", default="/etc/ciris-manager/config.yml")
     parser.add_argument("--metadata", default="/opt/ciris/agents/metadata.json")
     parser.add_argument("--db-path", default="/app/data/ciris_engine.db")
-    parser.add_argument("--backup-dir", default="/opt/ciris/agents/password-reset-backups")
+    # Outside /opt/ciris/agents: the manager treats every directory there as an
+    # agent, and a root-only one there stopped it starting.
+    parser.add_argument("--backup-dir", default="/opt/ciris/password-reset-backups")
     args = parser.parse_args()
 
     registry = AgentRegistry(Path(args.metadata))

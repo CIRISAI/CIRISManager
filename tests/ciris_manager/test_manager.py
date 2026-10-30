@@ -254,6 +254,32 @@ class TestCIRISManager:
         assert agent.name == "Scout"
         assert agent.port == 8081
 
+    def test_scan_skips_unreadable_directory(self, temp_dirs, config):
+        """A root-only directory in the agents dir must not stop the manager starting."""
+        good = temp_dirs["agents"] / "scout"
+        good.mkdir()
+        (good / "docker-compose.yml").write_text("services: {}\n")
+        (temp_dirs["agents"] / "password-reset-backups").mkdir()
+
+        real_exists = Path.exists
+
+        def exists(self):
+            if self.parent.name == "password-reset-backups":
+                raise PermissionError(13, "Permission denied", str(self))
+            return real_exists(self)
+
+        with patch(
+            "ciris_manager.template_verifier.TemplateVerifier._verify_manifest_signature",
+            return_value=True,
+        ):
+            with patch("ciris_manager.multi_server_docker.MultiServerDockerClient"):
+                with patch("ciris_manager.nginx_manager.NginxManager"):
+                    with patch("ciris_manager.manager.DockerImageCleanup"):
+                        with patch.object(Path, "exists", exists):
+                            manager = CIRISManager(config)
+
+        assert manager is not None
+
     @pytest.mark.asyncio
     async def test_create_agent_pre_approved(self, manager):
         """Test creating agent with pre-approved template."""

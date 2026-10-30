@@ -204,7 +204,14 @@ class CIRISManager:
                 continue
 
             compose_path = agent_dir / "docker-compose.yml"
-            if compose_path.exists():
+            # A directory the service cannot read (root-only, not an agent) is
+            # skipped: one stray directory must not stop the manager starting.
+            try:
+                is_agent_dir = compose_path.exists()
+            except OSError as e:
+                logger.warning(f"Skipping unreadable directory {agent_dir} in agents dir: {e}")
+                continue
+            if is_agent_dir:
                 # Extract agent info from directory name
                 agent_name = agent_dir.name
                 agent_id = agent_name
