@@ -54,6 +54,7 @@ or to any other host. Tell the bridge session before and after any staging.
 | 10-28 15:05 | – | canary | reached **WORK** on 2.16.5; primary (OpenRouter) healthy, Groq secondary failing (see hold below) |
 | 10-28 15:10 | hold | datum, echo-core, scout1, scout2 | **HELD on 2.9.38 by Eric's ruling**: the Groq qwen3.6 `reasoning_effort` fix (CIRISAgent PR #1327) rides **2.17.0**, no 2.16.x hotfix. Resume steps 5–8 with `--version 2.17.0-stable` once it ships. echo-speculative stays on 2.16.5. |
 | 10-29 18:30 | check | all five | 2.17.0-stable published, staged by CD for review (not started). All five running; scouts have 9-10 GB free for a 2 GB image. Manager client token expired: sign in before step 5. Traces: none reach the canonical since 2026-09-24 (owner consent missing, see step 5) |
+| 10-30 | prep | client | ciris-server 0.5.242 (owner requests) installed in the client node venv, node not started; routes present. Waiting for the agent release that pins 0.5.242 |
 
 ### Gotchas met (fold into the next run)
 - `ciris-manager-client agent get/list` reported the stopped canary as `running` for >37 s (CIRISManager#33). Gate step 6 on the container state read from the agent's host, not on `agent get`.
