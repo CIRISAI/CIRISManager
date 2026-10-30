@@ -4,7 +4,7 @@ Configuration settings for CIRISManager.
 
 from pathlib import Path
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class WatchdogConfig(BaseModel):
@@ -118,6 +118,37 @@ class ServerConfig(BaseModel):
     tls_key: Optional[str] = Field(
         default=None, description="Path to TLS client key for Docker API"
     )
+    web_client_origin: Optional[str] = Field(
+        default=None,
+        description=(
+            "Origin of the web client for this host's agents (e.g. "
+            "'https://scout.ciris.ai'). An agent accepts only a same-origin path "
+            "as its OAuth return, so the client sends a path; this host's nginx "
+            "forwards /oauth-complete.html and /oauth/* to this origin."
+        ),
+    )
+
+    @field_validator("web_client_origin")
+    @classmethod
+    def _bare_https_origin(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(v)
+        if (
+            parts.scheme != "https"
+            or not parts.hostname
+            or parts.path not in ("", "/")
+            or parts.query
+            or parts.fragment
+            or parts.username
+            or any(c in v for c in " ;{}$\"'\\")
+        ):
+            raise ValueError(
+                "web_client_origin must be a bare https origin, e.g. https://scout.ciris.ai"
+            )
+        return f"https://{parts.netloc}"
 
 
 class CIRISManagerConfig(BaseModel):

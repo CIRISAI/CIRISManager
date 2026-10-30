@@ -149,6 +149,7 @@ class CIRISManager:
                             config_dir="/tmp",  # Not used for remote servers
                             container_name="ciris-nginx",  # Standard nginx container name
                             hostname=server.hostname,
+                            web_client_origin=server.web_client_origin,
                         )
                         logger.info(
                             f"✅ Initialized Nginx Manager for remote server {server.server_id} ({server.hostname})"
