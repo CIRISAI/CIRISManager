@@ -15,6 +15,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **CIRISAgent owns applications** - Agents, GUI, business logic
 - **No mixed concerns** - Each repo has a clear, single purpose
 
+### Keys Live With the Operator, Not in the Cloud
+- **Client (the operator's laptop)** holds the keys. `ciris-manager-client` runs
+  beside a local ciris-server node (`~/ciris-manager-node`) that carries a
+  TPM-sealed **roster key of the operator's fed-ID** (`<fedID>-<fp>`, joined to
+  the self roster via `POST /v1/self/associate`) and its own node key, bound to
+  the operator by a self-claim. Everything that needs an owner's signature - an
+  owner-binding for an agent, a roster change - is signed here and leaves as
+  signed JSON. The server announces the key record, the roster row and the
+  binding to the federation itself; the client never does.
+- **Manager (the cloud host)** is an **orchestrator**. It upgrades containers,
+  persists `/app/identity`, resets the break-glass admin password and applies
+  signed bindings inside agents. It holds no owner key and cannot sign for the
+  operator. For now it also carries **AAA** (OAuth login, manager tokens, agent
+  service tokens); that is transitional and migrates to CEG-native auth in
+  ciris-server. Do not build new owner-level authority into the manager.
+- Consequence: an agent's **owner is the operator's fed-ID**, never a node key
+  or a device key. See `docs/RUNBOOK_CATCHUP_CLAIM_2026-10.md` for the one-time
+  claim of the legacy-admin agents.
+
 ### Why These Matter
 Every architectural decision should reduce complexity, not add it. If you can't explain a feature in one sentence, it's too complex. See `docs/NGINX_ARCHITECTURE_LESSONS.md` for detailed examples.
 
