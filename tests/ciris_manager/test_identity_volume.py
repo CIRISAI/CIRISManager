@@ -250,3 +250,48 @@ def _app_identity_tar(files: dict) -> bytes:
             info.size, info.mode, info.uid, info.gid = len(data), 0o600, 1000, 1000
             tar.addfile(info, io.BytesIO(data))
     return buf.getvalue()
+
+
+# ── agents whose /app/data is a named volume (datum in production) ────────────
+
+NAMED_VOLUME_BINDS = [
+    "/opt/ciris/agents/datum/.secrets:/app/.secrets",
+    "/home/ciris/shared/oauth:/home/ciris/shared/oauth",
+    "datum_datum_data:/app/data",
+    "datum_datum_logs:/app/logs",
+]
+
+
+def test_named_data_volume_falls_back_to_the_agent_dir():
+    assert identity_host_dir(NAMED_VOLUME_BINDS, "datum") == "/opt/ciris/agents/datum/identity"
+
+
+def test_named_data_volume_without_agent_id_has_no_anchor():
+    assert identity_host_dir(NAMED_VOLUME_BINDS) is None
+
+
+def test_data_bind_wins_over_the_agent_dir():
+    assert identity_host_dir(PROD_BINDS, "other") == "/opt/ciris/agents/datum/identity"
+
+
+def test_unsafe_agent_id_is_not_a_path():
+    assert identity_host_dir([], "../etc") is None
+    assert identity_host_dir([], "..") is None
+
+
+def test_recreate_with_named_data_volume_persists_identity(monkeypatch):
+    calls = {}
+
+    def fake_prepare(client, image, host_dir, archive=None):
+        calls.update(host_dir=host_dir)
+
+    monkeypatch.setattr("ciris_manager.identity_volume.prepare_identity_dir", fake_prepare)
+    old = _old_container()
+    config = {"volumes": list(NAMED_VOLUME_BINDS)}
+
+    assert _orchestrator()._persist_identity_volume(
+        MagicMock(), old, config, "ciris-datum", "datum"
+    )
+
+    assert calls == {"host_dir": "/opt/ciris/agents/datum/identity"}
+    assert "/opt/ciris/agents/datum/identity:/app/identity" in config["volumes"]

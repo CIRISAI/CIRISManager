@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 IDENTITY_PATH = "/app/identity"
 DATA_PATH = "/app/data"
+AGENTS_ROOT = "/opt/ciris/agents"
 CONTAINER_UID = "1000:1000"
 
 # Mounted at /target in the helper container. /tmp/identity holds the old
@@ -63,17 +64,24 @@ def has_identity_bind(binds: Optional[Iterable[str]]) -> bool:
     return any(_container_path(b) == IDENTITY_PATH for b in binds or [])
 
 
-def identity_host_dir(binds: Optional[Iterable[str]]) -> Optional[str]:
-    """Host directory for /app/identity: a sibling of the /app/data bind's source.
+def identity_host_dir(
+    binds: Optional[Iterable[str]], agent_id: Optional[str] = None
+) -> Optional[str]:
+    """Host directory for /app/identity.
 
-    Returns None when there is no /app/data bind to anchor it to.
+    A sibling of the /app/data bind's source when /app/data is a host bind.
+    When /app/data is a named volume (no host path to sit beside), the agent's
+    own directory on its host, /opt/ciris/agents/<agent_id>. Returns None only
+    when neither is available.
     """
     for b in binds or []:
         if _container_path(b) == DATA_PATH:
             source = b.split(":")[0].rstrip("/")
-            if "/" not in source:
-                return None
-            return source.rsplit("/", 1)[0] + "/identity"
+            if "/" in source:
+                return source.rsplit("/", 1)[0] + "/identity"
+            break
+    if agent_id and "/" not in agent_id and agent_id not in (".", ".."):
+        return f"{AGENTS_ROOT}/{agent_id}/identity"
     return None
 
 
