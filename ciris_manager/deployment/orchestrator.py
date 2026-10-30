@@ -3698,7 +3698,7 @@ class DeploymentOrchestrator:
                     old_container.stop(timeout=CONTAINER_STOP_GRACE_SECONDS)
                     logger.info(f"Stopped container {container_name}")
                     if not self._persist_identity_volume(
-                        docker_client, old_container, old_config, container_name
+                        docker_client, old_container, old_config, container_name, agent_id
                     ):
                         return False
                     old_container.remove()
@@ -3767,7 +3767,7 @@ class DeploymentOrchestrator:
                 # container predates that, move its identity out before compose
                 # replaces it, or the new container comes up as a new node.
                 if not await self._persist_local_identity_volume(
-                    server_id or "main", container_name
+                    server_id or "main", container_name, agent_id
                 ):
                     return False
 
@@ -3951,7 +3951,9 @@ class DeploymentOrchestrator:
             logger.error(f"Error recreating container for agent {agent_id}: {e}")
             return False
 
-    async def _persist_local_identity_volume(self, server_id: str, container_name: str) -> bool:
+    async def _persist_local_identity_volume(
+        self, server_id: str, container_name: str, agent_id: Optional[str] = None
+    ) -> bool:
         """Local (compose) counterpart of _persist_identity_volume.
 
         Compose recreates the container itself, so stop it here, move its
@@ -3976,10 +3978,17 @@ class DeploymentOrchestrator:
         if has_identity_bind(config["volumes"]):
             return True
         container.stop(timeout=CONTAINER_STOP_GRACE_SECONDS)
-        return self._persist_identity_volume(docker_client, container, config, container_name)
+        return self._persist_identity_volume(
+            docker_client, container, config, container_name, agent_id
+        )
 
     def _persist_identity_volume(
-        self, docker_client, old_container, old_config: dict, container_name: str
+        self,
+        docker_client,
+        old_container,
+        old_config: dict,
+        container_name: str,
+        agent_id: Optional[str] = None,
     ) -> bool:
         """Move a stopped container's /app/identity onto a host bind before recreate.
 
@@ -3988,6 +3997,10 @@ class DeploymentOrchestrator:
         /app/identity there is nothing to do. Otherwise copy the old identity to
         <agent_dir>/identity on the agent's host and add the bind to
         old_config["volumes"], which the new container is created from.
+
+        <agent_dir> is the parent of the /app/data bind. An agent whose data
+        lives in a named volume has no such bind; its agent directory is then
+        /opt/ciris/agents/<agent_id>, where its compose file already lives.
 
         On failure, start the old container again (it still holds the identity)
         and return False so the recreate is abandoned rather than minting a new
@@ -4004,11 +4017,11 @@ class DeploymentOrchestrator:
         binds = old_config.get("volumes") or []
         if has_identity_bind(binds):
             return True
-        host_dir = identity_host_dir(binds)
+        host_dir = identity_host_dir(binds, agent_id)
         if host_dir is None:
             logger.warning(
-                f"{container_name} has no /app/data bind to place /app/identity beside; "
-                "recreating without a persistent identity"
+                f"{container_name} has no /app/data bind and no agent id to place "
+                "/app/identity under; recreating without a persistent identity"
             )
             return True
 
