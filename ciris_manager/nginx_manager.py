@@ -38,6 +38,7 @@ class NginxManager:
         hostname: str = "agents.ciris.ai",
         use_ssl: bool = True,
         manager_address: str = "127.0.0.1:8888",
+        web_client_origin: Optional[str] = None,
     ):
         """
         Initialize nginx manager.
@@ -50,12 +51,15 @@ class NginxManager:
                      Set to False only when using Cloudflare Flexible SSL mode.
             manager_address: Address of the CIRISManager API (host:port). Use VPC IP when
                      manager runs on a different server than nginx.
+            web_client_origin: On an API-only host, the origin OAuth returns are
+                     forwarded to (see ServerConfig.web_client_origin).
         """
         self.config_dir = Path(config_dir)
         self.container_name = container_name
         self.hostname = hostname
         self.use_ssl = use_ssl
         self.manager_address = manager_address
+        self.web_client_origin = web_client_origin.rstrip("/") if web_client_origin else None
         self.config_path = self.config_dir / "nginx.conf"
         self.new_config_path = self.config_dir / "nginx.conf.new"
         self.backup_path = self.config_dir / "nginx.conf.backup"
@@ -896,6 +900,20 @@ http {
 """
         else:
             # Remote servers: return 200 at root for load balancer health checks
+            if self.web_client_origin:
+                # The agent only accepts a same-origin path as its OAuth return,
+                # so the web client sends one and the browser lands here; hand
+                # it to the client's own origin with the query (the one-time
+                # ciris_code) intact.
+                server += f"""
+        # OAuth returns belong to the web client at {self.web_client_origin}
+        location = /oauth-complete.html {{
+            return 302 {self.web_client_origin}$request_uri;
+        }}
+        location ^~ /oauth/ {{
+            return 302 {self.web_client_origin}$request_uri;
+        }}
+"""
             server += """
         # Remote server - no GUI, return 200 for load balancer health checks
         location = / {
