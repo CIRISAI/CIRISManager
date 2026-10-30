@@ -55,6 +55,14 @@ or to any other host. Tell the bridge session before and after any staging.
 | 10-28 15:10 | hold | datum, echo-core, scout1, scout2 | **HELD on 2.9.38 by Eric's ruling**: the Groq qwen3.6 `reasoning_effort` fix (CIRISAgent PR #1327) rides **2.17.0**, no 2.16.x hotfix. Resume steps 5–8 with `--version 2.17.0-stable` once it ships. echo-speculative stays on 2.16.5. |
 | 10-29 18:30 | check | all five | 2.17.0-stable published, staged by CD for review (not started). All five running; scouts have 9-10 GB free for a 2 GB image. Manager client token expired: sign in before step 5. Traces: none reach the canonical since 2026-09-24 (owner consent missing, see step 5) |
 | 10-30 | prep | client | ciris-server 0.5.242 (owner requests) installed in the client node venv, node not started; routes present. Waiting for the agent release that pins 0.5.242 |
+| 10-30 21:35 | 5,8b | echo-speculative | 2.18.0; node key kept; owner requests announce + community_trust applied; WORK, wakeup complete |
+| 10-30 21:37 | 5 | datum | 2.18.0; identity NOT persisted (`/app/data` is a named volume); fixed by CIRISManager#35, re-created via `latest` (same digest) to migrate |
+| 10-30 21:54 | – | manager | deploy of #35 crash-looped the manager: startup scan hit root-only `/opt/ciris/agents/password-reset-backups`; moved to `/opt/ciris/password-reset-backups`, fixed in #36 |
+| 10-30 22:21 | 6 | echo-core, datum | admin reset; `agent start` ran compose on the MANAGER host (debris container); used `agent restart` instead |
+| 10-30 22:33 | 7,8,8b | echo-core, datum | owner-binding applied, owner requests applied; WORK, wakeup complete |
+| 10-30 22:34 | claim | scout1 | first-run claim-remote via SSH tunnel: owner-binding persisted (ROOT written to the SHARED scout Postgres) |
+| 10-30 22:34 | claim | scout2 | claim-remote hung at `/v1/setup/root`; PIN unconsumed |
+| 10-30 22:41 | RCA | scouts | both wedged: persist Postgres pool = deadpool default 2×CPU = 2 on 1-vCPU hosts, no wait timeout; both connections checked out idle. Sent to cirispersist-47 |
 
 ### Gotchas met (fold into the next run)
 - `ciris-manager-client agent get/list` reported the stopped canary as `running` for >37 s (CIRISManager#33). Gate step 6 on the container state read from the agent's host, not on `agent get`.
